@@ -11,14 +11,12 @@ while others are real.
 
 """
 
-import csv
 import logging
 import os
 from itertools import batched
 
 import matplotlib.pyplot as plt
 import numpy as np
-from dateutil import parser as dp
 
 from change_detec import Bcdm, MatrixVariateNormalInvGamma
 
@@ -406,46 +404,20 @@ def index_data():
     computed based on the daily closing price of each index.
     """
 
-    # Store the absolute path to the file containing the data.
-    abspath = os.path.realpath(os.path.join(os.getcwd(), "data"))
-    abspath = os.path.join(abspath, "equity-index-data.csv")
-
-    time = []
-    val = []
-
-    # Read the data.
-    with open(abspath) as fileobj:
-        reader = csv.reader(fileobj, delimiter=",")
-        row = next(reader)
-        name = []
-        for field in row:
-            if field != "date":
-                name.append(field.upper())
-        for row in reader:
-            rec = []
-            for field in row:
-                try:
-                    rec.append(float(field))
-                except ValueError:
-                    time.append(dp.parse(field))
-
-            val.append(rec)
-
-    # Format the data.
-    X = np.ones([len(val), 1])
-    Y = np.array(val).reshape([len(val), len(name)])
+    # Load data
+    path = os.path.join(DATA_DIR, "equity-index-data.csv")
+    val = np.genfromtxt(path, delimiter=",", names=True)
 
     # Select daily returns from CAC and DAX.
-    ind = ["CAC", "DAX"]
-    if len(ind) > 0:
-        ind = [name.index(i) for i in ind]
-        name = [name[i] for i in ind]
-        Y = Y[:, ind]
+    index_names = ["cac", "dax"]
+    X = np.ones((len(val), 1))
+    Y = np.c_[*(val[name] for name in index_names)]
+    assert Y.shape[1] == len(index_names)
 
     kwargs = {
         "ratefun": 1.0e-2,  # 1% expected hazard rate
-        "mu": np.zeros([1, len(name)]),  # 0% expected rate of return
-        "sigma": 1.0e-4 * np.eye(len(name)),  # 1% expected volatility
+        "mu": np.zeros([1, Y.shape[1]]),  # 0% expected rate of return
+        "sigma": 1.0e-4 * np.eye(Y.shape[1]),  # 1% expected volatility
         "maxhypot": 50,
         "minprob": 1.0e-16,
     }
@@ -490,8 +462,7 @@ def index_data():
     upperaxes.set_ylabel("Rate of return")
     loweraxes.set_xlabel("Trading day")
     loweraxes.set_ylabel("Hypothesis probability")
-
-    upperaxes.legend(name, loc="upper left")
+    upperaxes.legend([name.upper() for name in index_names])
 
 
 def main():
