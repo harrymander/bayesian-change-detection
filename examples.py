@@ -177,7 +177,7 @@ def random_data():
     bcdm_segments = Bcdm(alg="maxprod", ratefun=rate)
 
     # Update the segment length hypotheses given the data.
-    for x, y in zip(X, Y):
+    for x, y in zip(X, Y, strict=False):
         bcdm_probabilities.update(x, y)
         bcdm_segments.update(x, y)
 
@@ -279,9 +279,9 @@ def non_sinusoidal():
     )
 
     # Update the segment length hypotheses given the data.
-    for x, y in zip(X, Y):
+    for x, y in zip(X, Y, strict=False):
         y = np.array([y])
-        basis_t = lambda xt: basis(xt - x)  # noqa: E731
+        basis_t = lambda xt: basis(xt - x)  # noqa: E731,B023
         bcdm_probabilities.update(x, y, basisfunc=basis_t)
         bcdm_segments.update(x, y, basisfunc=basis_t)
 
@@ -361,7 +361,7 @@ def well_data():
     bcdm_segments = Bcdm(alg="maxprod", **kwargs)
 
     # Update the segment length hypotheses given the data.
-    for x, y in zip(X, Y):
+    for x, y in zip(X, Y, strict=False):
         bcdm_probabilities.update(x, y)
         bcdm_segments.update(x, y)
 
@@ -414,7 +414,7 @@ def index_data():
     val = []
 
     # Read the data.
-    with open(abspath, "r") as fileobj:
+    with open(abspath) as fileobj:
         reader = csv.reader(fileobj, delimiter=",")
         row = next(reader)
         name = []
@@ -456,7 +456,7 @@ def index_data():
     bcdm_segments = Bcdm(alg="maxprod", **kwargs)
 
     # Update the segment length hypotheses given the data.
-    for x, y in zip(X, Y):
+    for x, y in zip(X, Y, strict=False):
         bcdm_probabilities.update(x, y)
         bcdm_segments.update(x, y)
 
