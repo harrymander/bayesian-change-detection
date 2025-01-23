@@ -307,7 +307,7 @@ class Bcdm:
         self.__initialised = False
 
         # If 'maxhypot' is set to none, no hypotheses will be trimmed.
-        if maxhypot > 0 or not None:
+        if maxhypot is None or maxhypot > 0:
             self.__maximum_hypotheses = maxhypot
         else:
             msg = "The input 'maxhypot' must be an integer greater than zero."
