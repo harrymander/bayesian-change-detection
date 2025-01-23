@@ -1,14 +1,3 @@
-# Python byte code.
-*.pyc
-*~
-
-# Editor configurations.
-.project
-.pydevproject
-
-# Mac attribute files.
-.DS_Store
-
-# WingWare IDE files.
-*.wpr
-*.wpu
+.*_cache/
+.venv/
+__pycache__/
