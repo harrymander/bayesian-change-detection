@@ -10,30 +10,34 @@ while others are real.
 .. codeauthor:: Asher Bender <a.bender@acfr.usyd.edu.au>
 
 """
+import csv
+import logging
 import os
+from itertools import batched
 from os import path
 
-import numpy as np
-from numpy import random
-from numpy import linalg
 import matplotlib.pyplot as plt
-
-import csv
-
-import datetime
+import numpy as np
 from dateutil import parser as dp
+from numpy import linalg, random
 
-import logging
-
-from change_detec import Bcdm
-from change_detec import MatrixVariateNormalInvGamma
+from change_detec import Bcdm, MatrixVariateNormalInvGamma
 
 # Use same random data for repeatability.
 np.random.seed(seed=1729)
 
 
-def gen_random_data(m, n, k, l, mu=None, omega=None, sigma=None, eta=None,
-                    featfun=None):
+def gen_random_data(
+    m,
+    n,
+    k,
+    ell,
+    mu=None,
+    omega=None,
+    sigma=None,
+    eta=None,
+    featfun=None,
+):
     """Randomly generate multi-variate input-output data
 
     First, generate a sequence of segments at random. Then, for each segment,
@@ -62,7 +66,7 @@ def gen_random_data(m, n, k, l, mu=None, omega=None, sigma=None, eta=None,
     # Generate the segment boundaries.
     bound = random.permutation(np.arange(k - 1) + 1)
     bound = np.concatenate([np.array([0]),
-                            np.sort(bound[:l-1]),
+                            np.sort(bound[:ell-1]),
                             np.array([k])])
 
     # For each segment generate a set of predictor-response data.
@@ -76,7 +80,9 @@ def gen_random_data(m, n, k, l, mu=None, omega=None, sigma=None, eta=None,
         y = np.zeros((k, n))
 
         # Generate the coefficient matrix and the noise covariance matrix.
-        coeff, noise = MatrixVariateNormalInvGamma(mu, omega, sigma, eta).rand()
+        coeff, noise = MatrixVariateNormalInvGamma(
+            mu, omega, sigma, eta
+        ).rand()
         fact = linalg.cholesky(noise).transpose()
 
         # Given a set of predictor data, generate a corresponding set of
@@ -99,7 +105,7 @@ def plot_probability(axes, prob, scale=None, **arg):
     """Plot hypotheses probabilities as a raster image."""
 
     if scale is None:
-        scale = lambda x: x
+        scale = lambda x: x  # noqa: E731
 
     k = max(np.shape(prob)) - 1
     ind, = np.nonzero(prob.max(axis=1) > 0)
@@ -114,34 +120,27 @@ def plot_probability(axes, prob, scale=None, **arg):
                 **arg)
 
 
+def batched_exact(it, n):
+    for batch in batched(it, n):
+        if len(batch) < n:
+            break
+        yield batch
+
+
 def plot_segment_span(x, segments=None, **arg):
     """Plot segments as alternating vertical spans (rectangles)."""
 
-    if segments is not None:
-        for i in range(len(segments) - 1):
-            if i % 2 == 0:
-                plt.axvspan(x[segments[i]], x[segments[i + 1]], **arg)
-
-    else:
-        for i in range(len(x) - 1):
-            if i % 2 == 0:
-                plt.axvspan(x[i], x[i + 1], **arg)
+    indices = range(len(x)) if segments is None else segments
+    for i in batched_exact(indices, 2):
+        plt.axvspan(x[i[0]], x[i[1]], **arg)
 
 
 def plot_segment_boundaries(x, segments=None, **args):
     """Plot segment boundaries as vertical lines."""
 
-    if segments is not None:
-        for i in range(len(segments)):
-            plt.axvline(x[segments[i]], **args)
-
-    else:
-        for i in range(len(x)):
-            plt.axvline(x[i], **args)
-
-
-def plot_segment_models(x, segments, basisfun=None, **args):
-    pass
+    indices = range(len(x)) if segments is None else segments
+    for i in indices:
+        plt.axvline(x[i], **args)
 
 
 def random_data():
@@ -196,7 +195,10 @@ def random_data():
     # coloured spans. Plot the true segment boundaries as vertical lines.
     for ax in (upperaxes, loweraxes):
         plt.sca(ax)
-        plot_segment_span(t, segments, facecolor='y', alpha=0.2, edgecolor='none')
+        plot_segment_span(
+            t, segments,
+            facecolor='y', alpha=0.2, edgecolor='none'
+        )
         plot_segment_boundaries(t, segbound, color='k', linestyle=':')
         ax.set_xlim([0, numpoint])
 
@@ -207,6 +209,18 @@ def random_data():
     loweraxes.set_ylabel('Hypothesis probability')
 
 
+def square_wave(x):
+    return np.sign(np.sin(x))
+
+
+def sawtooth_wave(a, x):
+    return 2 * ((x/a) - np.floor(0.5 + (x/a)))
+
+
+def triangle_wave(a, x):
+    return 2 * np.abs(sawtooth_wave(a, x)) - 1
+
+
 def non_sinusoidal():
     """Simple example with triangular wave data."""
 
@@ -214,12 +228,9 @@ def non_sinusoidal():
     omega = 1.0e-3 * np.eye(2)
     sigma = 1.0e-6 * np.eye(3)
     samples = 1000
-    basis = lambda x: np.array([[1.0, x]])
 
-    # Create triangulare wave functions.
-    square_wave = lambda x: np.sign(np.sin(x))
-    sawtooth_wave = lambda a, x: 2 * ((x/a) - np.floor(0.5 + (x/a)))
-    triangle_wave = lambda a, x: 2 * np.abs(sawtooth_wave(a, x)) - 1
+    def basis(x):
+        return np.r_[1.0, x].reshape(1, -1)
 
     # Create input and outputs.
     X = np.linspace(0, 3*2*np.pi, samples).reshape(samples, 1)
@@ -256,7 +267,7 @@ def non_sinusoidal():
     # Update the segment length hypotheses given the data.
     for x, y in zip(X, Y):
         y = np.array([y])
-        basis_t = lambda xt: basis(xt - x)
+        basis_t = lambda xt: basis(xt - x)  # noqa: E731
         bcdm_probabilities.update(x, y, basisfunc=basis_t)
         bcdm_segments.update(x, y, basisfunc=basis_t)
 
@@ -278,7 +289,10 @@ def non_sinusoidal():
     # Plot the changes detected by the segmentation algorithm as alternating
     # coloured spans. Plot the true segment boundaries as vertical lines.
     plt.sca(upperaxes)
-    plot_segment_span(X, segments, facecolor='y', alpha=0.2, edgecolor='none')
+    plot_segment_span(
+        X.ravel(), segments,
+        facecolor='y', alpha=0.2, edgecolor='none'
+    )
     plot_segment_boundaries(true_boundaries, color='k', linestyle=':')
 
     plt.sca(loweraxes)
@@ -326,7 +340,7 @@ def well_data():
         for line in file:
             try:
                 val.append(float(line))
-            except:
+            except ValueError:
                 pass
 
     # Format the data.
@@ -370,7 +384,10 @@ def well_data():
     # coloured spans. Plot the true segment boundaries as vertical lines.
     for ax in (upperaxes, loweraxes):
         plt.sca(ax)
-        plot_segment_span(t, segments, facecolor='y', alpha=0.2, edgecolor='none')
+        plot_segment_span(
+            t, segments,
+            facecolor='y', alpha=0.2, edgecolor='none'
+        )
         ax.set_xlim([0, len(val)])
 
     fig.canvas.manager.set_window_title('Well log data')
@@ -409,8 +426,9 @@ def index_data():
             for field in row:
                 try:
                     rec.append(float(field))
-                except:
+                except ValueError:
                     time.append(dp.parse(field))
+
             val.append(rec)
 
     # Format the data.
@@ -424,11 +442,13 @@ def index_data():
         name = [name[i] for i in ind]
         Y = Y[:, ind]
 
-    kwargs = {'ratefun': 1.0e-2,                   # 1% expected hazard rate
-              'mu': np.zeros([1, len(name)]),      # 0% expected rate of return
-              'sigma': 1.0e-4 * np.eye(len(name)), # 1% expected volatility
-              'maxhypot': 50,
-              'minprob': 1.0e-16}
+    kwargs = {
+        'ratefun': 1.0e-2,  # 1% expected hazard rate
+        'mu': np.zeros([1, len(name)]),  # 0% expected rate of return
+        'sigma': 1.0e-4 * np.eye(len(name)),  # 1% expected volatility
+        'maxhypot': 50,
+        'minprob': 1.0e-16,
+    }
 
     # Compute the posterior probabilities over segment length hypotheses. Then,
     # find the most likely sequence segmentation.
@@ -460,7 +480,10 @@ def index_data():
     # coloured spans. Plot the true segment boundaries as vertical lines.
     for ax in (upperaxes, loweraxes):
         plt.sca(ax)
-        plot_segment_span(t, segments, facecolor='y', alpha=0.2, edgecolor='none')
+        plot_segment_span(
+            t, segments,
+            facecolor='y', alpha=0.2, edgecolor='none'
+        )
         ax.set_xlim([0, len(val)])
 
     fig.canvas.manager.set_window_title('Equity index data')
@@ -472,14 +495,12 @@ def index_data():
     upperaxes.legend(name, loc='upper left')
 
 
-if __name__ == '__main__':
-
+def main():
     # Create a basic console logger.
-    logger = logging.getLogger()
+    logging.basicConfig(level=logging.DEBUG)
+    logging.getLogger().setLevel(logging.INFO)
+    logger = logging.getLogger(__name__)
     logger.setLevel(logging.DEBUG)
-    handler = logging.StreamHandler()
-    handler.setLevel(logging.DEBUG)
-    logger.addHandler(handler)
 
     # Run the examples.
     logger.info('Running random data example ...')
@@ -492,3 +513,7 @@ if __name__ == '__main__':
     index_data()
 
     plt.show()
+
+
+if __name__ == '__main__':
+    main()
