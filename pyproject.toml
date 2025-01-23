@@ -11,6 +11,9 @@ dependencies = [
 ]
 
 
+[tool.ruff]
+line-length = 79
+
 [tool.ruff.lint]
 select = ["F", "E", "W", "I", "UP", "B", "NPY"]
 ignore = [
