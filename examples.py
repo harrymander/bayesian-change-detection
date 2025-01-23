@@ -15,7 +15,6 @@ import csv
 import logging
 import os
 from itertools import batched
-from os import path
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -25,6 +24,8 @@ from change_detec import Bcdm, MatrixVariateNormalInvGamma
 
 # Use same random data for repeatability.
 np.random.seed(seed=1729)
+
+DATA_DIR = os.path.join(os.path.split(__file__)[0], "data")
 
 
 def gen_random_data(
@@ -342,19 +343,8 @@ def well_data():
     scale = 1.0e4
     rate = 1.0e-2
 
-    val = []
-
-    # Store the absolute path to the file containing the data.
-    abspath = path.realpath(path.join(os.getcwd(), "data"))
-    abspath = path.join(abspath, "well-data.txt")
-
     # Read the data.
-    with open(abspath, "r") as file:
-        for line in file:
-            try:
-                val.append(float(line))
-            except ValueError:
-                pass
+    val = np.loadtxt(os.path.join(DATA_DIR, "well-data.txt"), comments="#")
 
     # Format the data.
     X = np.ones([len(val), 1])
@@ -417,8 +407,8 @@ def index_data():
     """
 
     # Store the absolute path to the file containing the data.
-    abspath = path.realpath(path.join(os.getcwd(), "data"))
-    abspath = path.join(abspath, "equity-index-data.csv")
+    abspath = os.path.realpath(os.path.join(os.getcwd(), "data"))
+    abspath = os.path.join(abspath, "equity-index-data.csv")
 
     time = []
     val = []
