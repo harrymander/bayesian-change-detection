@@ -341,12 +341,9 @@ def well_data():
     scale = 1.0e4
     rate = 1.0e-2
 
-    # Read the data.
-    val = np.loadtxt(DATA_DIR / "well-data.txt", comments="#")
-
     # Format the data.
-    X = np.ones([len(val), 1])
-    Y = np.array(val).reshape([len(val), 1])
+    Y = np.loadtxt(DATA_DIR / "well-data.txt", comments="#").reshape(-1, 1)
+    X = np.ones_like(Y)
 
     loc = np.array([(loc,)])
     scale = np.array([(scale,)])
@@ -373,7 +370,7 @@ def well_data():
     fig.subplots_adjust(hspace=0)
 
     # Plot the response data.
-    t = np.arange(1, len(val) + 1)
+    t = np.arange(1, Y.size + 1)
     upperaxes.plot(t, Y[:])
 
     # Plot the posterior probabilities over segment length hypotheses.
@@ -386,7 +383,7 @@ def well_data():
         plot_segment_span(
             t, segments, facecolor="y", alpha=0.2, edgecolor="none"
         )
-        ax.set_xlim([0, len(val)])
+        ax.set_xlim([0, Y.size])
 
     fig.canvas.manager.set_window_title("Well log data")
     upperaxes.set_title("Well log data")
