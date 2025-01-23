@@ -20,7 +20,6 @@ from os import path
 import matplotlib.pyplot as plt
 import numpy as np
 from dateutil import parser as dp
-from numpy import linalg, random
 
 from change_detec import Bcdm, MatrixVariateNormalInvGamma
 
@@ -65,7 +64,7 @@ def gen_random_data(
     featfun = featfun if callable(featfun) else lambda x: x
 
     # Generate the segment boundaries.
-    bound = random.permutation(np.arange(k - 1) + 1)
+    bound = np.random.permutation(np.arange(k - 1) + 1)
     bound = np.concatenate(
         [np.array([0]), np.sort(bound[: ell - 1]), np.array([k])]
     )
@@ -76,20 +75,20 @@ def gen_random_data(
         # Generate random predictor (input) data and pre-allocate memory for
         # response (output) data.
         k = bound[i + 1] - bound[i]
-        x = random.rand(k, m)
+        x = np.random.rand(k, m)
         y = np.zeros((k, n))
 
         # Generate the coefficient matrix and the noise covariance matrix.
         coeff, noise = MatrixVariateNormalInvGamma(
             mu, omega, sigma, eta
         ).rand()
-        fact = linalg.cholesky(noise).transpose()
+        fact = np.linalg.cholesky(noise).transpose()
 
         # Given a set of predictor data, generate a corresponding set of
         # response data.
         for j in range(k):
             y[j, :] = featfun(np.dot(x[j, :], coeff))
-            y[j, :] += np.dot(random.randn(n), fact)
+            y[j, :] += np.dot(np.random.randn(n), fact)
 
         X.append(x)
         Y.append(y)
