@@ -15,6 +15,7 @@ import logging
 from itertools import batched
 from pathlib import Path
 
+import click
 import matplotlib.pyplot as plt
 import numpy as np
 
@@ -212,6 +213,8 @@ def random_data():
     loweraxes.set_xlabel("Observation")
     loweraxes.set_ylabel("Hypothesis probability")
 
+    return fig
+
 
 def square_wave(x):
     return np.sign(np.sin(x))
@@ -321,6 +324,8 @@ def non_sinusoidal():
     loweraxes.set_xlabel("Observation")
     loweraxes.set_ylabel("Hypothesis probability")
 
+    return fig
+
 
 def well_data():
     """Simple example with nuclear response data collected a well drilling
@@ -390,6 +395,8 @@ def well_data():
     upperaxes.set_ylabel("Nuclear magnetic response")
     loweraxes.set_xlabel("Measurement number")
     loweraxes.set_ylabel("Hypothesis probability")
+
+    return fig
 
 
 def index_data():
@@ -462,25 +469,105 @@ def index_data():
     loweraxes.set_ylabel("Hypothesis probability")
     upperaxes.legend([name.upper() for name in index_names])
 
+    return fig
 
-def main():
+
+def save_fig(name, fig):
+    fig.savefig(f"{name}.png")
+
+
+EXAMPLES = {
+    "random": random_data,
+    "non-sinusoidal": non_sinusoidal,
+    "well": well_data,
+    "index": index_data,
+}
+
+
+def parse_examples(items):
+    examples = {}
+    for item in items.split(","):
+        if item == "all":
+            return EXAMPLES
+        example = EXAMPLES.get(item)
+        if not example:
+            raise click.UsageError(f"Invalid example '{item}'")
+        examples[item] = example
+
+    return examples
+
+
+def get_plot_image_paths(prefix, names, overwrite):
+    prefix = Path(prefix)
+    if prefix.is_dir():
+        parent = prefix
+        filename_prefix = ""
+    else:
+        parent = prefix.parent
+        if not parent.exists():
+            raise click.ClickException(f"Directory does not exist: {parent}")
+        filename_prefix = prefix.name
+
+    paths = {}
+    for name in names:
+        path = parent / f"{filename_prefix}{name}.png"
+        if not overwrite and path.exists():
+            raise click.ClickException(
+                f"File exists, re-run with --overwrite/-f to overwrite: {path}"
+            )
+        paths[name] = path
+
+    return paths
+
+
+@click.command()
+@click.option(
+    "--prefix",
+    "-p",
+    help=f"""Write plots images to paths with the format '<prefix><name>.png'
+    where <name> is the name of the example
+    (e.g. '{next(iter(EXAMPLES))}').""",
+)
+@click.option("--overwrite/--no-overwrite", "-f/", default=False)
+@click.option(
+    "--show",
+    is_flag=True,
+    help="""Whether to show the plots when --prefix/-p is passed.""",
+)
+@click.option(
+    "--examples",
+    "-e",
+    default="all",
+    help=f"""Comma-separated values of examples to run, or "all" to run all
+    (the default). Available examples are: {",".join(EXAMPLES)}.""",
+)
+def main(prefix, overwrite, show, examples):
+    examples_to_run = parse_examples(examples)
+    if prefix:
+        image_paths = get_plot_image_paths(
+            prefix, examples_to_run.keys(), overwrite
+        )
+    else:
+        image_paths = None
+
     # Create a basic console logger.
     logging.basicConfig(level=logging.DEBUG)
     logging.getLogger().setLevel(logging.INFO)
     logger = logging.getLogger(__name__)
     logger.setLevel(logging.DEBUG)
 
-    # Run the examples.
-    logger.info("Running random data example ...")
-    random_data()
-    logger.info("Running triangular wave data example ...")
-    non_sinusoidal()
-    logger.info("Running well log data example ...")
-    well_data()
-    logger.info("Running equity index data example ...")
-    index_data()
+    for name, example in examples_to_run.items():
+        logger.info(f"Running {name} data example...")
+        fig = example()
+        if image_paths:
+            path = image_paths[name]
+            fig.savefig(path)
+            logger.info("Saved %s data plot to '%s'", name, path)
+            if not show:
+                plt.close(fig)
 
-    plt.show()
+    if show or not image_paths:
+        plt.show()
 
 
 if __name__ == "__main__":
