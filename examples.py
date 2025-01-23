@@ -10,6 +10,7 @@ while others are real.
 .. codeauthor:: Asher Bender <a.bender@acfr.usyd.edu.au>
 
 """
+
 import csv
 import logging
 import os
@@ -65,14 +66,13 @@ def gen_random_data(
 
     # Generate the segment boundaries.
     bound = random.permutation(np.arange(k - 1) + 1)
-    bound = np.concatenate([np.array([0]),
-                            np.sort(bound[:ell-1]),
-                            np.array([k])])
+    bound = np.concatenate(
+        [np.array([0]), np.sort(bound[: ell - 1]), np.array([k])]
+    )
 
     # For each segment generate a set of predictor-response data.
     X, Y = list(), list()
     for i in range(len(bound) - 1):
-
         # Generate random predictor (input) data and pre-allocate memory for
         # response (output) data.
         k = bound[i + 1] - bound[i]
@@ -108,16 +108,18 @@ def plot_probability(axes, prob, scale=None, **arg):
         scale = lambda x: x  # noqa: E731
 
     k = max(np.shape(prob)) - 1
-    ind, = np.nonzero(prob.max(axis=1) > 0)
+    (ind,) = np.nonzero(prob.max(axis=1) > 0)
     j = ind.max()
 
     # Plot the posterior probabilities over segment length hypotheses.
-    axes.imshow(1.0 - prob[:j+1],
-                origin='lower',
-                aspect='auto',
-                extent=[scale(-0.5), scale(k + 0.5), -0.5, j + 0.5],
-                interpolation='none',
-                **arg)
+    axes.imshow(
+        1.0 - prob[: j + 1],
+        origin="lower",
+        aspect="auto",
+        extent=[scale(-0.5), scale(k + 0.5), -0.5, j + 0.5],
+        interpolation="none",
+        **arg,
+    )
 
 
 def batched_exact(it, n):
@@ -158,16 +160,21 @@ def random_data():
 
     # Generate a sequence of segments and, for each segment, generate a set of
     # predictor-response data.
-    segbound, X, Y = gen_random_data(numpred, numresp, numpoint, numseg,
-                                     omega=coeffparam*np.eye(numpred),
-                                     eta=noiseparam)
+    segbound, X, Y = gen_random_data(
+        numpred,
+        numresp,
+        numpoint,
+        numseg,
+        omega=coeffparam * np.eye(numpred),
+        eta=noiseparam,
+    )
 
     rate = float(numseg) / float(numpoint - numseg)
 
     # Compute the posterior probabilities over segment length hypotheses. Then,
     # find the most likely segmentation of the sequence.
-    bcdm_probabilities = Bcdm(alg='sumprod', ratefun=rate)
-    bcdm_segments = Bcdm(alg='maxprod', ratefun=rate)
+    bcdm_probabilities = Bcdm(alg="sumprod", ratefun=rate)
+    bcdm_segments = Bcdm(alg="maxprod", ratefun=rate)
 
     # Update the segment length hypotheses given the data.
     for x, y in zip(X, Y):
@@ -196,17 +203,16 @@ def random_data():
     for ax in (upperaxes, loweraxes):
         plt.sca(ax)
         plot_segment_span(
-            t, segments,
-            facecolor='y', alpha=0.2, edgecolor='none'
+            t, segments, facecolor="y", alpha=0.2, edgecolor="none"
         )
-        plot_segment_boundaries(t, segbound, color='k', linestyle=':')
+        plot_segment_boundaries(t, segbound, color="k", linestyle=":")
         ax.set_xlim([0, numpoint])
 
-    fig.canvas.manager.set_window_title('Randomly generated data')
-    upperaxes.set_title('Randomly generated data')
-    upperaxes.set_ylabel('Output values')
-    loweraxes.set_xlabel('Observation')
-    loweraxes.set_ylabel('Hypothesis probability')
+    fig.canvas.manager.set_window_title("Randomly generated data")
+    upperaxes.set_title("Randomly generated data")
+    upperaxes.set_ylabel("Output values")
+    loweraxes.set_xlabel("Observation")
+    loweraxes.set_ylabel("Hypothesis probability")
 
 
 def square_wave(x):
@@ -214,7 +220,7 @@ def square_wave(x):
 
 
 def sawtooth_wave(a, x):
-    return 2 * ((x/a) - np.floor(0.5 + (x/a)))
+    return 2 * ((x / a) - np.floor(0.5 + (x / a)))
 
 
 def triangle_wave(a, x):
@@ -233,36 +239,44 @@ def non_sinusoidal():
         return np.r_[1.0, x].reshape(1, -1)
 
     # Create input and outputs.
-    X = np.linspace(0, 3*2*np.pi, samples).reshape(samples, 1)
-    Y = np.hstack([square_wave(X),
-                   triangle_wave(2*np.pi, X - np.pi/2),
-                   sawtooth_wave(2*np.pi, X + np.pi/3)])
+    X = np.linspace(0, 3 * 2 * np.pi, samples).reshape(samples, 1)
+    Y = np.hstack(
+        [
+            square_wave(X),
+            triangle_wave(2 * np.pi, X - np.pi / 2),
+            sawtooth_wave(2 * np.pi, X + np.pi / 3),
+        ]
+    )
 
     # Create Gaussian noise.
-    Y += np.vstack([0.025 * np.random.randn(samples),
-                    0.1 * np.random.randn(samples),
-                    0.05 * np.random.randn(samples)]).T
+    Y += np.vstack(
+        [
+            0.025 * np.random.randn(samples),
+            0.1 * np.random.randn(samples),
+            0.05 * np.random.randn(samples),
+        ]
+    ).T
 
     # Determine location of true boundaries.
-    true_boundaries = np.hstack((np.pi * np.arange(0, 7),
-                                 np.pi * np.arange(0, 6) + np.pi/2,
-                                 2*np.pi * np.arange(0, 4) + np.pi - np.pi/3))
+    true_boundaries = np.hstack(
+        (
+            np.pi * np.arange(0, 7),
+            np.pi * np.arange(0, 6) + np.pi / 2,
+            2 * np.pi * np.arange(0, 4) + np.pi - np.pi / 3,
+        )
+    )
 
     true_boundaries = np.sort(true_boundaries[true_boundaries <= max(X)])
 
     # Compute the posterior probabilities over segment length hypotheses. Then,
     # find the most likely segmentation of the sequence.
-    bcdm_probabilities = Bcdm(alg='sumprod',
-                              ratefun=rate,
-                              basisfunc=basis,
-                              omega=omega,
-                              sigma=sigma)
+    bcdm_probabilities = Bcdm(
+        alg="sumprod", ratefun=rate, basisfunc=basis, omega=omega, sigma=sigma
+    )
 
-    bcdm_segments = Bcdm(alg='maxprod',
-                         ratefun=rate,
-                         basisfunc=basis,
-                         omega=omega,
-                         sigma=sigma)
+    bcdm_segments = Bcdm(
+        alg="maxprod", ratefun=rate, basisfunc=basis, omega=omega, sigma=sigma
+    )
 
     # Update the segment length hypotheses given the data.
     for x, y in zip(X, Y):
@@ -290,24 +304,24 @@ def non_sinusoidal():
     # coloured spans. Plot the true segment boundaries as vertical lines.
     plt.sca(upperaxes)
     plot_segment_span(
-        X.ravel(), segments,
-        facecolor='y', alpha=0.2, edgecolor='none'
+        X.ravel(), segments, facecolor="y", alpha=0.2, edgecolor="none"
     )
-    plot_segment_boundaries(true_boundaries, color='k', linestyle=':')
+    plot_segment_boundaries(true_boundaries, color="k", linestyle=":")
 
     plt.sca(loweraxes)
-    plot_segment_span(segments, facecolor='y', alpha=0.2, edgecolor='none')
-    plot_segment_boundaries(samples * true_boundaries / max(X),
-                            color='k', linestyle=':')
+    plot_segment_span(segments, facecolor="y", alpha=0.2, edgecolor="none")
+    plot_segment_boundaries(
+        samples * true_boundaries / max(X), color="k", linestyle=":"
+    )
 
     upperaxes.set_xlim([0, max(X)])
     loweraxes.set_xlim([0, len(X)])
 
-    fig.canvas.manager.set_window_title('Triangular wave data')
-    upperaxes.set_title('Triangular wave data')
-    upperaxes.set_ylabel('Signal values')
-    loweraxes.set_xlabel('Observation')
-    loweraxes.set_ylabel('Hypothesis probability')
+    fig.canvas.manager.set_window_title("Triangular wave data")
+    upperaxes.set_title("Triangular wave data")
+    upperaxes.set_ylabel("Signal values")
+    loweraxes.set_xlabel("Observation")
+    loweraxes.set_ylabel("Hypothesis probability")
 
 
 def well_data():
@@ -332,11 +346,11 @@ def well_data():
     val = []
 
     # Store the absolute path to the file containing the data.
-    abspath = path.realpath(path.join(os.getcwd(), 'data'))
-    abspath = path.join(abspath, 'well-data.txt')
+    abspath = path.realpath(path.join(os.getcwd(), "data"))
+    abspath = path.join(abspath, "well-data.txt")
 
     # Read the data.
-    with open(abspath, 'r') as file:
+    with open(abspath, "r") as file:
         for line in file:
             try:
                 val.append(float(line))
@@ -347,17 +361,15 @@ def well_data():
     X = np.ones([len(val), 1])
     Y = np.array(val).reshape([len(val), 1])
 
-    loc = np.array([(loc, )])
-    scale = np.array([(scale, )])
+    loc = np.array([(loc,)])
+    scale = np.array([(scale,)])
 
-    kwargs = {'ratefun': rate,
-              'mu': loc,
-              'sigma': scale}
+    kwargs = {"ratefun": rate, "mu": loc, "sigma": scale}
 
     # Compute the posterior probabilities over segment length hypotheses. Then,
     # find the most likely sequence segmentation.
-    bcdm_probabilities = Bcdm(alg='sumprod', **kwargs)
-    bcdm_segments = Bcdm(alg='maxprod', **kwargs)
+    bcdm_probabilities = Bcdm(alg="sumprod", **kwargs)
+    bcdm_segments = Bcdm(alg="maxprod", **kwargs)
 
     # Update the segment length hypotheses given the data.
     for x, y in zip(X, Y):
@@ -385,16 +397,15 @@ def well_data():
     for ax in (upperaxes, loweraxes):
         plt.sca(ax)
         plot_segment_span(
-            t, segments,
-            facecolor='y', alpha=0.2, edgecolor='none'
+            t, segments, facecolor="y", alpha=0.2, edgecolor="none"
         )
         ax.set_xlim([0, len(val)])
 
-    fig.canvas.manager.set_window_title('Well log data')
-    upperaxes.set_title('Well log data')
-    upperaxes.set_ylabel('Nuclear magnetic response')
-    loweraxes.set_xlabel('Measurement number')
-    loweraxes.set_ylabel('Hypothesis probability')
+    fig.canvas.manager.set_window_title("Well log data")
+    upperaxes.set_title("Well log data")
+    upperaxes.set_ylabel("Nuclear magnetic response")
+    loweraxes.set_xlabel("Measurement number")
+    loweraxes.set_ylabel("Hypothesis probability")
 
 
 def index_data():
@@ -407,19 +418,19 @@ def index_data():
     """
 
     # Store the absolute path to the file containing the data.
-    abspath = path.realpath(path.join(os.getcwd(), 'data'))
-    abspath = path.join(abspath, 'equity-index-data.csv')
+    abspath = path.realpath(path.join(os.getcwd(), "data"))
+    abspath = path.join(abspath, "equity-index-data.csv")
 
     time = []
     val = []
 
     # Read the data.
-    with open(abspath, 'r') as fileobj:
-        reader = csv.reader(fileobj, delimiter=',')
+    with open(abspath, "r") as fileobj:
+        reader = csv.reader(fileobj, delimiter=",")
         row = next(reader)
         name = []
         for field in row:
-            if field != 'date':
+            if field != "date":
                 name.append(field.upper())
         for row in reader:
             rec = []
@@ -436,24 +447,24 @@ def index_data():
     Y = np.array(val).reshape([len(val), len(name)])
 
     # Select daily returns from CAC and DAX.
-    ind = ['CAC', 'DAX']
+    ind = ["CAC", "DAX"]
     if len(ind) > 0:
         ind = [name.index(i) for i in ind]
         name = [name[i] for i in ind]
         Y = Y[:, ind]
 
     kwargs = {
-        'ratefun': 1.0e-2,  # 1% expected hazard rate
-        'mu': np.zeros([1, len(name)]),  # 0% expected rate of return
-        'sigma': 1.0e-4 * np.eye(len(name)),  # 1% expected volatility
-        'maxhypot': 50,
-        'minprob': 1.0e-16,
+        "ratefun": 1.0e-2,  # 1% expected hazard rate
+        "mu": np.zeros([1, len(name)]),  # 0% expected rate of return
+        "sigma": 1.0e-4 * np.eye(len(name)),  # 1% expected volatility
+        "maxhypot": 50,
+        "minprob": 1.0e-16,
     }
 
     # Compute the posterior probabilities over segment length hypotheses. Then,
     # find the most likely sequence segmentation.
-    bcdm_probabilities = Bcdm(alg='sumprod', **kwargs)
-    bcdm_segments = Bcdm(alg='maxprod', **kwargs)
+    bcdm_probabilities = Bcdm(alg="sumprod", **kwargs)
+    bcdm_segments = Bcdm(alg="maxprod", **kwargs)
 
     # Update the segment length hypotheses given the data.
     for x, y in zip(X, Y):
@@ -481,18 +492,17 @@ def index_data():
     for ax in (upperaxes, loweraxes):
         plt.sca(ax)
         plot_segment_span(
-            t, segments,
-            facecolor='y', alpha=0.2, edgecolor='none'
+            t, segments, facecolor="y", alpha=0.2, edgecolor="none"
         )
         ax.set_xlim([0, len(val)])
 
-    fig.canvas.manager.set_window_title('Equity index data')
-    upperaxes.set_title('Equity index data')
-    upperaxes.set_ylabel('Rate of return')
-    loweraxes.set_xlabel('Trading day')
-    loweraxes.set_ylabel('Hypothesis probability')
+    fig.canvas.manager.set_window_title("Equity index data")
+    upperaxes.set_title("Equity index data")
+    upperaxes.set_ylabel("Rate of return")
+    loweraxes.set_xlabel("Trading day")
+    loweraxes.set_ylabel("Hypothesis probability")
 
-    upperaxes.legend(name, loc='upper left')
+    upperaxes.legend(name, loc="upper left")
 
 
 def main():
@@ -503,17 +513,17 @@ def main():
     logger.setLevel(logging.DEBUG)
 
     # Run the examples.
-    logger.info('Running random data example ...')
+    logger.info("Running random data example ...")
     random_data()
-    logger.info('Running triangular wave data example ...')
+    logger.info("Running triangular wave data example ...")
     non_sinusoidal()
-    logger.info('Running well log data example ...')
+    logger.info("Running well log data example ...")
     well_data()
-    logger.info('Running equity index data example ...')
+    logger.info("Running equity index data example ...")
     index_data()
 
     plt.show()
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()
