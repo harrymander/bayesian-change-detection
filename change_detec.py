@@ -18,12 +18,11 @@ are propagated and re-weighted to reflect this new knowledge.
 """
 
 import numpy as np
-from numpy import linalg
-from numpy import random
+from numpy import linalg, random
 from scipy import special
 
 
-class MatrixVariateNormalInvGamma(object):
+class MatrixVariateNormalInvGamma:
     """Matrix-variate normal, matrix-variate inverse gamma distribution
 
     The matrix-variate normal, inverse-gamma distribution is the conjugate
@@ -211,13 +210,16 @@ class MatrixVariateNormalInvGamma(object):
         return a, b
 
 
-class Bcdm(object):
+class Bcdm:
     """Bayesian change detection model.
 
     Args:
-        mu (numpy.array): (M x N) location parameters of the prior distribution.
-        omega (numpy.array): (M x M) scale parameters of the prior distribution.
-        sigma (numpy.array): (N x N) dispersion parameters of the prior distribution.
+        mu (numpy.array): (M x N) location parameters of the prior
+                          distribution.
+        omega (numpy.array): (M x M) scale parameters of the prior
+                             distribution.
+        sigma (numpy.array): (N x N) dispersion parameters of the prior
+                             distribution.
         eta (float): shape parameter of the prior distribution.
         alg (string): Specifies the algorithm to use. Choose either 'sumprod'
                       for the sum-product algorithm or 'maxprod' for the
@@ -333,14 +335,14 @@ class Bcdm(object):
         if self.__m is None:
             self.__m = m
         elif self.__m != m:
-            msg = "Expected {} dimensions in the predictor variable.".format(m)
+            msg = f"Expected {m} dimensions in the predictor variable."
             raise Exception(msg)
 
         # Ensure output dimensions are consistent.
         if self.__n is None:
             self.__n = n
         elif self.__n != n:
-            msg = "Expected {} dimensions in the response variable.".format(n)
+            msg = f"Expected {n} dimensions in the response variable."
             raise Exception(msg)
 
         # Set uninformative prior for the location parameter.
