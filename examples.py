@@ -12,8 +12,8 @@ while others are real.
 """
 
 import logging
-import os
 from itertools import batched
+from pathlib import Path
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -23,7 +23,7 @@ from change_detec import Bcdm, MatrixVariateNormalInvGamma
 # Use same random data for repeatability.
 np.random.seed(seed=1729)
 
-DATA_DIR = os.path.join(os.path.split(__file__)[0], "data")
+DATA_DIR = Path(__file__).parent / "data"
 
 
 def gen_random_data(
@@ -342,7 +342,7 @@ def well_data():
     rate = 1.0e-2
 
     # Read the data.
-    val = np.loadtxt(os.path.join(DATA_DIR, "well-data.txt"), comments="#")
+    val = np.loadtxt(DATA_DIR / "well-data.txt", comments="#")
 
     # Format the data.
     X = np.ones([len(val), 1])
@@ -405,8 +405,9 @@ def index_data():
     """
 
     # Load data
-    path = os.path.join(DATA_DIR, "equity-index-data.csv")
-    val = np.genfromtxt(path, delimiter=",", names=True)
+    val = np.genfromtxt(
+        DATA_DIR / "equity-index-data.csv", delimiter=",", names=True
+    )
 
     # Select daily returns from CAC and DAX.
     index_names = ["cac", "dax"]
