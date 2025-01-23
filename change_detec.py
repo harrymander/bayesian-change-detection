@@ -16,6 +16,7 @@ are propagated and re-weighted to reflect this new knowledge.
 .. codeauthor:: Asher Bender <a.bender@acfr.usyd.edu.au>
 
 """
+
 import numpy as np
 from numpy import linalg
 from numpy import random
@@ -33,50 +34,58 @@ class MatrixVariateNormalInvGamma(object):
     """
 
     def __init__(self, mu, omega, sigma, eta):
-
         # Get size of data.
         m, n = np.shape(mu)
         self.__m, self.__n = m, n
 
         # Check that the location parameter is a matrix of finite numbers.
-        if not (np.ndim(mu) == 2 and
-                np.shape(mu) == (m, n) and
-                not np.isnan(mu).any() and
-                np.isfinite(mu).all()):
-            msg = 'The location parameter must be a matrix of finite numbers.'
+        if not (
+            np.ndim(mu) == 2
+            and np.shape(mu) == (m, n)
+            and not np.isnan(mu).any()
+            and np.isfinite(mu).all()
+        ):
+            msg = "The location parameter must be a matrix of finite numbers."
             raise Exception(msg)
 
         # Check that the scale parameter is a symmetric, positive-definite
         # matrix.
-        if not (np.ndim(omega) == 2 and
-                np.shape(omega) == (m, m) and
-                not np.isnan(omega).any() and
-                np.isfinite(omega).all() and
-                np.allclose(np.transpose(omega), omega) and
-                linalg.det(omega) > 0.0):
-            msg = 'The scale parameter must be a symmetric, positive-definite'
-            msg += ' matrix.'
+        if not (
+            np.ndim(omega) == 2
+            and np.shape(omega) == (m, m)
+            and not np.isnan(omega).any()
+            and np.isfinite(omega).all()
+            and np.allclose(np.transpose(omega), omega)
+            and linalg.det(omega) > 0.0
+        ):
+            msg = "The scale parameter must be a symmetric, positive-definite"
+            msg += " matrix."
             raise Exception(msg)
 
         # Check that the dispersion parameter is a symmetric, positive-definite
         # matrix.
-        if not (np.ndim(sigma) == 2 and
-                np.shape(sigma) == (n, n) and
-                not np.isnan(sigma).any() and
-                np.isfinite(sigma).all() and
-                np.allclose(np.transpose(sigma), sigma) and
-                linalg.det(sigma) > 0.0):
-            msg = 'The noise parameter must be a symmetric, positive-definite'
-            msg += ' matrix.'
+        if not (
+            np.ndim(sigma) == 2
+            and np.shape(sigma) == (n, n)
+            and not np.isnan(sigma).any()
+            and np.isfinite(sigma).all()
+            and np.allclose(np.transpose(sigma), sigma)
+            and linalg.det(sigma) > 0.0
+        ):
+            msg = "The noise parameter must be a symmetric, positive-definite"
+            msg += " matrix."
             raise Exception(msg)
 
         # Check that the shape parameter is a number greater than one minus the
         # number of degrees of freedom.
-        if not (np.isscalar(eta) and
-                not np.isnan(eta) and
-                np.isfinite(eta) and eta > n - 1.0):
-            msg = 'The shape parameter must be greater than one minus the'
-            msg += ' degrees of freedom.'
+        if not (
+            np.isscalar(eta)
+            and not np.isnan(eta)
+            and np.isfinite(eta)
+            and eta > n - 1.0
+        ):
+            msg = "The shape parameter must be greater than one minus the"
+            msg += " degrees of freedom."
             raise Exception(msg)
 
         # Allocate space for storing the matrix of product statistics.
@@ -133,7 +142,6 @@ class MatrixVariateNormalInvGamma(object):
             self.__weight += 1
 
     def log_constant(self):
-
         m, n = self.__m, self.__n
 
         # Note usage of the log-determinant 'trick':
@@ -145,10 +153,12 @@ class MatrixVariateNormalInvGamma(object):
 
         # Evaluate the log-normalization constant.
         # (Equation 8)
-        return special.gammaln(0.5*(w - np.arange(n))).sum() - \
-               n * np.log(d[:m]).sum() - \
-               w * np.log(d[m:] / np.sqrt(w)).sum() - \
-               n * (0.5 * w) * np.log(0.5 * w)
+        return (
+            special.gammaln(0.5 * (w - np.arange(n))).sum()
+            - n * np.log(d[:m]).sum()
+            - w * np.log(d[m:] / np.sqrt(w)).sum()
+            - n * (0.5 * w) * np.log(0.5 * w)
+        )
 
     def parameters(self):
         """Return the posterior parameters.
@@ -165,13 +175,14 @@ class MatrixVariateNormalInvGamma(object):
         w = self.__weight
 
         # Compute the parameters of the posterior distribution.
-        return linalg.solve(s[:m, :m], s[:m, m:]), \
-               np.dot(s[:m, :m].transpose(), s[:m, :m]), \
-               np.dot(s[m:, m:].transpose(), s[m:, m:]) / w, \
-               w
+        return (
+            linalg.solve(s[:m, :m], s[:m, m:]),
+            np.dot(s[:m, :m].transpose(), s[:m, :m]),
+            np.dot(s[m:, m:].transpose(), s[m:, m:]) / w,
+            w,
+        )
 
     def rand(self):
-
         m, n = self.__m, self.__n
 
         s = linalg.cholesky(self.__prod).transpose()
@@ -184,15 +195,18 @@ class MatrixVariateNormalInvGamma(object):
         eta = w
 
         # Simulate the marginal Wishart distribution.
-        f = linalg.solve(np.diag(np.sqrt(2.0*random.gamma(
-            (eta - np.arange(n))/2.0))) + np.tril(random.randn(n, n), -1),
-                         np.sqrt(eta)*linalg.cholesky(sigma).transpose())
+        f = linalg.solve(
+            np.diag(np.sqrt(2.0 * random.gamma((eta - np.arange(n)) / 2.0)))
+            + np.tril(random.randn(n, n), -1),
+            np.sqrt(eta) * linalg.cholesky(sigma).transpose(),
+        )
         b = np.dot(f.transpose(), f)
 
         # Simulate the conditional Gauss distribution.
-        a = mu + linalg.solve(linalg.cholesky(omega).transpose(),
-                              np.dot(random.randn(m, n),
-                                     linalg.cholesky(b).transpose()))
+        a = mu + linalg.solve(
+            linalg.cholesky(omega).transpose(),
+            np.dot(random.randn(m, n), linalg.cholesky(b).transpose()),
+        )
 
         return a, b
 
@@ -240,12 +254,20 @@ class Bcdm(object):
 
     """
 
-    def __init__(self, mu=None, omega=None, sigma=None, eta=None,
-                 alg='sumprod', ratefun=0.1, basisfunc=None, minprob=1.0e-6,
-                 maxhypot=20):
-
+    def __init__(
+        self,
+        mu=None,
+        omega=None,
+        sigma=None,
+        eta=None,
+        alg="sumprod",
+        ratefun=0.1,
+        basisfunc=None,
+        minprob=1.0e-6,
+        maxhypot=20,
+    ):
         # The inference algorithm must be either sum-product or sum-product.
-        if alg.lower() not in ['sumprod', 'maxprod']:
+        if alg.lower() not in ["sumprod", "maxprod"]:
             msg = "The input 'alg' must be either 'sumprod' or 'maxprod'."
             raise Exception(msg)
         else:
@@ -311,14 +333,14 @@ class Bcdm(object):
         if self.__m is None:
             self.__m = m
         elif self.__m != m:
-            msg = 'Expected {} dimensions in the predictor variable.'.format(m)
+            msg = "Expected {} dimensions in the predictor variable.".format(m)
             raise Exception(msg)
 
         # Ensure output dimensions are consistent.
         if self.__n is None:
             self.__n = n
         elif self.__n != n:
-            msg = 'Expected {} dimensions in the response variable.'.format(n)
+            msg = "Expected {} dimensions in the response variable.".format(n)
             raise Exception(msg)
 
         # Set uninformative prior for the location parameter.
@@ -352,18 +374,21 @@ class Bcdm(object):
             basisfunc = self.__basisfunc
 
         # Create new Bayesian linear model (using supplied priors).
-        stat = MatrixVariateNormalInvGamma(self.__mu,
-                                           self.__omega,
-                                           self.__sigma,
-                                           self.__eta)
+        stat = MatrixVariateNormalInvGamma(
+            self.__mu, self.__omega, self.__sigma, self.__eta
+        )
 
         # Add a new hypothesis, which states that a new segment is about to
         # begin.
-        self.__hypotheses.append({'count': 0,
-                                  'log_probability': log_likelihood,
-                                  'distribution': stat,
-                                  'log_constant': stat.log_constant(),
-                                  'basisfunc': basisfunc})
+        self.__hypotheses.append(
+            {
+                "count": 0,
+                "log_probability": log_likelihood,
+                "distribution": stat,
+                "log_constant": stat.log_constant(),
+                "basisfunc": basisfunc,
+            }
+        )
 
     def update(self, X, Y, basisfunc=None):
         """Update model with a single observation.
@@ -405,40 +430,41 @@ class Bcdm(object):
         # Update hypotheses by updating each matrix variate, normal inverse
         # gamma distribution over the linear models.
         for hypothesis in self.__hypotheses:
-
             # Update the sufficient statistics.
-            hypothesis['distribution'].update(hypothesis['basisfunc'](X), Y)
+            hypothesis["distribution"].update(hypothesis["basisfunc"](X), Y)
 
             # Compute the log-normalization constant after the update
             # (posterior parameter distribution).
             # (Equation 8)
-            n_o = hypothesis['log_constant']
-            n_k = hypothesis['log_constant'] = hypothesis['distribution'].log_constant()
+            n_o = hypothesis["log_constant"]
+            n_k = hypothesis["log_constant"] = hypothesis[
+                "distribution"
+            ].log_constant()
 
             # Evaluate the log-density of the predictive distribution.
             # (Equation 16)
             log_density = n_k - n_o - k * (0.5 * m * n) * np.log(2.0 * np.pi)
 
             # Increment the counter.
-            hypothesis['count'] += 1
+            hypothesis["count"] += 1
 
             # Accumulate the log-likelihood of the data.
             # (Equation 17)
-            hazard = self.__ratefun(hypothesis['count'])
-            aux = np.log(hazard) + log_density + hypothesis['log_probability']
+            hazard = self.__ratefun(hypothesis["count"])
+            aux = np.log(hazard) + log_density + hypothesis["log_probability"]
             loglik = self.__soft_max(loglik, aux)
 
             # Keep track of the highest, log-likelihood.
             if aux > logmax:
-                logmax, ind = aux, hypothesis['count']
+                logmax, ind = aux, hypothesis["count"]
 
             # Update and accumulate the log-probabilities.
-            hypothesis['log_probability'] += np.log1p(-hazard) + log_density
-            logsum = self.__soft_max(logsum, hypothesis['log_probability'])
+            hypothesis["log_probability"] += np.log1p(-hazard) + log_density
+            logsum = self.__soft_max(logsum, hypothesis["log_probability"])
 
         # In the max-product algorithm, keep track of the most likely
         # hypotheses.
-        if self.__alg__ == 'maxprod':
+        if self.__alg__ == "maxprod":
             loglik = logmax
             self.__counts.append(ind)
 
@@ -449,19 +475,22 @@ class Bcdm(object):
         # Normalize the hypotheses so that their probabilities sum to one.
         logsum = self.__soft_max(logsum, loglik)
         for hypothesis in self.__hypotheses:
-            hypothesis['log_probability'] -= logsum
+            hypothesis["log_probability"] -= logsum
 
         # Automatically trim hypothesis on each update if requested.
         if self.__maximum_hypotheses is not None:
-            self.trim_hypotheses(minprob=self.__minimum_probability,
-                                 maxhypot=self.__maximum_hypotheses)
+            self.trim_hypotheses(
+                minprob=self.__minimum_probability,
+                maxhypot=self.__maximum_hypotheses,
+            )
 
         # In the sum-product algorithm, keep track of the probabilities.
-        if self.__alg__ == 'sumprod':
+        if self.__alg__ == "sumprod":
             iteration = list()
             for hypothesis in self.__hypotheses:
-                iteration.append((hypothesis['count'],
-                                  hypothesis['log_probability']))
+                iteration.append(
+                    (hypothesis["count"], hypothesis["log_probability"])
+                )
 
             self.__probabilities.append(iteration)
 
@@ -485,12 +514,15 @@ class Bcdm(object):
             return
 
         # Sort the hypotheses in decreasing log probability order.
-        self.__hypotheses.sort(key=lambda dct: -dct['log_probability'])
+        self.__hypotheses.sort(key=lambda dct: -dct["log_probability"])
 
         # Store the indices of likely hypotheses.
         minprob = np.log(minprob)
-        index = [i for i, hypot in enumerate(self.__hypotheses)
-                 if hypot['log_probability'] > minprob]
+        index = [
+            i
+            for i, hypot in enumerate(self.__hypotheses)
+            if hypot["log_probability"] > minprob
+        ]
 
         # Trim the hypotheses.
         index = index[:maxhypot] if len(index) >= maxhypot else index
@@ -505,9 +537,9 @@ class Bcdm(object):
         # Normalize the hypotheses so that their probabilities sum to one.
         logsum = -np.inf
         for hypot in self.__hypotheses:
-            logsum = self.__soft_max(logsum, hypot['log_probability'])
+            logsum = self.__soft_max(logsum, hypot["log_probability"])
         for hypot in self.__hypotheses:
-            hypot['log_probability'] -= logsum
+            hypot["log_probability"] -= logsum
 
     def infer(self):
         """Return posterior probabilities OR sequence segmentation.
@@ -533,16 +565,18 @@ class Bcdm(object):
         # In the max-product algorithm, the most likely hypotheses are
         # tracked. Recover the most likely segment boundaries by performing a
         # back-trace.
-        if self.__alg__ == 'maxprod':
-
+        if self.__alg__ == "maxprod":
             # Find the most likely hypothesis.
-            max_hypothesis = max(self.__hypotheses,
-                                 key=lambda dct: dct['log_probability'])
+            max_hypothesis = max(
+                self.__hypotheses, key=lambda dct: dct["log_probability"]
+            )
 
             # Find the best sequence segmentation given all the data so far.
-            segment_boundaries = [len(self.__counts) - 1, ]
+            segment_boundaries = [
+                len(self.__counts) - 1,
+            ]
             index = segment_boundaries[0] - 1
-            count = max_hypothesis['count'] - 1
+            count = max_hypothesis["count"] - 1
             while index > 0:
                 index -= count
                 segment_boundaries.insert(0, index)
@@ -560,7 +594,7 @@ class Bcdm(object):
 
             # Update hypotheses probabilities.
             for i in range(len(self.__probabilities)):
-                for (j, probability) in self.__probabilities[i]:
+                for j, probability in self.__probabilities[i]:
                     segment_probabilities[j, i + 1] = np.exp(probability)
 
             # A segment always occurs at the beginning of the dataset.
