@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/python3
 
 """Examples of the Bayesian model-based change detection model in action
 
@@ -399,7 +399,7 @@ def index_data():
     # Read the data.
     with open(abspath, 'r') as fileobj:
         reader = csv.reader(fileobj, delimiter=',')
-        row = reader.next()
+        row = next(reader)
         name = []
         for field in row:
             if field != 'date':
