@@ -200,7 +200,7 @@ def random_data():
         plot_segment_boundaries(t, segbound, color='k', linestyle=':')
         ax.set_xlim([0, numpoint])
 
-    fig.canvas.set_window_title('Randomly generated data')
+    fig.canvas.manager.set_window_title('Randomly generated data')
     upperaxes.set_title('Randomly generated data')
     upperaxes.set_ylabel('Output values')
     loweraxes.set_xlabel('Observation')
@@ -289,7 +289,7 @@ def non_sinusoidal():
     upperaxes.set_xlim([0, max(X)])
     loweraxes.set_xlim([0, len(X)])
 
-    fig.canvas.set_window_title('Triangular wave data')
+    fig.canvas.manager.set_window_title('Triangular wave data')
     upperaxes.set_title('Triangular wave data')
     upperaxes.set_ylabel('Signal values')
     loweraxes.set_xlabel('Observation')
@@ -373,7 +373,7 @@ def well_data():
         plot_segment_span(t, segments, facecolor='y', alpha=0.2, edgecolor='none')
         ax.set_xlim([0, len(val)])
 
-    fig.canvas.set_window_title('Well log data')
+    fig.canvas.manager.set_window_title('Well log data')
     upperaxes.set_title('Well log data')
     upperaxes.set_ylabel('Nuclear magnetic response')
     loweraxes.set_xlabel('Measurement number')
@@ -463,7 +463,7 @@ def index_data():
         plot_segment_span(t, segments, facecolor='y', alpha=0.2, edgecolor='none')
         ax.set_xlim([0, len(val)])
 
-    fig.canvas.set_window_title('Equity index data')
+    fig.canvas.manager.set_window_title('Equity index data')
     upperaxes.set_title('Equity index data')
     upperaxes.set_ylabel('Rate of return')
     loweraxes.set_xlabel('Trading day')
