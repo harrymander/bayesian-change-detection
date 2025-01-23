@@ -44,8 +44,9 @@ class MatrixVariateNormalInvGamma:
             and not np.isnan(mu).any()
             and np.isfinite(mu).all()
         ):
-            msg = "The location parameter must be a matrix of finite numbers."
-            raise Exception(msg)
+            raise ValueError(
+                "The location parameter must be a matrix of finite numbers."
+            )
 
         # Check that the scale parameter is a symmetric, positive-definite
         # matrix.
@@ -57,9 +58,10 @@ class MatrixVariateNormalInvGamma:
             and np.allclose(np.transpose(omega), omega)
             and linalg.det(omega) > 0.0
         ):
-            msg = "The scale parameter must be a symmetric, positive-definite"
-            msg += " matrix."
-            raise Exception(msg)
+            raise ValueError(
+                "The scale parameter must be a symmetric, "
+                "positive-definite matrix"
+            )
 
         # Check that the dispersion parameter is a symmetric, positive-definite
         # matrix.
@@ -71,9 +73,10 @@ class MatrixVariateNormalInvGamma:
             and np.allclose(np.transpose(sigma), sigma)
             and linalg.det(sigma) > 0.0
         ):
-            msg = "The noise parameter must be a symmetric, positive-definite"
-            msg += " matrix."
-            raise Exception(msg)
+            raise ValueError(
+                "The noise parameter must be a symmetric, positive-definite "
+                "matrix."
+            )
 
         # Check that the shape parameter is a number greater than one minus the
         # number of degrees of freedom.
@@ -83,9 +86,10 @@ class MatrixVariateNormalInvGamma:
             and np.isfinite(eta)
             and eta > n - 1.0
         ):
-            msg = "The shape parameter must be greater than one minus the"
-            msg += " degrees of freedom."
-            raise Exception(msg)
+            raise ValueError(
+                "The shape parameter must be greater than one minus the "
+                "degrees of freedom."
+            )
 
         # Allocate space for storing the matrix of product statistics.
         self.__prod = np.zeros([m + n, m + n])
@@ -252,7 +256,7 @@ class Bcdm:
                         :py:meth:`.trim`.
 
     Raises:
-        Exception: If the any of the inputs are an incorrect type.
+        ValueError: If the any of the inputs are invalid.
 
     """
 
@@ -270,8 +274,9 @@ class Bcdm:
     ):
         # The inference algorithm must be either sum-product or sum-product.
         if alg.lower() not in ["sumprod", "maxprod"]:
-            msg = "The input 'alg' must be either 'sumprod' or 'maxprod'."
-            raise Exception(msg)
+            raise ValueError(
+                "The input 'alg' must be either 'sumprod' or 'maxprod'."
+            )
         else:
             self.__alg__ = alg.lower()
 
@@ -310,14 +315,16 @@ class Bcdm:
         if maxhypot is None or maxhypot > 0:
             self.__maximum_hypotheses = maxhypot
         else:
-            msg = "The input 'maxhypot' must be an integer greater than zero."
-            raise Exception(msg)
+            raise ValueError(
+                "The input 'maxhypot' must be an integer greater than zero."
+            )
 
         if minprob > 0:
             self.__minimum_probability = minprob
         else:
-            msg = "The input 'minprob' must be a float greater than zero."
-            raise Exception(msg)
+            raise ValueError(
+                "The input 'minprob' must be a float greater than zero."
+            )
 
         # Allocate variables for tracking segments.
         self.__hypotheses = list()
@@ -335,15 +342,17 @@ class Bcdm:
         if self.__m is None:
             self.__m = m
         elif self.__m != m:
-            msg = f"Expected {m} dimensions in the predictor variable."
-            raise Exception(msg)
+            raise ValueError(
+                f"Expected {m} dimensions in the predictor variable."
+            )
 
         # Ensure output dimensions are consistent.
         if self.__n is None:
             self.__n = n
         elif self.__n != n:
-            msg = f"Expected {n} dimensions in the response variable."
-            raise Exception(msg)
+            raise ValueError(
+                f"Expected {n} dimensions in the response variable."
+            )
 
         # Set uninformative prior for the location parameter.
         if self.__mu is None:
