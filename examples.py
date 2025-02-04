@@ -28,10 +28,10 @@ DATA_DIR = Path(__file__).parent / "data"
 
 
 def gen_random_data(
-    m,
-    n,
-    k,
-    ell,
+    numpred,
+    numresp,
+    numpoint,
+    numseg,
     mu=None,
     omega=None,
     sigma=None,
@@ -47,36 +47,37 @@ def gen_random_data(
 
     # Set default prior for the location parameter.
     if mu is None:
-        mu = np.zeros([m, n])
+        mu = np.zeros((numpred, numresp))
 
     # Set default prior for the scale parameter.
     if omega is None:
-        omega = np.eye(m)
+        omega = np.eye(numpred)
 
     # Set default prior for the dispersion/noise parameter.
     if sigma is None:
-        sigma = np.eye(n)
+        sigma = np.eye(numresp)
 
     # Set default prior for the shape parameter.
     if eta is None:
-        eta = n
+        eta = numresp
 
-    featfun = featfun if callable(featfun) else lambda x: x
+    featfun = featfun or (lambda x: x)
 
     # Generate the segment boundaries.
-    bound = np.random.permutation(np.arange(k - 1) + 1)
-    bound = np.concatenate(
-        [np.array([0]), np.sort(bound[: ell - 1]), np.array([k])]
+    changepoints = np.sort(
+        np.random.choice(np.arange(numpoint - 1), numseg - 1, replace=False)
+        + 1
     )
+    boundaries = np.r_[0, changepoints, numpoint]
 
     # For each segment generate a set of predictor-response data.
     X, Y = list(), list()
-    for i in range(len(bound) - 1):
+    for i in range(len(boundaries) - 1):
         # Generate random predictor (input) data and pre-allocate memory for
         # response (output) data.
-        k = bound[i + 1] - bound[i]
-        x = np.random.rand(k, m)
-        y = np.zeros((k, n))
+        numpoint = boundaries[i + 1] - boundaries[i]
+        x = np.random.rand(numpoint, numpred)
+        y = np.zeros((numpoint, numresp))
 
         # Generate the coefficient matrix and the noise covariance matrix.
         coeff, noise = MatrixVariateNormalInvGamma(
@@ -86,18 +87,18 @@ def gen_random_data(
 
         # Given a set of predictor data, generate a corresponding set of
         # response data.
-        for j in range(k):
+        for j in range(numpoint):
             y[j, :] = featfun(np.dot(x[j, :], coeff))
-            y[j, :] += np.dot(np.random.randn(n), fact)
+            y[j, :] += np.dot(np.random.randn(numresp), fact)
 
         X.append(x)
         Y.append(y)
 
     # Adjust the last element of the true boundaries for python's zero
     # indexing.
-    bound[-1] -= 1
+    boundaries[-1] -= 1
 
-    return bound, np.concatenate(X, axis=0), np.concatenate(Y, axis=0)
+    return boundaries, np.concatenate(X, axis=0), np.concatenate(Y, axis=0)
 
 
 def plot_probability(axes, prob, scale=None, **arg):
