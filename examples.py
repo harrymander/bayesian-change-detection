@@ -12,7 +12,7 @@ while others are real.
 """
 
 import logging
-from itertools import batched
+from itertools import batched, pairwise
 from pathlib import Path
 
 import click
@@ -71,34 +71,25 @@ def gen_random_data(
     boundaries = np.r_[0, changepoints, numpoint]
 
     # For each segment generate a set of predictor-response data.
-    X, Y = list(), list()
-    for i in range(len(boundaries) - 1):
-        # Generate random predictor (input) data and pre-allocate memory for
-        # response (output) data.
-        numpoint = boundaries[i + 1] - boundaries[i]
-        x = np.random.rand(numpoint, numpred)
-        y = np.zeros((numpoint, numresp))
-
+    X = np.random.rand(numpoint, numpred)
+    Y = np.empty((numpoint, numresp))
+    for i0, i1 in pairwise(boundaries):
         # Generate the coefficient matrix and the noise covariance matrix.
-        coeff, noise = MatrixVariateNormalInvGamma(
-            mu, omega, sigma, eta
-        ).rand()
+        norm_inv_gamma = MatrixVariateNormalInvGamma(mu, omega, sigma, eta)
+        coeff, noise = norm_inv_gamma.rand()
         fact = np.linalg.cholesky(noise).transpose()
 
         # Given a set of predictor data, generate a corresponding set of
         # response data.
-        for j in range(numpoint):
-            y[j, :] = featfun(np.dot(x[j, :], coeff))
-            y[j, :] += np.dot(np.random.randn(numresp), fact)
-
-        X.append(x)
-        Y.append(y)
+        for i in range(i0, i1):
+            eps = np.dot(np.random.randn(numresp), fact)
+            Y[i] = featfun(np.dot(X[i], coeff)) + eps
 
     # Adjust the last element of the true boundaries for python's zero
     # indexing.
     boundaries[-1] -= 1
 
-    return boundaries, np.concatenate(X, axis=0), np.concatenate(Y, axis=0)
+    return boundaries, X, Y
 
 
 def plot_probability(axes, prob, scale=None, **arg):
