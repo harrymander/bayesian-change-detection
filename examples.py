@@ -484,9 +484,9 @@ EXAMPLES = {
 }
 
 
-def parse_examples(items):
+def parse_examples(value):
     examples = {}
-    for item in items.split(","):
+    for item in value.split(","):
         if item == "all":
             return EXAMPLES
         example = EXAMPLES.get(item)
@@ -540,15 +540,14 @@ def get_plot_image_paths(prefix, names, overwrite):
     default="all",
     help=f"""Comma-separated values of examples to run, or "all" to run all
     (the default). Available examples are: {",".join(EXAMPLES)}.""",
+    callback=lambda c, p, value: parse_examples(value),
 )
 def main(prefix, overwrite, show, examples):
-    examples_to_run = parse_examples(examples)
-    if prefix:
-        image_paths = get_plot_image_paths(
-            prefix, examples_to_run.keys(), overwrite
-        )
-    else:
-        image_paths = None
+    image_paths = (
+        get_plot_image_paths(prefix, examples.keys(), overwrite)
+        if prefix
+        else None
+    )
 
     # Create a basic console logger.
     logging.basicConfig(level=logging.DEBUG)
@@ -556,7 +555,7 @@ def main(prefix, overwrite, show, examples):
     logger = logging.getLogger(__name__)
     logger.setLevel(logging.DEBUG)
 
-    for name, example in examples_to_run.items():
+    for name, example in examples.items():
         logger.info(f"Running {name} data example...")
         fig = example()
         if image_paths:
