@@ -164,8 +164,8 @@ def random_data():
 
     # Compute the posterior probabilities over segment length hypotheses. Then,
     # find the most likely segmentation of the sequence.
-    bcdm_probabilities = Bcdm(alg="sumprod", ratefun=rate)
-    bcdm_segments = Bcdm(alg="maxprod", ratefun=rate)
+    bcdm_probabilities = Bcdm(alg="sumprod", hazardfunc=rate)
+    bcdm_segments = Bcdm(alg="maxprod", hazardfunc=rate)
 
     # Update the segment length hypotheses given the data.
     for x, y in zip(X, Y, strict=False):
@@ -264,11 +264,19 @@ def non_sinusoidal():
     # Compute the posterior probabilities over segment length hypotheses. Then,
     # find the most likely segmentation of the sequence.
     bcdm_probabilities = Bcdm(
-        alg="sumprod", ratefun=rate, basisfunc=basis, omega=omega, sigma=sigma
+        alg="sumprod",
+        hazardfunc=rate,
+        basisfunc=basis,
+        omega=omega,
+        sigma=sigma,
     )
 
     bcdm_segments = Bcdm(
-        alg="maxprod", ratefun=rate, basisfunc=basis, omega=omega, sigma=sigma
+        alg="maxprod",
+        hazardfunc=rate,
+        basisfunc=basis,
+        omega=omega,
+        sigma=sigma,
     )
 
     # Update the segment length hypotheses given the data.
@@ -345,10 +353,9 @@ def well_data():
     loc = np.array([(loc,)])
     scale = np.array([(scale,)])
 
-    kwargs = {"ratefun": rate, "mu": loc, "sigma": scale}
-
     # Compute the posterior probabilities over segment length hypotheses. Then,
     # find the most likely sequence segmentation.
+    kwargs = {"hazardfunc": rate, "mu": loc, "sigma": scale}
     bcdm_probabilities = Bcdm(alg="sumprod", **kwargs)
     bcdm_segments = Bcdm(alg="maxprod", **kwargs)
 
@@ -411,16 +418,15 @@ def index_data():
     Y = np.c_[*(val[name] for name in index_names)]
     assert Y.shape[1] == len(index_names)
 
+    # Compute the posterior probabilities over segment length hypotheses. Then,
+    # find the most likely sequence segmentation.
     kwargs = {
-        "ratefun": 1.0e-2,  # 1% expected hazard rate
         "mu": np.zeros([1, Y.shape[1]]),  # 0% expected rate of return
         "sigma": 1.0e-4 * np.eye(Y.shape[1]),  # 1% expected volatility
         "maxhypot": 50,
+        "hazardfunc": 1.0e-2,  # 1% expected hazard rate
         "minprob": 1.0e-16,
     }
-
-    # Compute the posterior probabilities over segment length hypotheses. Then,
-    # find the most likely sequence segmentation.
     bcdm_probabilities = Bcdm(alg="sumprod", **kwargs)
     bcdm_segments = Bcdm(alg="maxprod", **kwargs)
 
