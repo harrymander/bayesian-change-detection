@@ -495,16 +495,29 @@ def parse_examples(value):
     return examples
 
 
+def raise_if_not_dir(path):
+    if not path.exists():
+        raise click.ClickException(f"Directory does not exist: {path}")
+    if not path.is_dir():
+        raise click.ClickException(f"Not a directory: {path}")
+
+
 def get_plot_image_paths(prefix, names, overwrite):
+    trailing_slash = prefix[-1] == "/"
     prefix = Path(prefix)
-    if prefix.is_dir():
+    if trailing_slash or prefix.is_dir():
         parent = prefix
         filename_prefix = ""
+        if trailing_slash:
+            if prefix.exists():
+                raise_if_not_dir(prefix)
+            else:
+                raise_if_not_dir(prefix.parent)
+                prefix.mkdir()
     else:
         parent = prefix.parent
-        if not parent.exists():
-            raise click.ClickException(f"Directory does not exist: {parent}")
         filename_prefix = prefix.name
+        raise_if_not_dir(parent)
 
     paths = {}
     for name in names:
