@@ -502,7 +502,8 @@ def raise_if_not_dir(path):
         raise click.ClickException(f"Not a directory: {path}")
 
 
-def get_plot_image_paths(prefix, names, overwrite):
+def get_plot_image_paths(prefix, suffix, names, overwrite):
+    suffix = suffix or ""
     trailing_slash = prefix[-1] == "/"
     prefix = Path(prefix)
     if trailing_slash or prefix.is_dir():
@@ -521,7 +522,7 @@ def get_plot_image_paths(prefix, names, overwrite):
 
     paths = {}
     for name in names:
-        path = parent / f"{filename_prefix}{name}.png"
+        path = parent / f"{filename_prefix}{name}{suffix}.png"
         if not overwrite and path.exists():
             raise click.ClickException(
                 f"File exists, re-run with --overwrite/-f to overwrite: {path}"
@@ -535,9 +536,14 @@ def get_plot_image_paths(prefix, names, overwrite):
 @click.option(
     "--prefix",
     "-p",
-    help=f"""Write plots images to paths with the format '<prefix><name>.png'
-    where <name> is the name of the example
-    (e.g. '{next(iter(EXAMPLES))}').""",
+    help=f"""Write plots images to paths with the format
+    '<prefix><name><suffix>.png' where <name> is the name of the example (e.g.
+    '{next(iter(EXAMPLES))}') and <suffix> is the value passed to --suffix (if
+    given).""",
+)
+@click.option(
+    "--suffix",
+    help="""Suffix to append to image name before the file extension.""",
 )
 @click.option("--overwrite/--no-overwrite", "-f/", default=False)
 @click.option(
@@ -553,9 +559,9 @@ def get_plot_image_paths(prefix, names, overwrite):
     (the default). Available examples are: {",".join(EXAMPLES)}.""",
     callback=lambda c, p, value: parse_examples(value),
 )
-def main(prefix, overwrite, show, examples):
+def main(prefix, suffix, overwrite, show, examples):
     image_paths = (
-        get_plot_image_paths(prefix, examples.keys(), overwrite)
+        get_plot_image_paths(prefix, suffix, examples.keys(), overwrite)
         if prefix
         else None
     )
