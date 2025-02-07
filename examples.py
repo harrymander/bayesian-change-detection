@@ -19,7 +19,7 @@ import click
 import matplotlib.pyplot as plt
 import numpy as np
 
-from change_detec import Bcdm, MatrixVariateNormalInvGamma
+from bayesian_change_detection import Bcdm, MatrixVariateNormalInvGamma
 
 # Use same random data for repeatability.
 np.random.seed(seed=1729)
