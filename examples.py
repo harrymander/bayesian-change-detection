@@ -18,6 +18,7 @@ from pathlib import Path
 import click
 import matplotlib.pyplot as plt
 import numpy as np
+from matplotlib.figure import Figure
 
 from bayesian_change_detection import Bcdm, MatrixVariateNormalInvGamma
 
@@ -103,6 +104,7 @@ def plot_probability(axes, prob, scale=None, **arg):
     j = ind.max()
 
     # Plot the posterior probabilities over segment length hypotheses.
+    arg["cmap"] = plt.cm.gray
     axes.imshow(
         1.0 - prob[: j + 1],
         origin="lower",
@@ -136,7 +138,7 @@ def plot_segment_boundaries(x, segments=None, **args):
         plt.axvline(x[i], **args)
 
 
-def random_data():
+def random_data() -> Figure:
     """Simple example with synthetic data."""
 
     # Set the size of the problem.
@@ -160,22 +162,17 @@ def random_data():
         eta=noiseparam,
     )
 
-    rate = float(numseg) / float(numpoint - numseg)
-
-    # Compute the posterior probabilities over segment length hypotheses. Then,
-    # find the most likely segmentation of the sequence.
-    bcdm_probabilities = Bcdm(alg="sumprod", hazardfunc=rate)
-    bcdm_segments = Bcdm(alg="maxprod", hazardfunc=rate)
+    rate = numseg / (numpoint - numseg)
+    model = Bcdm(X.shape[1], Y.shape[1], hazardfunc=rate)
 
     # Update the segment length hypotheses given the data.
     for x, y in zip(X, Y, strict=True):
-        bcdm_probabilities.update(x, y)
-        bcdm_segments.update(x, y)
+        model.update(x, y)
 
     # Recover the hypothesis probabilities and back-trace to find the most
     # likely segmentation of the sequence.
-    hypotheses_probability = bcdm_probabilities.infer()
-    segments = bcdm_segments.infer()
+    hypotheses_probability = model.posterior_probabilities()
+    segments = model.segmentations()
 
     # Create subplots with shared X-axis.
     fig, (upperaxes, loweraxes) = plt.subplots(2, sharex=True)
@@ -187,7 +184,7 @@ def random_data():
         upperaxes.plot(t, Y[:, i])
 
     # Plot the posterior probabilities over segment length hypotheses.
-    plot_probability(loweraxes, hypotheses_probability, cmap=plt.cm.gray)
+    plot_probability(loweraxes, hypotheses_probability)
 
     # Plot the changes detected by the segmentation algorithm as alternating
     # coloured spans. Plot the true segment boundaries as vertical lines.
@@ -199,7 +196,9 @@ def random_data():
         plot_segment_boundaries(t, segbound, color="k", linestyle=":")
         ax.set_xlim([0, numpoint])
 
-    fig.canvas.manager.set_window_title("Randomly generated data")
+    fig.canvas.manager.set_window_title(  # type: ignore
+        "Randomly generated data"
+    )
     upperaxes.set_title("Randomly generated data")
     upperaxes.set_ylabel("Output values")
     loweraxes.set_xlabel("Observation")
@@ -208,19 +207,19 @@ def random_data():
     return fig
 
 
-def square_wave(x):
+def square_wave(x: np.ndarray) -> np.ndarray:
     return np.sign(np.sin(x))
 
 
-def sawtooth_wave(a, x):
+def sawtooth_wave(a: float, x: np.ndarray) -> np.ndarray:
     return 2 * ((x / a) - np.floor(0.5 + (x / a)))
 
 
-def triangle_wave(a, x):
+def triangle_wave(a: float, x: np.ndarray) -> np.ndarray:
     return 2 * np.abs(sawtooth_wave(a, x)) - 1
 
 
-def non_sinusoidal():
+def non_sinusoidal() -> Figure:
     """Simple example with triangular wave data."""
 
     rate = 0.001
@@ -228,26 +227,23 @@ def non_sinusoidal():
     sigma = 1.0e-6 * np.eye(3)
     samples = 1000
 
-    def basis(x):
-        return np.r_[1.0, x].reshape(1, -1)
-
     # Create input and outputs.
     X = np.linspace(0, 3 * 2 * np.pi, samples).reshape(samples, 1)
     Y = np.hstack(
-        [
+        (
             square_wave(X),
             triangle_wave(2 * np.pi, X - np.pi / 2),
             sawtooth_wave(2 * np.pi, X + np.pi / 3),
-        ]
+        )
     )
 
     # Create Gaussian noise.
     Y += np.vstack(
-        [
+        (
             0.025 * np.random.randn(samples),
             0.1 * np.random.randn(samples),
             0.05 * np.random.randn(samples),
-        ]
+        )
     ).T
 
     # Determine location of true boundaries.
@@ -259,37 +255,34 @@ def non_sinusoidal():
         )
     )
 
-    true_boundaries = np.sort(true_boundaries[true_boundaries <= max(X)])
-
-    # Compute the posterior probabilities over segment length hypotheses. Then,
-    # find the most likely segmentation of the sequence.
-    bcdm_probabilities = Bcdm(
-        alg="sumprod",
+    true_boundaries = np.sort(true_boundaries[true_boundaries <= X.max()])
+    model = Bcdm(
+        X.shape[1] + 1,
+        Y.shape[1],
         hazardfunc=rate,
-        basisfunc=basis,
         omega=omega,
         sigma=sigma,
     )
 
-    bcdm_segments = Bcdm(
-        alg="maxprod",
-        hazardfunc=rate,
-        basisfunc=basis,
-        omega=omega,
-        sigma=sigma,
-    )
+    def add_intercept(x: np.ndarray) -> np.ndarray:
+        return np.r_[1.0, x].reshape(1, -1)
 
     # Update the segment length hypotheses given the data.
     for x, y in zip(X, Y, strict=True):
-        y = np.array([y])
-        basis_t = lambda xt: basis(xt - x)  # noqa: E731,B023
-        bcdm_probabilities.update(x, y, basisfunc=basis_t)
-        bcdm_segments.update(x, y, basisfunc=basis_t)
+        # FIXME: x is not bound in the loop, hence the linter error. I thought
+        # it didn't matter but it gives different results when binding with
+        # partial... Need to look into this, I think it is a bug with the
+        # original code.
+        model.update(
+            x,
+            y,
+            basis=lambda xt: add_intercept(xt - x),  # noqa: B023
+        )
 
     # Recover the hypothesis probabilities and back-trace to find the most
     # likely segmentation of the sequence.
-    hypotheses_probability = bcdm_probabilities.infer()
-    segments = bcdm_segments.infer()
+    hypotheses_probability = model.posterior_probabilities()
+    segments = model.segmentations()
 
     # Create subplots with shared X-axis.
     fig, (upperaxes, loweraxes) = plt.subplots(2, sharex=False)
@@ -299,7 +292,7 @@ def non_sinusoidal():
         upperaxes.plot(X, Y[:, i])
 
     # Plot the posterior probabilities over segment length hypotheses.
-    plot_probability(loweraxes, hypotheses_probability, cmap=plt.cm.gray)
+    plot_probability(loweraxes, hypotheses_probability)
 
     # Plot the changes detected by the segmentation algorithm as alternating
     # coloured spans. Plot the true segment boundaries as vertical lines.
@@ -312,13 +305,13 @@ def non_sinusoidal():
     plt.sca(loweraxes)
     plot_segment_span(segments, facecolor="y", alpha=0.2, edgecolor="none")
     plot_segment_boundaries(
-        samples * true_boundaries / max(X), color="k", linestyle=":"
+        samples * true_boundaries / X.max(), color="k", linestyle=":"
     )
 
-    upperaxes.set_xlim([0, max(X)])
+    upperaxes.set_xlim([0, X.max()])
     loweraxes.set_xlim([0, len(X)])
 
-    fig.canvas.manager.set_window_title("Triangular wave data")
+    fig.canvas.manager.set_window_title("Triangular wave data")  # type: ignore
     upperaxes.set_title("Triangular wave data")
     upperaxes.set_ylabel("Signal values")
     loweraxes.set_xlabel("Observation")
@@ -327,7 +320,7 @@ def non_sinusoidal():
     return fig
 
 
-def well_data():
+def well_data() -> Figure:
     """Simple example with nuclear response data collected a well drilling
 
     Segment the well log data used in Fearnhead and Clifford (1996). This data
@@ -350,24 +343,24 @@ def well_data():
     Y = np.loadtxt(DATA_DIR / "well-data.txt", comments="#").reshape(-1, 1)
     X = np.ones_like(Y)
 
-    loc = np.array([(loc,)])
-    scale = np.array([(scale,)])
-
     # Compute the posterior probabilities over segment length hypotheses. Then,
     # find the most likely sequence segmentation.
-    kwargs = {"hazardfunc": rate, "mu": loc, "sigma": scale}
-    bcdm_probabilities = Bcdm(alg="sumprod", **kwargs)
-    bcdm_segments = Bcdm(alg="maxprod", **kwargs)
+    model = Bcdm(
+        X.shape[1],
+        Y.shape[1],
+        hazardfunc=rate,
+        mu=np.atleast_2d(loc),
+        sigma=np.atleast_2d(scale),
+    )
 
     # Update the segment length hypotheses given the data.
     for x, y in zip(X, Y, strict=True):
-        bcdm_probabilities.update(x, y)
-        bcdm_segments.update(x, y)
+        model.update(x, y)
 
     # Recover the hypothesis probabilities and back-trace to find the most
     # likely segmentation of the sequence.
-    hypotheses_probability = bcdm_probabilities.infer()
-    segments = bcdm_segments.infer()
+    hypotheses_probability = model.posterior_probabilities()
+    segments = model.segmentations()
 
     # Create subplots with shared X-axis.
     fig, (upperaxes, loweraxes) = plt.subplots(2, sharex=True)
@@ -378,8 +371,7 @@ def well_data():
     upperaxes.plot(t, Y[:])
 
     # Plot the posterior probabilities over segment length hypotheses.
-    plot_probability(loweraxes, hypotheses_probability, cmap=plt.cm.gray)
-
+    plot_probability(loweraxes, hypotheses_probability)
     # Plot the changes detected by the segmentation algorithm as alternating
     # coloured spans. Plot the true segment boundaries as vertical lines.
     for ax in (upperaxes, loweraxes):
@@ -389,7 +381,7 @@ def well_data():
         )
         ax.set_xlim([0, Y.size])
 
-    fig.canvas.manager.set_window_title("Well log data")
+    fig.canvas.manager.set_window_title("Well log data")  # type: ignore
     upperaxes.set_title("Well log data")
     upperaxes.set_ylabel("Nuclear magnetic response")
     loweraxes.set_xlabel("Measurement number")
@@ -398,7 +390,7 @@ def well_data():
     return fig
 
 
-def index_data():
+def index_data() -> Figure:
     """Simple example with equity index return data
 
     Segment the daily rates of return of a pair of equity indices between April
@@ -418,27 +410,24 @@ def index_data():
     Y = np.c_[*(val[name] for name in index_names)]
     assert Y.shape[1] == len(index_names)
 
-    # Compute the posterior probabilities over segment length hypotheses. Then,
-    # find the most likely sequence segmentation.
-    kwargs = {
-        "mu": np.zeros([1, Y.shape[1]]),  # 0% expected rate of return
-        "sigma": 1.0e-4 * np.eye(Y.shape[1]),  # 1% expected volatility
-        "maxhypot": 50,
-        "hazardfunc": 1.0e-2,  # 1% expected hazard rate
-        "minprob": 1.0e-16,
-    }
-    bcdm_probabilities = Bcdm(alg="sumprod", **kwargs)
-    bcdm_segments = Bcdm(alg="maxprod", **kwargs)
+    model = Bcdm(
+        X.shape[1],
+        Y.shape[1],
+        mu=np.zeros([1, Y.shape[1]]),  # 0% expected rate of return
+        sigma=1.0e-4 * np.eye(Y.shape[1]),  # 1% expected volatility
+        maxhypot=50,
+        hazardfunc=1.0e-2,  # 1% expected hazard rate
+        minprob=1.0e-16,
+    )
 
     # Update the segment length hypotheses given the data.
     for x, y in zip(X, Y, strict=True):
-        bcdm_probabilities.update(x, y)
-        bcdm_segments.update(x, y)
+        model.update(x, y)
 
     # Recover the hypothesis probabilities and back-trace to find the most
     # likely segmentation of the sequence.
-    hypotheses_probability = bcdm_probabilities.infer()
-    segments = bcdm_segments.infer()
+    hypotheses_probability = model.posterior_probabilities()
+    segments = model.segmentations()
 
     # Create subplots with shared X-axis.
     fig, (upperaxes, loweraxes) = plt.subplots(2, sharex=True)
@@ -449,7 +438,7 @@ def index_data():
     upperaxes.plot(t, Y[:])
 
     # Plot the posterior probabilities over segment length hypotheses.
-    plot_probability(loweraxes, hypotheses_probability, cmap=plt.cm.gray)
+    plot_probability(loweraxes, hypotheses_probability)
 
     # Plot the changes detected by the segmentation algorithm as alternating
     # coloured spans. Plot the true segment boundaries as vertical lines.
@@ -460,7 +449,7 @@ def index_data():
         )
         ax.set_xlim([0, len(val)])
 
-    fig.canvas.manager.set_window_title("Equity index data")
+    fig.canvas.manager.set_window_title("Equity index data")  # type: ignore
     upperaxes.set_title("Equity index data")
     upperaxes.set_ylabel("Rate of return")
     loweraxes.set_xlabel("Trading day")

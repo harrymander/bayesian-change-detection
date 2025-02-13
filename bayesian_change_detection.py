@@ -17,6 +17,9 @@ are propagated and re-weighted to reflect this new knowledge.
 
 """
 
+from collections.abc import Callable, Sequence
+from dataclasses import dataclass
+
 import numpy as np
 from numpy import linalg, random
 from scipy import special
@@ -213,10 +216,41 @@ class MatrixVariateNormalInvGamma:
         return a, b
 
 
+def _log_sum_exp(x: float, y: float) -> float:
+    """
+    Numerically stable form of:
+
+      log(exp(x) + exp(y))
+    """
+    return max(x, y) + np.log1p(np.exp(-abs(x - y)))
+
+
+def _identity_basis(x: np.ndarray) -> np.ndarray:
+    return x
+
+
+BasisFunction = Callable[[np.ndarray], np.ndarray]
+HazardFunction = Callable[[int], float]
+
+
+@dataclass
+class _Hypothesis:
+    count: int
+    basis: BasisFunction
+    distribution: MatrixVariateNormalInvGamma
+    log_constant: float
+    maxprod: float
+    sumprod: float
+
+
 class Bcdm:
     """Bayesian change detection model.
 
     Args:
+        numpred (int): Number of predictor variables, M
+                       (dimensionality of input).
+        numresp (int): Number of response variables, N
+                       (dimensionality of output).
         mu (numpy.array): (M x N) location parameters of the prior
                           distribution.
         omega (numpy.array): (M x M) scale parameters of the prior
@@ -224,13 +258,6 @@ class Bcdm:
         sigma (numpy.array): (N x N) dispersion parameters of the prior
                              distribution.
         eta (float): shape parameter of the prior distribution.
-        alg (string): Specifies the algorithm to use. Choose either 'sumprod'
-                      for the sum-product algorithm or 'maxprod' for the
-                      max-product algorithm. If the sum-product algorithm is
-                      selected, the posterior probabilities of the segmentation
-                      hypotheses will be calculated. If the max-product
-                      algorithm is selected, the most likely sequence
-                      segmentation will be calculated.
         hazardfunc (float): Relative chance of a new segments being generated.
                             ``hazardfunc`` is a value between 0 and 1. Segments
                             are MORE likely to be created with values closer to
@@ -239,11 +266,6 @@ class Bcdm:
                             to an executable hazard function. The hazard
                             function must accept non-negative integers and
                             return non-negative floating-point numbers.
-        basisfunc (callable): Feature functions for basis function
-                              expansion. Feature functions provide additional
-                              flexibility by mapping the predictor variables to
-                              an intermmediate feature space, thus allowing the
-                              user to model non-linear relationships.
         minprob (float): Minimum probability required for a
                          hypothesis. Hypotheses with insignificant support
                          (probabilities below this value) will be pruned.
@@ -259,41 +281,68 @@ class Bcdm:
 
     """
 
+    def _validate_shape(self, name: str, exp: Sequence[int]):
+        shape = getattr(self, name).shape
+        if shape != exp:
+            raise ValueError(
+                f"invalid shape for {name}: expected {exp}, got {shape}"
+            )
+
     def __init__(
         self,
-        mu=None,
-        omega=None,
-        sigma=None,
-        eta=None,
-        alg="sumprod",
-        hazardfunc=0.1,
-        basisfunc=None,
-        minprob=1.0e-6,
-        maxhypot=20,
+        numpred: int,
+        numresp: int,
+        *,
+        mu: np.ndarray | None = None,
+        omega: np.ndarray | None = None,
+        sigma: np.ndarray | None = None,
+        eta: int | None = None,
+        hazardfunc: HazardFunction | float = 0.1,
+        minprob: float = 1.0e-6,
+        maxhypot: int | None = 20,
     ):
-        alg = alg.lower()
-        algs = ("sumprod", "maxprod")
-        if alg not in algs:
-            raise ValueError(f"The input 'alg' must be in {algs}.")
+        if numpred <= 0:
+            raise ValueError("numpred must be > 0")
+        self.numpred = numpred
 
-        self.alg = alg
-        self.numpred = None
-        self.numresp = None
-        self.mu = mu  # location parameter
-        self.omega = omega  # scale parameter
-        self.sigma = sigma  # dispersion/noise parameter
-        self.eta = eta  # shape parameter
+        if numresp <= 0:
+            raise ValueError("numresp must be > 0")
+        self.numresp = numresp
 
-        # Ensure algorithm initialises on first call to update.
-        self.initialised = False
+        # Set uninformative prior for the location parameter.
+        if mu is None:
+            self.mu = np.zeros((numpred, numresp))
+        else:
+            self.mu = mu
+            self._validate_shape("mu", (numpred, numresp))
+
+        # Set uninformative prior for the scale parameter.
+        if omega is None:
+            self.omega = np.eye(numpred)
+        else:
+            self.omega = omega
+            self._validate_shape("omega", (numpred, numpred))
+
+        # Set uninformative prior for the dispersion/noise parameter.
+        if sigma is None:
+            self.sigma = np.eye(numresp)
+        else:
+            self.sigma = sigma
+            self._validate_shape("sigma", (numresp, numresp))
+
+        # Set uninformative prior for the shape parameter.
+        if eta is None:
+            self.eta = numresp
+        else:
+            if eta <= 0:
+                raise ValueError("eta must be > 0")
+            self.eta = eta
 
         # If 'maxhypot' is set to none, no hypotheses will be trimmed.
         if maxhypot is None or maxhypot > 0:
             self.maximum_hypotheses = maxhypot
         else:
-            raise ValueError(
-                "The input 'maxhypot' must be an integer greater than zero."
-            )
+            raise ValueError("maxhypot must be > 0")
 
         if minprob > 0:
             self.min_probability = minprob
@@ -303,83 +352,66 @@ class Bcdm:
             )
 
         # Variables for tracking segments.
-        self.hypotheses = []
-        self.counts = []
-        self.probabilities = []
+        self.hypotheses: list[_Hypothesis] = []
+        self.log_likelihoods: list[list[tuple[int, float]]] = []
+        self.maxprod_maxinds: list[int] = []
 
-        # Store basis and hazard function.
-        self.basisfunc = basisfunc if callable(basisfunc) else lambda x: x
-        self.hazardfunc = (
+        self.hazardfunc: HazardFunction = (
             hazardfunc if callable(hazardfunc) else lambda _: hazardfunc
         )
 
-    def _init_algorithm(self, numpred, numresp):
-        """Initialise the Bcdm algorithm."""
-
-        # Ensure input dimensions are consistent.
-        if self.numpred is None:
-            self.numpred = numpred
-        elif self.numpred != numpred:
-            raise ValueError(
-                f"Expected {numpred} dimensions in the predictor variable."
-            )
-
-        # Ensure output dimensions are consistent.
-        if self.numresp is None:
-            self.numresp = numresp
-        elif self.numresp != numresp:
-            raise ValueError(
-                f"Expected {numresp} dimensions in the response variable."
-            )
-
-        # Set uninformative prior for the location parameter.
-        if self.mu is None:
-            self.mu = np.zeros((numpred, numresp))
-
-        # Set uninformative prior for the scale parameter.
-        if self.omega is None:
-            self.omega = np.eye(numpred)
-
-        # Set uninformative prior for the dispersion/noise parameter.
-        if self.sigma is None:
-            self.sigma = np.eye(numresp)
-
-        # Set uninformative prior for the shape parameter.
-        if self.eta is None:
-            self.eta = numresp
-
-        # Create the initial hypothesis, which states that the first segment is
-        # about to begin.
-        self._add_new_hypothesis(0.0)
-
-    def _softmax(self, x, y):
-        return max(x, y) + np.log1p(np.exp(-abs(x - y)))
-
-    def _add_new_hypothesis(self, log_likelihood, basisfunc=None):
-        """Function for spawning new hypothesis"""
-
-        # Set basis function.
-        if basisfunc is None:
-            basisfunc = self.basisfunc
-
-        # Create new Bayesian linear model (using supplied priors).
-        stat = MatrixVariateNormalInvGamma(
-            self.mu, self.omega, self.sigma, self.eta
+    def _linear_model(self) -> MatrixVariateNormalInvGamma:
+        """Create new Bayesian linear model (using supplied priors)."""
+        return MatrixVariateNormalInvGamma(
+            mu=self.mu,
+            omega=self.omega,
+            sigma=self.sigma,
+            eta=self.eta,
         )
 
+    def _add_new_hypothesis(
+        self,
+        sumprod: float,
+        maxprod: float,
+        basis: BasisFunction,
+    ) -> None:
         # Add a new hypothesis, which states that a new segment is about to
         # begin.
-        self.hypotheses.append(
-            {
-                "count": 0,
-                "log_probability": log_likelihood,
-                "distribution": stat,
-                "log_constant": stat.log_constant(),
-                "basisfunc": basisfunc,
-            }
+        distribution = self._linear_model()
+        new = _Hypothesis(
+            count=0,
+            basis=basis,
+            distribution=distribution,
+            log_constant=distribution.log_constant(),
+            sumprod=sumprod,
+            maxprod=maxprod,
         )
+        self.hypotheses.append(new)
 
-    def update(self, X, Y, basisfunc=None):
+    @staticmethod
+    def _num_samples(x: np.ndarray) -> int:
+        if x.ndim == 1:
+            return 1
+        if x.ndim == 2:
+            return x.shape[0]
+        raise ValueError("input must be 1- or 2-D array")
+
+    @dataclass
+    class _LogProbabilities:
+        prob: float = -np.inf
+        sum: float = -np.inf
+
+    @dataclass
+    class _MaxLogProbabilities(_LogProbabilities):
+        max: float = -np.inf
+        argmax: int = -1
+
+    def update(
+        self,
+        X: np.ndarray,
+        Y: np.ndarray,
+        basis: BasisFunction | None = None,
+    ) -> None:
         """Update model with a single observation.
 
         When new input-output data is available, the model can be updated using
@@ -390,81 +422,85 @@ class Bcdm:
         class with ``maxhypot`` set to ``None``.
 
         Args:
-            X (numpy.array): Observed (1 x M) input data (predictor variable).
-            Y (numpy.array): Observed (1 x N) output data (response variable).
-
+            X (numpy.array): Observed (k x M) or (M) input data
+                             (predictor variable).
+            Y (numpy.array): Observed (k x N) or (N) output data
+                             (response variable).
+            basis (callable | None): Basis function. If None, defaults to the
+                                     identity function.
         """
 
-        # Initialise algorithm on first call to update. This allows the
-        # algorithm to configure itself to the size of the first input/output
-        # data if no hyper-parameters have been specified.
-        if not self.initialised:
-            init_basis = self.basisfunc if basisfunc is None else basisfunc
-            x = init_basis(X)
-            m = x.shape[1] if np.ndim(x) > 1 else X.size
-            n = Y.shape[1] if np.ndim(Y) > 1 else Y.size
-            self._init_algorithm(m, n)
-            self.initialised = True
+        basis = basis or _identity_basis
+        if not self.hypotheses:
+            self._add_new_hypothesis(0, 0, basis)
 
-        # Get size of data.
-        k = X.shape[0] if np.ndim(X) > 1 else X.size
-        m, n = self.numpred, self.numresp
+        k = self._num_samples(X)
+        k_y = self._num_samples(Y)
+        if k != k_y:
+            raise ValueError("X and Y must have the same number of samples")
 
-        # Allocate variables for the dynamic programming pass.
-        loglik = -np.inf
-        logmax = -np.inf
-        logsum = -np.inf
-        ind = np.nan
+        Y = np.atleast_2d(Y)
 
         # Update hypotheses by updating each matrix variate, normal inverse
         # gamma distribution over the linear models.
+        sumprod = self._LogProbabilities()
+        maxprod = self._MaxLogProbabilities()
         for hypothesis in self.hypotheses:
             # Update the sufficient statistics.
-            hypothesis["distribution"].update(hypothesis["basisfunc"](X), Y)
+            hypothesis.distribution.update(hypothesis.basis(X), Y)
 
             # Compute the log-normalization constant after the update
-            # (posterior parameter distribution).
-            # (Equation 8)
-            n_o = hypothesis["log_constant"]
-            n_k = hypothesis["log_constant"] = hypothesis[
-                "distribution"
-            ].log_constant()
+            # (posterior parameter distribution) (Equation 8)
+            n_o = hypothesis.log_constant
+            hypothesis.log_constant = hypothesis.distribution.log_constant()
+            n_k = hypothesis.log_constant
 
             # Evaluate the log-density of the predictive distribution.
             # (Equation 16)
-            log_density = n_k - n_o - k * (0.5 * m * n) * np.log(2.0 * np.pi)
+            log_density = (
+                n_k
+                - n_o
+                - k * (self.numpred * self.numresp / 2) * np.log(2 * np.pi)
+            )
 
-            # Increment the counter.
-            hypothesis["count"] += 1
+            # Accumulate the log-likelihood of the data (Equation 17)
+            hypothesis.count += 1
+            hazard = self.hazardfunc(hypothesis.count)
+            log_hazard = np.log(hazard)
 
-            # Accumulate the log-likelihood of the data.
-            # (Equation 17)
-            hazard = self.hazardfunc(hypothesis["count"])
-            aux = np.log(hazard) + log_density + hypothesis["log_probability"]
-            loglik = self._softmax(loglik, aux)
+            # Keep track of the posterior probability.
+            sumprod.prob = _log_sum_exp(
+                sumprod.prob, log_hazard + log_density + hypothesis.sumprod
+            )
 
-            # Keep track of the highest, log-likelihood.
-            if aux > logmax:
-                logmax, ind = aux, hypothesis["count"]
+            # Keep track of the highest log-likelihood.
+            maxprod_aux = log_hazard + log_density + hypothesis.maxprod
+            maxprod.prob = _log_sum_exp(maxprod.prob, maxprod_aux)
+            if maxprod_aux > maxprod.max:
+                maxprod.max = maxprod_aux
+                maxprod.argmax = hypothesis.count
 
             # Update and accumulate the log-probabilities.
-            hypothesis["log_probability"] += np.log1p(-hazard) + log_density
-            logsum = self._softmax(logsum, hypothesis["log_probability"])
+            hypoth_log_prob = np.log1p(-hazard) + log_density
+            hypothesis.maxprod += hypoth_log_prob
+            maxprod.sum = _log_sum_exp(maxprod.sum, hypothesis.maxprod)
+            hypothesis.sumprod += hypoth_log_prob
+            sumprod.sum = _log_sum_exp(sumprod.sum, hypothesis.sumprod)
 
-        # In the max-product algorithm, keep track of the most likely
-        # hypotheses.
-        if self.alg == "maxprod":
-            loglik = logmax
-            self.counts.append(ind)
+        # Keep track of the most likely hypotheses.
+        maxprod.prob = maxprod.max
+        self.maxprod_maxinds.append(maxprod.argmax)
 
         # Add a new hypothesis, which states that the next segment is about to
         # begin.
-        self._add_new_hypothesis(loglik, basisfunc)
+        self._add_new_hypothesis(sumprod.prob, maxprod.prob, basis)
 
         # Normalize the hypotheses so that their probabilities sum to one.
-        logsum = self._softmax(logsum, loglik)
+        maxprod.sum = _log_sum_exp(maxprod.sum, maxprod.prob)
+        sumprod.sum = _log_sum_exp(sumprod.sum, sumprod.prob)
         for hypothesis in self.hypotheses:
-            hypothesis["log_probability"] -= logsum
+            hypothesis.maxprod -= maxprod.sum
+            hypothesis.sumprod -= sumprod.sum
 
         # Automatically trim hypothesis on each update if requested.
         if self.maximum_hypotheses is not None:
@@ -473,17 +509,12 @@ class Bcdm:
                 maxhypot=self.maximum_hypotheses,
             )
 
-        # In the sum-product algorithm, keep track of the probabilities.
-        if self.alg == "sumprod":
-            iteration = list()
-            for hypothesis in self.hypotheses:
-                iteration.append(
-                    (hypothesis["count"], hypothesis["log_probability"])
-                )
+        # Keep track of the probabilities.
+        self.log_likelihoods.append(
+            [(h.count, h.sumprod) for h in self.hypotheses]
+        )
 
-            self.probabilities.append(iteration)
-
-    def trim_hypotheses(self, minprob=1.0e-6, maxhypot=20):
+    def trim_hypotheses(self, minprob=1.0e-6, maxhypot=20) -> None:
         """Prune hypotheses to limit computational complexity.
 
         The computational complexity of the algorithm can be managed by
@@ -503,14 +534,14 @@ class Bcdm:
             return
 
         # Sort the hypotheses in decreasing log probability order.
-        self.hypotheses.sort(key=lambda dct: -dct["log_probability"])
+        self.hypotheses.sort(key=lambda h: -h.sumprod)
 
         # Store the indices of likely hypotheses.
         minprob = np.log(minprob)
         index = [
             i
             for i, hypot in enumerate(self.hypotheses)
-            if hypot["log_probability"] > minprob
+            if hypot.sumprod > minprob
         ]
 
         # Trim the hypotheses.
@@ -521,72 +552,51 @@ class Bcdm:
         #       hypotheses. Interestingly, the algorithm specified in update
         #       does not require that the hypotheses be ordered! This sort can
         #       safely be ignored.
-        # self.__hypotheses.sort(key=lambda dct: dct['index'])
+        # self.hypotheses.sort(key=lambda h: h.count)
 
         # Normalize the hypotheses so that their probabilities sum to one.
         logsum = -np.inf
         for hypot in self.hypotheses:
-            logsum = self._softmax(logsum, hypot["log_probability"])
+            logsum = _log_sum_exp(logsum, hypot.sumprod)
         for hypot in self.hypotheses:
-            hypot["log_probability"] -= logsum
+            hypot.sumprod -= logsum
 
-    def infer(self):
-        """Return posterior probabilities OR sequence segmentation.
-
-        If the MAX-PRODUCT algorithm is selected, this method returns the most
-        likely sequence segmentation as a list of integers. Each integer in the
-        list marks where a segment begins.
-
-        If the SUM-PRODUCT algorithm is selected, this method returns the
-        posterior probabilities of the segmentation hypotheses as a numpy
-        array. Rows in the array represent hypotheses and columns in the array
-        represent data points in the time-series.
-
-        Returns:
-            object: This method returns the inference results. In the case of
-                    the MAX-PRODUCT algorithm, the method returns the most
-                    likely segmentation. In the case of the SUM-PRODUCT
-                    algorithm, this method returns the posterior probabilities
-                    of the segmentation hypotheses.
-
+    def posterior_probabilities(self) -> np.ndarray:
         """
+        Calculate posterior probabilities of the segmentation hypotheses.
+        """
+        k = len(self.log_likelihoods)
+        segment_probabilities = np.zeros((k + 1, k + 1))
+        segment_probabilities[0, 0] = 1.0
 
-        # In the max-product algorithm, the most likely hypotheses are
-        # tracked. Recover the most likely segment boundaries by performing a
-        # back-trace.
-        if self.alg == "maxprod":
-            # Find the most likely hypothesis.
-            max_hypothesis = max(
-                self.hypotheses, key=lambda dct: dct["log_probability"]
-            )
+        # Update hypotheses probabilities.
+        for i in range(len(self.log_likelihoods)):
+            for j, p in self.log_likelihoods[i]:
+                segment_probabilities[j, i + 1] = np.exp(p)
 
-            # Find the best sequence segmentation given all the data so far.
-            segment_boundaries = [
-                len(self.counts) - 1,
-            ]
-            index = segment_boundaries[0] - 1
-            count = max_hypothesis["count"] - 1
-            while index > 0:
-                index -= count
-                segment_boundaries.insert(0, index)
-                count = self.counts[index - 1]
+        # A segment always occurs at the beginning of the dataset.
+        segment_probabilities[0, 0] = 1.0
+        return segment_probabilities
 
-            return segment_boundaries
+    def segmentations(self) -> list[int]:
+        """
+        Calculate the most likely sequence segmentation as a list of
+        integers. Each integer in the list marks where a segment begins.
+        """
+        # The most likely hypotheses are tracked. Recover the most likely
+        # segment boundaries by performing a back-trace.
 
-        # In the sum-product algorithm, the segment probabilities are
-        # tracked. Recover the segment probabilities by formatting the stored
-        # history.
-        else:
-            k = len(self.probabilities)
-            segment_probabilities = np.zeros((k + 1, k + 1))
-            segment_probabilities[0, 0] = 1.0
+        if any(ind < 0 for ind in self.maxprod_maxinds):
+            raise AssertionError("maxprod_maxinds contains negative indices")
 
-            # Update hypotheses probabilities.
-            for i in range(len(self.probabilities)):
-                for j, probability in self.probabilities[i]:
-                    segment_probabilities[j, i + 1] = np.exp(probability)
+        # Find the best sequence segmentation given all the data so far.
+        max_hypothesis = max(self.hypotheses, key=lambda h: h.maxprod)
+        segment_boundaries = [len(self.maxprod_maxinds) - 1]
+        index = segment_boundaries[0] - 1
+        count = max_hypothesis.count - 1
+        while index > 0:
+            index -= count
+            segment_boundaries.insert(0, index)
+            count = self.maxprod_maxinds[index - 1]
 
-            # A segment always occurs at the beginning of the dataset.
-            segment_probabilities[0, 0] = 1.0
-
-            return segment_probabilities
+        return segment_boundaries
