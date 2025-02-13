@@ -1,3 +1,4 @@
 .*_cache/
+.dmypy.json
 .venv/
 __pycache__/
