@@ -6,30 +6,30 @@ name = "bayesian-change-detection"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
-    { name = "click" },
-    { name = "matplotlib" },
     { name = "numpy" },
     { name = "scipy" },
 ]
 
 [package.dev-dependencies]
 dev = [
+    { name = "click" },
     { name = "flake8" },
+    { name = "matplotlib" },
     { name = "mypy" },
     { name = "ruff" },
 ]
 
 [package.metadata]
 requires-dist = [
-    { name = "click", specifier = ">=8.1.8" },
-    { name = "matplotlib", specifier = ">=3.10.0" },
     { name = "numpy", specifier = ">=1.26.4" },
     { name = "scipy", specifier = ">=1.15.1" },
 ]
 
 [package.metadata.requires-dev]
 dev = [
+    { name = "click", specifier = ">=8.1.8" },
     { name = "flake8", specifier = ">=7.1.1" },
+    { name = "matplotlib", specifier = ">=3.10.0" },
     { name = "mypy", specifier = ">=1.15.0" },
     { name = "ruff", specifier = ">=0.9.2" },
 ]
