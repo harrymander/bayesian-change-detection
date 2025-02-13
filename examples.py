@@ -168,7 +168,7 @@ def random_data():
     bcdm_segments = Bcdm(alg="maxprod", hazardfunc=rate)
 
     # Update the segment length hypotheses given the data.
-    for x, y in zip(X, Y, strict=False):
+    for x, y in zip(X, Y, strict=True):
         bcdm_probabilities.update(x, y)
         bcdm_segments.update(x, y)
 
@@ -280,7 +280,7 @@ def non_sinusoidal():
     )
 
     # Update the segment length hypotheses given the data.
-    for x, y in zip(X, Y, strict=False):
+    for x, y in zip(X, Y, strict=True):
         y = np.array([y])
         basis_t = lambda xt: basis(xt - x)  # noqa: E731,B023
         bcdm_probabilities.update(x, y, basisfunc=basis_t)
@@ -360,7 +360,7 @@ def well_data():
     bcdm_segments = Bcdm(alg="maxprod", **kwargs)
 
     # Update the segment length hypotheses given the data.
-    for x, y in zip(X, Y, strict=False):
+    for x, y in zip(X, Y, strict=True):
         bcdm_probabilities.update(x, y)
         bcdm_segments.update(x, y)
 
@@ -431,7 +431,7 @@ def index_data():
     bcdm_segments = Bcdm(alg="maxprod", **kwargs)
 
     # Update the segment length hypotheses given the data.
-    for x, y in zip(X, Y, strict=False):
+    for x, y in zip(X, Y, strict=True):
         bcdm_probabilities.update(x, y)
         bcdm_segments.update(x, y)
 
