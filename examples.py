@@ -459,10 +459,6 @@ def index_data() -> Figure:
     return fig
 
 
-def save_fig(name, fig):
-    fig.savefig(f"{name}.png")
-
-
 EXAMPLES = {
     "random": random_data,
     "non-sinusoidal": non_sinusoidal,
