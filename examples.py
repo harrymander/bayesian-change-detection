@@ -19,6 +19,7 @@ import click
 import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.figure import Figure
+from tqdm import tqdm
 
 from bayesian_change_detection import Bcdm, MatrixVariateNormalInvGamma
 
@@ -166,7 +167,7 @@ def random_data() -> Figure:
     model = Bcdm(X.shape[1], Y.shape[1], hazardfunc=rate)
 
     # Update the segment length hypotheses given the data.
-    for x, y in zip(X, Y, strict=True):
+    for x, y in tqdm(zip(X, Y, strict=True), total=len(X)):
         model.update(x, y)
 
     # Recover the hypothesis probabilities and back-trace to find the most
@@ -268,7 +269,7 @@ def non_sinusoidal() -> Figure:
         return np.r_[1.0, x].reshape(1, -1)
 
     # Update the segment length hypotheses given the data.
-    for x, y in zip(X, Y, strict=True):
+    for x, y in tqdm(zip(X, Y, strict=True), total=len(X)):
         # FIXME: x is not bound in the loop, hence the linter error. I thought
         # it didn't matter but it gives different results when binding with
         # partial... Need to look into this, I think it is a bug with the
@@ -354,7 +355,7 @@ def well_data() -> Figure:
     )
 
     # Update the segment length hypotheses given the data.
-    for x, y in zip(X, Y, strict=True):
+    for x, y in tqdm(zip(X, Y, strict=True), total=len(X)):
         model.update(x, y)
 
     # Recover the hypothesis probabilities and back-trace to find the most
@@ -421,7 +422,7 @@ def index_data() -> Figure:
     )
 
     # Update the segment length hypotheses given the data.
-    for x, y in zip(X, Y, strict=True):
+    for x, y in tqdm(zip(X, Y, strict=True), total=len(X)):
         model.update(x, y)
 
     # Recover the hypothesis probabilities and back-trace to find the most
