@@ -1,4 +1,4 @@
-#!/usr/bin/python3
+#!/usr/bin/env python3
 
 """Examples of the Bayesian model-based change detection model in action
 
