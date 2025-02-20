@@ -569,7 +569,7 @@ class Bcdm:
         segment_probabilities = np.zeros((k + 1, k + 1))
 
         # Update hypotheses probabilities.
-        for i in range(len(self.log_likelihoods)):
+        for i in range(k):
             for j, p in self.log_likelihoods[i]:
                 segment_probabilities[j, i + 1] = np.exp(p)
 
