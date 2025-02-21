@@ -350,8 +350,8 @@ def well_data() -> Figure:
         X.shape[1],
         Y.shape[1],
         hazardfunc=rate,
-        mu=np.atleast_2d(loc),
-        sigma=np.atleast_2d(scale),
+        mu=loc,
+        sigma=scale,
     )
 
     # Update the segment length hypotheses given the data.

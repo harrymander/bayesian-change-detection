@@ -293,10 +293,10 @@ class Bcdm:
         numpred: int,
         numresp: int,
         *,
-        mu: np.ndarray | None = None,
-        omega: np.ndarray | None = None,
-        sigma: np.ndarray | None = None,
-        eta: int | None = None,
+        mu: np.ndarray | float | None = None,
+        omega: np.ndarray | float | None = None,
+        sigma: np.ndarray | float | None = None,
+        eta: float | None = None,
         hazardfunc: HazardFunction | float = 0.1,
         minprob: float = 1.0e-6,
         maxhypot: int | None = 20,
@@ -310,27 +310,31 @@ class Bcdm:
         self.numresp = numresp
 
         # Set uninformative prior for the location parameter.
+        self.mu: np.ndarray
         if mu is None:
             self.mu = np.zeros((numpred, numresp))
         else:
-            self.mu = mu
+            self.mu = np.atleast_2d(mu)
             self._validate_shape("mu", (numpred, numresp))
 
         # Set uninformative prior for the scale parameter.
+        self.omega: np.ndarray
         if omega is None:
             self.omega = np.eye(numpred)
         else:
-            self.omega = omega
+            self.omega = np.atleast_2d(omega)
             self._validate_shape("omega", (numpred, numpred))
 
         # Set uninformative prior for the dispersion/noise parameter.
+        self.sigma: np.ndarray
         if sigma is None:
             self.sigma = np.eye(numresp)
         else:
-            self.sigma = sigma
+            self.sigma = np.atleast_2d(sigma)
             self._validate_shape("sigma", (numresp, numresp))
 
         # Set uninformative prior for the shape parameter.
+        self.eta: float
         if eta is None:
             self.eta = numresp
         else:
