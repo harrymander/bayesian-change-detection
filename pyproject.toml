@@ -31,9 +31,6 @@ line-length = 79
 
 [tool.ruff.lint]
 select = ["F", "E", "W", "I", "UP", "B", "NPY", "RUF", "T10"]
-ignore = [
-    "NPY002", # Replace legacy `np.random.randn` call with `np.random.Generator`
-]
 
 [[tool.mypy.overrides]]
 module = "scipy"

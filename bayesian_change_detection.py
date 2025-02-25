@@ -21,7 +21,7 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 
 import numpy as np
-from numpy import linalg, random
+from numpy import linalg
 from scipy import special
 
 
@@ -35,7 +35,17 @@ class MatrixVariateNormalInvGamma:
 
     """
 
-    def __init__(self, mu, omega, sigma, eta):
+    def __init__(
+        self,
+        mu,
+        omega,
+        sigma,
+        eta,
+        *,
+        rng: np.random.Generator | None = None,
+    ):
+        self.rng = rng or np.random.default_rng()
+
         # Get size of data.
         m, n = np.shape(mu)
         self.m, self.n = m, n
@@ -201,8 +211,8 @@ class MatrixVariateNormalInvGamma:
 
         # Simulate the marginal Wishart distribution.
         f = linalg.solve(
-            np.diag(np.sqrt(2.0 * random.gamma((eta - np.arange(n)) / 2.0)))
-            + np.tril(random.randn(n, n), -1),
+            np.diag(np.sqrt(2.0 * self.rng.gamma((eta - np.arange(n)) / 2.0)))
+            + np.tril(self.rng.standard_normal((n, n)), -1),
             np.sqrt(eta) * linalg.cholesky(sigma).transpose(),
         )
         b = np.dot(f.transpose(), f)
@@ -210,7 +220,10 @@ class MatrixVariateNormalInvGamma:
         # Simulate the conditional Gauss distribution.
         a = mu + linalg.solve(
             linalg.cholesky(omega).transpose(),
-            np.dot(random.randn(m, n), linalg.cholesky(b).transpose()),
+            np.dot(
+                self.rng.standard_normal((m, n)),
+                linalg.cholesky(b).transpose(),
+            ),
         )
 
         return a, b
@@ -300,7 +313,10 @@ class Bcdm:
         hazardfunc: HazardFunction | float = 0.1,
         minprob: float = 1.0e-6,
         maxhypot: int | None = 20,
+        rng: np.random.Generator | None = None,
     ):
+        self.rng = rng
+
         if numpred <= 0:
             raise ValueError("numpred must be > 0")
         self.numpred = numpred
@@ -371,6 +387,7 @@ class Bcdm:
             omega=self.omega,
             sigma=self.sigma,
             eta=self.eta,
+            rng=self.rng,
         )
 
     def _add_new_hypothesis(

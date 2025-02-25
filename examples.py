@@ -12,6 +12,7 @@ while others are real.
 """
 
 import logging
+from collections.abc import Callable
 from itertools import batched, pairwise
 from pathlib import Path
 
@@ -24,7 +25,7 @@ from tqdm import tqdm
 from bayesian_change_detection import Bcdm, MatrixVariateNormalInvGamma
 
 # Use same random data for repeatability.
-np.random.seed(seed=1729)
+DEFAULT_SEED = 1729
 
 DATA_DIR = Path(__file__).parent / "data"
 
@@ -39,6 +40,7 @@ def gen_random_data(
     sigma=None,
     eta=None,
     featfun=None,
+    rng: np.random.Generator | None = None,
 ):
     """Randomly generate multi-variate input-output data
 
@@ -46,6 +48,8 @@ def gen_random_data(
     generate a random coefficient matrix and a random noise covariance matrix,
     and use these to generate input-output data.
     """
+
+    rng = rng or np.random.default_rng()
 
     # Set default prior for the location parameter.
     if mu is None:
@@ -67,24 +71,29 @@ def gen_random_data(
 
     # Generate the segment boundaries.
     changepoints = np.sort(
-        np.random.choice(np.arange(numpoint - 1), numseg - 1, replace=False)
-        + 1
+        rng.choice(np.arange(numpoint - 1), numseg - 1, replace=False) + 1
     )
     boundaries = np.r_[0, changepoints, numpoint]
 
     # For each segment generate a set of predictor-response data.
-    X = np.random.rand(numpoint, numpred)
+    X = rng.random((numpoint, numpred))
     Y = np.empty((numpoint, numresp))
     for i0, i1 in pairwise(boundaries):
         # Generate the coefficient matrix and the noise covariance matrix.
-        norm_inv_gamma = MatrixVariateNormalInvGamma(mu, omega, sigma, eta)
+        norm_inv_gamma = MatrixVariateNormalInvGamma(
+            mu,
+            omega,
+            sigma,
+            eta,
+            rng=rng,
+        )
         coeff, noise = norm_inv_gamma.rand()
         fact = np.linalg.cholesky(noise).transpose()
 
         # Given a set of predictor data, generate a corresponding set of
         # response data.
         for i in range(i0, i1):
-            eps = np.dot(np.random.randn(numresp), fact)
+            eps = np.dot(rng.standard_normal(numresp), fact)
             Y[i] = featfun(np.dot(X[i], coeff)) + eps
 
     # Adjust the last element of the true boundaries for python's zero
@@ -139,7 +148,7 @@ def plot_segment_boundaries(x, segments=None, **args):
         plt.axvline(x[i], **args)
 
 
-def random_data() -> Figure:
+def random_data(rng: np.random.Generator) -> Figure:
     """Simple example with synthetic data."""
 
     # Set the size of the problem.
@@ -161,10 +170,16 @@ def random_data() -> Figure:
         numseg,
         omega=coeffparam * np.eye(numpred),
         eta=noiseparam,
+        rng=rng,
     )
 
     rate = numseg / (numpoint - numseg)
-    model = Bcdm(X.shape[1], Y.shape[1], hazardfunc=rate)
+    model = Bcdm(
+        X.shape[1],
+        Y.shape[1],
+        hazardfunc=rate,
+        rng=rng,
+    )
 
     # Update the segment length hypotheses given the data.
     for x, y in tqdm(zip(X, Y, strict=True), total=len(X)):
@@ -220,7 +235,7 @@ def triangle_wave(a: float, x: np.ndarray) -> np.ndarray:
     return 2 * np.abs(sawtooth_wave(a, x)) - 1
 
 
-def non_sinusoidal() -> Figure:
+def non_sinusoidal(rng: np.random.Generator) -> Figure:
     """Simple example with triangular wave data."""
 
     rate = 0.001
@@ -241,9 +256,9 @@ def non_sinusoidal() -> Figure:
     # Create Gaussian noise.
     Y += np.vstack(
         (
-            0.025 * np.random.randn(samples),
-            0.1 * np.random.randn(samples),
-            0.05 * np.random.randn(samples),
+            0.025 * rng.standard_normal((samples)),
+            0.1 * rng.standard_normal(samples),
+            0.05 * rng.standard_normal(samples),
         )
     ).T
 
@@ -263,6 +278,7 @@ def non_sinusoidal() -> Figure:
         hazardfunc=rate,
         omega=omega,
         sigma=sigma,
+        rng=rng,
     )
 
     def add_intercept(x: np.ndarray) -> np.ndarray:
@@ -321,7 +337,7 @@ def non_sinusoidal() -> Figure:
     return fig
 
 
-def well_data() -> Figure:
+def well_data(rng: np.random.Generator) -> Figure:
     """Simple example with nuclear response data collected a well drilling
 
     Segment the well log data used in Fearnhead and Clifford (1996). This data
@@ -352,6 +368,7 @@ def well_data() -> Figure:
         hazardfunc=rate,
         mu=loc,
         sigma=scale,
+        rng=rng,
     )
 
     # Update the segment length hypotheses given the data.
@@ -391,7 +408,7 @@ def well_data() -> Figure:
     return fig
 
 
-def index_data() -> Figure:
+def index_data(rng: np.random.Generator) -> Figure:
     """Simple example with equity index return data
 
     Segment the daily rates of return of a pair of equity indices between April
@@ -419,6 +436,7 @@ def index_data() -> Figure:
         maxhypot=50,
         hazardfunc=1.0e-2,  # 1% expected hazard rate
         minprob=1.0e-16,
+        rng=rng,
     )
 
     # Update the segment length hypotheses given the data.
@@ -460,7 +478,8 @@ def index_data() -> Figure:
     return fig
 
 
-EXAMPLES = {
+ExamplesFuncDict = dict[str, Callable[[np.random.Generator], Figure]]
+EXAMPLES: ExamplesFuncDict = {
     "random": random_data,
     "non-sinusoidal": non_sinusoidal,
     "well": well_data,
@@ -468,7 +487,7 @@ EXAMPLES = {
 }
 
 
-def parse_examples(value):
+def parse_examples(value: str) -> ExamplesFuncDict:
     examples = {}
     for item in value.split(","):
         if item == "all":
@@ -545,7 +564,23 @@ def get_plot_image_paths(prefix, suffix, names, overwrite):
     (the default). Available examples are: {",".join(EXAMPLES)}.""",
     callback=lambda c, p, value: parse_examples(value),
 )
-def main(prefix, suffix, overwrite, show, examples):
+@click.option(
+    "--seed",
+    "seed_str",
+    default="12345",
+    help="""Random seed, interpreted as a sequence of bytes. Each example is
+    re-seeded before running. If empty, an unpredictable seed is used.""",
+    show_default=True,
+)
+def main(
+    prefix: str | None,
+    suffix: str | None,
+    overwrite: bool,
+    show: bool,
+    examples: ExamplesFuncDict,
+    seed_str: str,
+) -> None:
+    seed = list(seed_str.encode()) if seed_str else None
     image_paths = (
         get_plot_image_paths(prefix, suffix, examples.keys(), overwrite)
         if prefix
@@ -560,7 +595,7 @@ def main(prefix, suffix, overwrite, show, examples):
 
     for name, example in examples.items():
         logger.info(f"Running {name} data example...")
-        fig = example()
+        fig = example(np.random.default_rng(seed))
         if image_paths:
             path = image_paths[name]
             fig.savefig(path)
