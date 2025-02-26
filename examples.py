@@ -12,10 +12,9 @@ while others are real.
 """
 
 import logging
-from collections.abc import Callable
 from itertools import batched, pairwise
 from pathlib import Path
-from typing import cast
+from typing import Any, Protocol, cast
 
 import click
 import matplotlib.pyplot as plt
@@ -149,7 +148,7 @@ def plot_segment_boundaries(x, segments=None, **args):
         plt.axvline(x[i], **args)
 
 
-def random_data(rng: np.random.Generator) -> Figure:
+def random_data(rng: np.random.Generator, **kw) -> Figure:
     """Simple example with synthetic data."""
 
     # Set the size of the problem.
@@ -236,7 +235,9 @@ def triangle_wave(a: float, x: np.ndarray) -> np.ndarray:
     return 2 * np.abs(sawtooth_wave(a, x)) - 1
 
 
-def triangular(rng: np.random.Generator) -> Figure:
+def triangular(
+    rng: np.random.Generator, *, show_regression: bool = False, **kw
+) -> Figure:
     """Simple example with triangular wave data."""
 
     rate = 0.001
@@ -273,12 +274,6 @@ def triangular(rng: np.random.Generator) -> Figure:
     # likely segmentation of the sequence.
     hypotheses_probability = model.posterior_probabilities()
     segments = model.segmentations()
-    params = model.regression_parameters(
-        X,
-        Y,
-        basis=add_intercept,
-        segmentations=segments,
-    )
 
     # Create subplots with shared X-axis.
     fig, (upperaxes, loweraxes) = plt.subplots(2, sharex=False)
@@ -288,13 +283,20 @@ def triangular(rng: np.random.Generator) -> Figure:
         upperaxes.plot(X, Y[:, i])
 
     # Plot the regression lines and confidence intervals for each segment
-    for p, (i0, i1) in zip(params, pairwise(segments), strict=True):
-        x = add_intercept(X[i0 : i1 + 1])
-        pred = (x @ p.mu).ravel()
-        conf = p.confidence_interval(x).ravel()
-        upperaxes.plot(x[:, 1], pred, "k--")
-        upperaxes.plot(x[:, 1], pred + conf, "g--")
-        upperaxes.plot(x[:, 1], pred - conf, "g--")
+    if show_regression:
+        params = model.regression_parameters(
+            X,
+            Y,
+            basis=add_intercept,
+            segmentations=segments,
+        )
+        for p, (i0, i1) in zip(params, pairwise(segments), strict=True):
+            x = add_intercept(X[i0 : i1 + 1])
+            pred = (x @ p.mu).ravel()
+            conf = p.confidence_interval(x).ravel()
+            upperaxes.plot(x[:, 1], pred, "k--")
+            upperaxes.plot(x[:, 1], pred + conf, "g--")
+            upperaxes.plot(x[:, 1], pred - conf, "g--")
 
     # Plot the posterior probabilities over segment length hypotheses.
     plot_probability(loweraxes, hypotheses_probability)
@@ -325,7 +327,7 @@ def triangular(rng: np.random.Generator) -> Figure:
     return fig
 
 
-def non_sinusoidal(rng: np.random.Generator) -> Figure:
+def non_sinusoidal(rng: np.random.Generator, **kw) -> Figure:
     """Example with various simple waveforms (square, triangle, sawtooth)."""
 
     rate = 0.001
@@ -427,7 +429,9 @@ def non_sinusoidal(rng: np.random.Generator) -> Figure:
     return fig
 
 
-def well_data(rng: np.random.Generator) -> Figure:
+def well_data(
+    rng: np.random.Generator, *, show_regression: bool = False, **kw
+) -> Figure:
     """Simple example with nuclear response data collected a well drilling
 
     Segment the well log data used in Fearnhead and Clifford (1996). This data
@@ -469,7 +473,6 @@ def well_data(rng: np.random.Generator) -> Figure:
     # likely segmentation of the sequence.
     hypotheses_probability = model.posterior_probabilities()
     segments = model.segmentations()
-    params = model.regression_parameters(X, Y, segmentations=segments)
 
     # Create subplots with shared X-axis.
     fig, (upperaxes, loweraxes) = plt.subplots(2, sharex=True)
@@ -480,13 +483,15 @@ def well_data(rng: np.random.Generator) -> Figure:
     upperaxes.plot(t, Y[:])
 
     # Plot the regression lines and confidence intervals for each segment
-    for p, (i0, i1) in zip(params, pairwise(segments), strict=True):
-        t_sub = t[i0 : i1 + 1]
-        pred = np.ones_like(t_sub) * p.mu.item()
-        upperaxes.plot(t_sub, pred, "k--")
-        conf = p.confidence_interval(X[i0 : i1 + 1]).ravel()
-        upperaxes.plot(t_sub, pred + conf, "g--")
-        upperaxes.plot(t_sub, pred - conf, "g--")
+    if show_regression:
+        params = model.regression_parameters(X, Y, segmentations=segments)
+        for p, (i0, i1) in zip(params, pairwise(segments), strict=True):
+            t_sub = t[i0 : i1 + 1]
+            pred = np.ones_like(t_sub) * p.mu.item()
+            upperaxes.plot(t_sub, pred, "k--")
+            conf = p.confidence_interval(X[i0 : i1 + 1]).ravel()
+            upperaxes.plot(t_sub, pred + conf, "g--")
+            upperaxes.plot(t_sub, pred - conf, "g--")
 
     # Plot the posterior probabilities over segment length hypotheses.
     plot_probability(loweraxes, hypotheses_probability)
@@ -508,7 +513,7 @@ def well_data(rng: np.random.Generator) -> Figure:
     return fig
 
 
-def index_data(rng: np.random.Generator) -> Figure:
+def index_data(rng: np.random.Generator, **kw) -> Figure:
     """Simple example with equity index return data
 
     Segment the daily rates of return of a pair of equity indices between April
@@ -578,8 +583,12 @@ def index_data(rng: np.random.Generator) -> Figure:
     return fig
 
 
-ExamplesFuncDict = dict[str, Callable[[np.random.Generator], Figure]]
-EXAMPLES: ExamplesFuncDict = {
+class ExampleGenerator(Protocol):
+    def __call__(self, rng: np.random.Generator, **kw: Any) -> Figure: ...
+
+
+ExampleGeneratorDict = dict[str, ExampleGenerator]
+EXAMPLES: ExampleGeneratorDict = {
     "random": random_data,
     "triangle": triangular,
     "non-sinusoidal": non_sinusoidal,
@@ -588,7 +597,7 @@ EXAMPLES: ExamplesFuncDict = {
 }
 
 
-def parse_examples(value: str) -> ExamplesFuncDict:
+def parse_examples(value: str) -> ExampleGeneratorDict:
     examples = {}
     for item in value.split(","):
         if item == "all":
@@ -673,13 +682,20 @@ def get_plot_image_paths(prefix, suffix, names, overwrite):
     re-seeded before running. If empty, an unpredictable seed is used.""",
     show_default=True,
 )
+@click.option(
+    "--show-regression",
+    is_flag=True,
+    help="""Show regression line and confidence interval for select
+    examples.""",
+)
 def main(
     prefix: str | None,
     suffix: str | None,
     overwrite: bool,
     show: bool,
-    examples: ExamplesFuncDict,
+    examples: ExampleGeneratorDict,
     seed_str: str,
+    show_regression: bool,
 ) -> None:
     seed = list(seed_str.encode()) if seed_str else None
     image_paths = (
@@ -696,7 +712,10 @@ def main(
 
     for name, example in examples.items():
         logger.info(f"Running {name} data example...")
-        fig = example(np.random.default_rng(seed))
+        fig = example(
+            np.random.default_rng(seed),
+            show_regression=show_regression,
+        )
         if image_paths:
             path = image_paths[name]
             fig.savefig(path)
