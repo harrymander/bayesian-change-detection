@@ -15,6 +15,7 @@ import logging
 from collections.abc import Callable
 from itertools import batched, pairwise
 from pathlib import Path
+from typing import cast
 
 import click
 import matplotlib.pyplot as plt
@@ -235,8 +236,82 @@ def triangle_wave(a: float, x: np.ndarray) -> np.ndarray:
     return 2 * np.abs(sawtooth_wave(a, x)) - 1
 
 
-def non_sinusoidal(rng: np.random.Generator) -> Figure:
+def triangular(rng: np.random.Generator) -> Figure:
     """Simple example with triangular wave data."""
+
+    rate = 0.001
+    omega = 1.0e-3 * np.eye(2)
+    sigma = 1.0e-6
+    samples = 1000
+
+    # Create input and outputs.
+    X = np.linspace(0, 3 * 2 * np.pi, samples).reshape(-1, 1)
+    noise = 0.1 * rng.standard_normal((samples, 1))
+    Y = triangle_wave(2 * np.pi, X - np.pi / 2) + noise
+
+    # Determine location of true boundaries.
+    true_boundaries = np.pi * np.arange(0, 6) + np.pi / 2
+    true_boundaries = np.sort(true_boundaries[true_boundaries <= X.max()])
+
+    model = Bcdm(
+        X.shape[1] + 1,
+        Y.shape[1],
+        hazardfunc=rate,
+        omega=omega,
+        sigma=sigma,
+        rng=rng,
+    )
+
+    def add_intercept(x: np.ndarray) -> np.ndarray:
+        return np.c_[np.ones_like(x), x]
+
+    # Update the segment length hypotheses given the data.
+    for x, y in tqdm(zip(X, Y, strict=True), total=len(X)):
+        model.update(x, cast(np.ndarray, y), basis=add_intercept)
+
+    # Recover the hypothesis probabilities and back-trace to find the most
+    # likely segmentation of the sequence.
+    hypotheses_probability = model.posterior_probabilities()
+    segments = model.segmentations()
+
+    # Create subplots with shared X-axis.
+    fig, (upperaxes, loweraxes) = plt.subplots(2, sharex=False)
+
+    # Plot the response data.
+    for i in range(Y.shape[1]):
+        upperaxes.plot(X, Y[:, i])
+
+    # Plot the posterior probabilities over segment length hypotheses.
+    plot_probability(loweraxes, hypotheses_probability)
+
+    # Plot the changes detected by the segmentation algorithm as alternating
+    # coloured spans. Plot the true segment boundaries as vertical lines.
+    plt.sca(upperaxes)
+    plot_segment_span(
+        X.ravel(), segments, facecolor="y", alpha=0.2, edgecolor="none"
+    )
+    plot_segment_boundaries(true_boundaries, color="k", linestyle=":")
+
+    plt.sca(loweraxes)
+    plot_segment_span(segments, facecolor="y", alpha=0.2, edgecolor="none")
+    plot_segment_boundaries(
+        samples * true_boundaries / X.max(), color="k", linestyle=":"
+    )
+
+    upperaxes.set_xlim([0, X.max()])
+    loweraxes.set_xlim([0, len(X)])
+
+    fig.canvas.manager.set_window_title("Triangular wave data")  # type: ignore
+    upperaxes.set_title("Triangular wave data")
+    upperaxes.set_ylabel("Signal values")
+    loweraxes.set_xlabel("Observation")
+    loweraxes.set_ylabel("Hypothesis probability")
+
+    return fig
+
+
+def non_sinusoidal(rng: np.random.Generator) -> Figure:
+    """Example with various simple waveforms (square, triangle, sawtooth)."""
 
     rate = 0.001
     omega = 1.0e-3 * np.eye(2)
@@ -481,6 +556,7 @@ def index_data(rng: np.random.Generator) -> Figure:
 ExamplesFuncDict = dict[str, Callable[[np.random.Generator], Figure]]
 EXAMPLES: ExamplesFuncDict = {
     "random": random_data,
+    "triangle": triangular,
     "non-sinusoidal": non_sinusoidal,
     "well": well_data,
     "index": index_data,
