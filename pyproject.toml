@@ -33,5 +33,5 @@ line-length = 79
 select = ["F", "E", "W", "I", "UP", "B", "NPY", "RUF", "T10"]
 
 [[tool.mypy.overrides]]
-module = "scipy"
+module = "scipy.*"
 ignore_missing_imports = true
