@@ -19,10 +19,13 @@ are propagated and re-weighted to reflect this new knowledge.
 
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
+from itertools import pairwise
+from typing import overload
 
 import numpy as np
 from numpy import linalg
 from scipy import special
+from scipy.stats import t as StudentsT
 
 
 class MatrixVariateNormalInvGamma:
@@ -256,6 +259,27 @@ class _Hypothesis:
     sumprod: float
 
 
+@dataclass
+class RegressionParameters:
+    mu: np.ndarray
+    omega: np.ndarray
+    sigma: np.ndarray
+    eta: float
+
+    def var(self, X: np.ndarray) -> np.ndarray:
+        return (
+            self.sigma
+            / (self.eta - 1)
+            * (1 + (np.dot(X, self.omega) * X).sum(axis=1))
+        )
+
+    def confidence_interval(
+        self, X: np.ndarray, sig: float = 0.05
+    ) -> np.ndarray:
+        t = StudentsT(2 * self.eta).ppf(1 - sig / 2)
+        return t * np.sqrt(self.var(X))
+
+
 class Bcdm:
     """Bayesian change detection model.
 
@@ -354,8 +378,8 @@ class Bcdm:
         if eta is None:
             self.eta = numresp
         else:
-            if eta <= 0:
-                raise ValueError("eta must be > 0")
+            if eta < 1:
+                raise ValueError("eta must be >= 1")
             self.eta = eta
 
         # If 'maxhypot' is set to none, no hypotheses will be trimmed.
@@ -426,6 +450,90 @@ class Bcdm:
     class _MaxLogProbabilities(_LogProbabilities):
         max: float = -np.inf
         argmax: int = -1
+
+    @overload
+    def regression_parameters(
+        self,
+        X: np.ndarray,
+        Y: np.ndarray,
+        *,
+        segmentations: Sequence[int],
+        basis: BasisFunction | None = ...,
+    ) -> list[RegressionParameters]: ...
+
+    @overload
+    def regression_parameters(
+        self,
+        X: np.ndarray,
+        Y: np.ndarray,
+        *,
+        basis: BasisFunction | None = ...,
+        segmentations: None = ...,
+    ) -> RegressionParameters: ...
+
+    def regression_parameters(
+        self,
+        X: np.ndarray,
+        Y: np.ndarray,
+        *,
+        basis: BasisFunction | None = None,
+        segmentations: Sequence[int] | None = None,
+    ) -> RegressionParameters | list[RegressionParameters]:
+        if self.numresp != 1:
+            raise NotImplementedError(
+                "Currently only supports single response variable"
+            )
+        if Y.shape[-1] != self.numresp:
+            raise ValueError(
+                f"Y must have {self.numresp} response variables(s), "
+                f"got {Y.shape[-1]}"
+            )
+
+        if basis:
+            X = basis(X)
+
+        if X.shape[-1] != self.numpred:
+            raise ValueError(
+                f"X must have {self.numpred} predictor(s), got {X.shape[-1]}"
+            )
+
+        indices = segmentations or (0, len(X) - 1)
+        params = []
+        for i0, i1 in pairwise(indices):
+            x = X[i0 : i1 + 1]
+            y = Y[i0 : i1 + 1]
+
+            omega_inv = self.omega + (x.T @ x)
+            omega = np.linalg.inv(omega_inv)
+            mu = omega @ ((self.omega @ self.mu) + (x.T @ y))
+            sigma = (
+                self.sigma
+                + (
+                    (self.mu.T @ self.omega @ self.mu)
+                    + (y.T @ y)
+                    - (mu.T @ omega_inv @ mu)
+                )
+                / 2
+            )
+            eta = self.eta + len(x) / 2
+
+            # if (sigma < 0).any():
+            #     breakpoint()
+
+            params.append(
+                RegressionParameters(
+                    mu=mu,
+                    omega=omega,
+                    sigma=sigma,
+                    eta=eta,
+                )
+            )
+
+        if segmentations:
+            return params
+
+        assert len(params) == 1
+        return params[0]
 
     def update(
         self,
