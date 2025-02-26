@@ -273,6 +273,12 @@ def triangular(rng: np.random.Generator) -> Figure:
     # likely segmentation of the sequence.
     hypotheses_probability = model.posterior_probabilities()
     segments = model.segmentations()
+    params = model.regression_parameters(
+        X,
+        Y,
+        basis=add_intercept,
+        segmentations=segments,
+    )
 
     # Create subplots with shared X-axis.
     fig, (upperaxes, loweraxes) = plt.subplots(2, sharex=False)
@@ -280,6 +286,15 @@ def triangular(rng: np.random.Generator) -> Figure:
     # Plot the response data.
     for i in range(Y.shape[1]):
         upperaxes.plot(X, Y[:, i])
+
+    # Plot the regression lines and confidence intervals for each segment
+    for p, (i0, i1) in zip(params, pairwise(segments), strict=True):
+        x = add_intercept(X[i0 : i1 + 1])
+        pred = (x @ p.mu).ravel()
+        conf = p.confidence_interval(x).ravel()
+        upperaxes.plot(x[:, 1], pred, "k--")
+        upperaxes.plot(x[:, 1], pred + conf, "g--")
+        upperaxes.plot(x[:, 1], pred - conf, "g--")
 
     # Plot the posterior probabilities over segment length hypotheses.
     plot_probability(loweraxes, hypotheses_probability)
@@ -454,6 +469,7 @@ def well_data(rng: np.random.Generator) -> Figure:
     # likely segmentation of the sequence.
     hypotheses_probability = model.posterior_probabilities()
     segments = model.segmentations()
+    params = model.regression_parameters(X, Y, segmentations=segments)
 
     # Create subplots with shared X-axis.
     fig, (upperaxes, loweraxes) = plt.subplots(2, sharex=True)
@@ -462,6 +478,15 @@ def well_data(rng: np.random.Generator) -> Figure:
     # Plot the response data.
     t = np.arange(1, Y.size + 1)
     upperaxes.plot(t, Y[:])
+
+    # Plot the regression lines and confidence intervals for each segment
+    for p, (i0, i1) in zip(params, pairwise(segments), strict=True):
+        t_sub = t[i0 : i1 + 1]
+        pred = np.ones_like(t_sub) * p.mu.item()
+        upperaxes.plot(t_sub, pred, "k--")
+        conf = p.confidence_interval(X[i0 : i1 + 1]).ravel()
+        upperaxes.plot(t_sub, pred + conf, "g--")
+        upperaxes.plot(t_sub, pred - conf, "g--")
 
     # Plot the posterior probabilities over segment length hypotheses.
     plot_probability(loweraxes, hypotheses_probability)
