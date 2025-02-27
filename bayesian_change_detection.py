@@ -23,9 +23,8 @@ from itertools import pairwise
 from typing import overload
 
 import numpy as np
+import scipy
 from numpy import linalg
-from scipy import special
-from scipy.stats import t as StudentsT
 
 
 class MatrixVariateNormalInvGamma:
@@ -172,7 +171,7 @@ class MatrixVariateNormalInvGamma:
         # Evaluate the log-normalization constant.
         # (Equation 8)
         return (
-            special.gammaln(0.5 * (w - np.arange(n))).sum()
+            scipy.special.gammaln(0.5 * (w - np.arange(n))).sum()
             - n * np.log(d[:m]).sum()
             - w * np.log(d[m:] / np.sqrt(w)).sum()
             - n * (0.5 * w) * np.log(0.5 * w)
@@ -276,7 +275,7 @@ class RegressionParameters:
     def confidence_interval(
         self, X: np.ndarray, sig: float = 0.05
     ) -> np.ndarray:
-        t = StudentsT(2 * self.eta).ppf(1 - sig / 2)
+        t = scipy.stats.t(2 * self.eta).ppf(1 - sig / 2)
         return t * np.sqrt(self.var(X))
 
 
