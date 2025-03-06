@@ -723,7 +723,8 @@ class Bcdm:
         count = max_hypothesis.count - 1
         while index > 0:
             index -= count
-            segment_boundaries.insert(0, index)
+            segment_boundaries.append(index)
             count = self.maxprod_maxinds[index - 1]
 
+        segment_boundaries.reverse()
         return segment_boundaries
