@@ -21,7 +21,7 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from functools import partial
 from itertools import pairwise
-from typing import overload
+from typing import cast, overload
 
 import numpy as np
 import scipy
@@ -284,7 +284,7 @@ def _constant_hazard(_, *, rate: float) -> float:
     return rate
 
 
-class Bcdm:
+class MatrixVariateBcdm:
     """Bayesian change detection model.
 
     Args:
@@ -745,3 +745,209 @@ class Bcdm:
 
         segment_boundaries.reverse()
         return segment_boundaries
+
+
+def _check_array_shape(name: str, x, exp: Sequence[int]) -> np.ndarray:
+    s = x.shape
+    if s != exp:
+        raise ValueError(f"invalid shape for {name}: expected {exp}, got {s}")
+    return x
+
+
+class MultivariateBcdm:
+    _LOG_2PI = np.log(2 * np.pi)
+
+    def __init__(
+        self,
+        p: int,
+        *,
+        prior_mean: float | np.ndarray = 0,
+        prior_cov: float | np.ndarray = 1,
+        prior_shape: float = 1,
+        prior_scale: float = 1,
+        hazard: HazardFunction | float = 0.1,
+    ):
+        """
+        Bayesian change detection model for univariate response data.
+
+        Args:
+            p: Number of predictor variables.
+            prior_mean: Prior mean (Lambda) of the model. If a scalar, it is
+                a constant vector of that value.
+            prior_cov: Prior covariance matrix (Omega^-1) of the model. If a
+                scalar, it is set to be a diagonal matrix with that value.
+            prior_shape: Shape of the prior noise distribution.
+            prior_scale: Scale of the prior noise distribution.
+            hazard: Hazard function or a constant float value.
+        """
+        if p < 1:
+            raise ValueError("p must be >= 1")
+
+        self.p = p
+
+        if np.isscalar(prior_mean):
+            self.prior_mean = np.full(p, prior_mean)
+        else:
+            self.prior_mean = _check_array_shape(
+                "prior_mean", prior_mean, (p,)
+            )
+
+        if np.isscalar(prior_cov):
+            self.prior_cov = np.eye(self.p) * cast(float, prior_cov)
+        else:
+            self.prior_cov = _check_array_shape("prior_cov", prior_cov, (p, p))
+
+        if prior_shape <= 0:
+            raise ValueError("prior_shape must be > 0")
+        self.prior_shape = prior_shape
+
+        if prior_scale <= 0:
+            raise ValueError("prior_scale must be > 0")
+        self.prior_scale = prior_scale
+
+        self.hazardfunc: Callable[[int], float]
+        if callable(hazard):
+            self.hazardfunc = hazard
+        elif not (0 <= hazard <= 1):
+            raise ValueError("hazard must be in [0, 1]")
+        else:
+            self.hazardfunc = lambda _: hazard
+
+        self.x: list[np.ndarray] = []
+        self.y: list[float] = []
+
+        self.distributions: list[_MultivariateNormalInverseGamma] = []
+
+        self.log_likelihoods = [np.array([0.0])]  # lambda_0(0) = 1, log = 0
+        self.max_log_likelihoods: list[float] = []
+        self.argmax_log_likelihoods: list[int] = []  # j_k, after eq. 18
+
+    def _normal_inv_gamma(self) -> "_MultivariateNormalInverseGamma":
+        return _MultivariateNormalInverseGamma(
+            mean=self.prior_mean,
+            cov=self.prior_cov,
+            shape=self.prior_shape,
+            scale=self.prior_scale,
+        )
+
+    def update(
+        self,
+        x: np.ndarray | float,
+        y: float,
+        *,
+        debug: bool = False,
+    ) -> None:
+        x = _check_array_shape("x", np.atleast_1d(x), (self.p,))
+
+        # Calculate the log predictive probabilities (pi_{k}(i) for i = 0...k,
+        # equation 16) and max log likelihood (lambda_k(0) eq. 17b)
+        log_predictive_probs = []
+        max_log_likelihood = -np.inf
+        argmax_log_likelihood = 0
+        self.distributions.append(self._normal_inv_gamma())
+        for i, (distribution, prev_log_likelihood) in enumerate(
+            zip(self.distributions, self.log_likelihoods[-1], strict=True)
+        ):
+            distribution = self.distributions[i]
+            prev_log_constant = distribution.log_constant
+
+            # Update sufficient statistics
+            distribution.update(x, y)
+
+            log_predictive_prob = (  # pi_k(i)
+                distribution.log_constant
+                - prev_log_constant
+                - self._LOG_2PI / 2
+            )
+            log_likelihood = (
+                np.log(self.hazardfunc(i))  # h(i + 1)
+                + log_predictive_prob  # pi_k(i)
+                + prev_log_likelihood  # lambda_{k - 1}(i)
+            )
+            assert log_likelihood <= 0
+
+            if log_likelihood > max_log_likelihood:
+                max_log_likelihood = log_likelihood  # lambda_k(0)
+                argmax_log_likelihood = i  # j_k, eq. 18
+
+            if debug:
+                print(f"{log_predictive_prob=}")
+                print(f"{log_likelihood=}")
+                print(f"{max_log_likelihood=}")
+                print(f"{argmax_log_likelihood=}")
+
+            log_predictive_probs.append(log_predictive_prob)
+
+        # Update the log likelihoods (eq. 17a)
+        new_log_likelihoods = np.empty(len(log_predictive_probs) + 1)
+        new_log_likelihoods[0] = max_log_likelihood  # lambda_k(0)
+        for i, (log_predictive_prob, prev_log_likelihood) in enumerate(
+            zip(log_predictive_probs, self.log_likelihoods[-1], strict=True)
+        ):
+            # lambda_k(i + 1) = (1 - hazard(i + 1)) * pi_k(i) + lambda_k(i)
+            new_log_likelihoods[i + 1] = (
+                np.log1p(-self.hazardfunc(i))  # (1 - h(i + 1))
+                + log_predictive_prob  # pi_k(i)
+                + prev_log_likelihood  # lambda_{k - 1}(i)
+            )
+
+        # Normalise likelihoods
+        new_log_likelihoods -= scipy.special.logsumexp(new_log_likelihoods)
+        assert np.isclose(0, scipy.special.logsumexp(new_log_likelihoods))
+
+        self.log_likelihoods.append(new_log_likelihoods)
+        self.max_log_likelihoods.append(max_log_likelihood)
+        self.argmax_log_likelihoods.append(argmax_log_likelihood)
+
+
+class _MultivariateNormalInverseGamma:
+    def __init__(
+        self,
+        *,
+        mean: np.ndarray,
+        cov: np.ndarray,
+        shape: float,
+        scale: float,
+    ):
+        self.mean = mean
+        self.cov = cov
+        self.shape = shape
+        self.scale = scale
+
+        p = self.mean.shape[0]
+        self.xx = np.zeros((p, p))
+        self.xy = np.zeros(p)
+        self.yy = 0.0
+
+        self.log_constant: float
+        self._set_log_constant()
+
+    def _set_log_constant(self) -> None:
+        logdetsign, logdet = np.linalg.slogdet(self.cov)
+        assert logdetsign > 0, "Covariance matrix not positive definite"
+        self.log_constant = (
+            scipy.special.gammaln(self.shape)
+            - logdet / 2
+            - self.shape * np.log(self.scale)
+        )
+
+    def update(self, x: np.ndarray, y: float) -> None:
+        self.xx += np.outer(x, x)
+        self.xy += x * y
+        self.yy += y**2
+
+        mean0 = self.mean
+        cov0 = self.cov
+        inv_cov0 = np.linalg.inv(cov0)
+
+        inv_cov = inv_cov0 + self.xx
+        self.cov = np.linalg.inv(inv_cov)
+        self.mean = self.cov @ (inv_cov0 @ mean0 + self.xy)
+        self.shape += 0.5
+        self.scale += (
+            mean0.T @ inv_cov0 @ mean0.T
+            + self.yy
+            - self.mean.T @ inv_cov @ self.mean
+        ) / 2
+        assert self.scale > 0, self.scale
+        self._set_log_constant()

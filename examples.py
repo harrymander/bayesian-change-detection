@@ -22,7 +22,10 @@ import numpy as np
 from matplotlib.figure import Figure
 from tqdm import tqdm
 
-from bayesian_change_detection import Bcdm, MatrixVariateNormalInvGamma
+from bayesian_change_detection import (
+    MatrixVariateBcdm,
+    MatrixVariateNormalInvGamma,
+)
 
 # Use same random data for repeatability.
 DEFAULT_SEED = 1729
@@ -174,7 +177,7 @@ def random_data(rng: np.random.Generator, **kw) -> Figure:
     )
 
     rate = numseg / (numpoint - numseg)
-    model = Bcdm(
+    model = MatrixVariateBcdm(
         X.shape[1],
         Y.shape[1],
         hazardfunc=rate,
@@ -254,7 +257,7 @@ def triangular(
     true_boundaries = np.pi * np.arange(0, 6) + np.pi / 2
     true_boundaries = np.sort(true_boundaries[true_boundaries <= X.max()])
 
-    model = Bcdm(
+    model = MatrixVariateBcdm(
         X.shape[1] + 1,
         Y.shape[1],
         hazardfunc=rate,
@@ -364,7 +367,7 @@ def non_sinusoidal(rng: np.random.Generator, **kw) -> Figure:
     )
 
     true_boundaries = np.sort(true_boundaries[true_boundaries <= X.max()])
-    model = Bcdm(
+    model = MatrixVariateBcdm(
         X.shape[1] + 1,
         Y.shape[1],
         hazardfunc=rate,
@@ -456,7 +459,7 @@ def well_data(
 
     # Compute the posterior probabilities over segment length hypotheses. Then,
     # find the most likely sequence segmentation.
-    model = Bcdm(
+    model = MatrixVariateBcdm(
         X.shape[1],
         Y.shape[1],
         hazardfunc=rate,
@@ -533,7 +536,7 @@ def index_data(rng: np.random.Generator, **kw) -> Figure:
     Y = np.c_[*(val[name] for name in index_names)]
     assert Y.shape[1] == len(index_names)
 
-    model = Bcdm(
+    model = MatrixVariateBcdm(
         X.shape[1],
         Y.shape[1],
         mu=np.zeros([1, Y.shape[1]]),  # 0% expected rate of return
