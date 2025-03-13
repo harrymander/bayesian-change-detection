@@ -515,10 +515,6 @@ class Bcdm:
                 / 2
             )
             eta = self.eta + len(x) / 2
-
-            # if (sigma < 0).any():
-            #     breakpoint()
-
             params.append(
                 RegressionParameters(
                     mu=mu,
