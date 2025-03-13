@@ -22,7 +22,10 @@ import numpy as np
 from matplotlib.figure import Figure
 from tqdm import tqdm
 
-from bayesian_change_detection import Bcdm, MatrixVariateNormalInvGamma
+from bayesian_change_detection import (
+    MatrixVariateBcdm,
+    MatrixVariateNormalInvGamma,
+)
 
 # Use same random data for repeatability.
 DEFAULT_SEED = 1729
@@ -103,7 +106,7 @@ def gen_random_data(
     return boundaries, X, Y
 
 
-def plot_probability(axes, prob, scale=None, **arg):
+def plot_probability(axes, prob, scale=None, **kwargs):
     """Plot hypotheses probabilities as a raster image."""
 
     if scale is None:
@@ -114,15 +117,14 @@ def plot_probability(axes, prob, scale=None, **arg):
     j = ind.max()
 
     # Plot the posterior probabilities over segment length hypotheses.
-    arg["cmap"] = plt.cm.gray
-    axes.imshow(
-        1.0 - prob[: j + 1],
-        origin="lower",
-        aspect="auto",
-        extent=[scale(-0.5), scale(k + 0.5), -0.5, j + 0.5],
-        interpolation="none",
-        **arg,
-    )
+    kwargs = {
+        "cmap": "gray_r",
+        "origin": "lower",
+        "aspect": "auto",
+        "extent": [scale(-0.5), scale(k + 0.5), -0.5, j + 0.5],
+        "interpolation": "none",
+    } | kwargs
+    axes.imshow(prob[: j + 1], **kwargs)
 
 
 def batched_exact(it, n):
@@ -174,7 +176,7 @@ def random_data(rng: np.random.Generator, **kw) -> Figure:
     )
 
     rate = numseg / (numpoint - numseg)
-    model = Bcdm(
+    model = MatrixVariateBcdm(
         X.shape[1],
         Y.shape[1],
         hazardfunc=rate,
@@ -254,7 +256,7 @@ def triangular(
     true_boundaries = np.pi * np.arange(0, 6) + np.pi / 2
     true_boundaries = np.sort(true_boundaries[true_boundaries <= X.max()])
 
-    model = Bcdm(
+    model = MatrixVariateBcdm(
         X.shape[1] + 1,
         Y.shape[1],
         hazardfunc=rate,
@@ -364,7 +366,7 @@ def non_sinusoidal(rng: np.random.Generator, **kw) -> Figure:
     )
 
     true_boundaries = np.sort(true_boundaries[true_boundaries <= X.max()])
-    model = Bcdm(
+    model = MatrixVariateBcdm(
         X.shape[1] + 1,
         Y.shape[1],
         hazardfunc=rate,
@@ -456,7 +458,7 @@ def well_data(
 
     # Compute the posterior probabilities over segment length hypotheses. Then,
     # find the most likely sequence segmentation.
-    model = Bcdm(
+    model = MatrixVariateBcdm(
         X.shape[1],
         Y.shape[1],
         hazardfunc=rate,
@@ -533,7 +535,7 @@ def index_data(rng: np.random.Generator, **kw) -> Figure:
     Y = np.c_[*(val[name] for name in index_names)]
     assert Y.shape[1] == len(index_names)
 
-    model = Bcdm(
+    model = MatrixVariateBcdm(
         X.shape[1],
         Y.shape[1],
         mu=np.zeros([1, Y.shape[1]]),  # 0% expected rate of return

@@ -21,11 +21,12 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from functools import partial
 from itertools import pairwise
-from typing import overload
+from typing import TypeVar, cast, overload
 
 import numpy as np
 import scipy
 from numpy import linalg
+from numpy.testing import assert_allclose
 
 
 class MatrixVariateNormalInvGamma:
@@ -284,7 +285,7 @@ def _constant_hazard(_, *, rate: float) -> float:
     return rate
 
 
-class Bcdm:
+class MatrixVariateBcdm:
     """Bayesian change detection model.
 
     Args:
@@ -745,3 +746,219 @@ class Bcdm:
 
         segment_boundaries.reverse()
         return segment_boundaries
+
+
+def _check_array_shape(name: str, x, exp: Sequence[int]) -> np.ndarray:
+    s = x.shape
+    if s != exp:
+        raise ValueError(f"invalid shape for {name}: expected {exp}, got {s}")
+    return x
+
+
+class MultivariateBcdm:
+    def __init__(
+        self,
+        p: int,
+        *,
+        prior_mean: float | np.ndarray = 0,
+        prior_cov: float | np.ndarray = 1,
+        prior_shape: float = 1,
+        prior_scale: float = 1,
+        hazard: float = 0.1,
+    ):
+        """
+        Bayesian change detection model for univariate response data.
+
+        Args:
+            p: Number of predictor variables.
+            prior_mean: Prior mean (Lambda) of the model. If a scalar, it is
+                a constant vector of that value.
+            prior_cov: Prior covariance matrix (Omega^-1) of the model. If a
+                scalar, it is set to be a diagonal matrix with that value.
+            prior_shape: Shape of the prior noise distribution.
+            prior_scale: Scale of the prior noise distribution.
+            hazard: Hazard rate.
+        """
+        if p < 1:
+            raise ValueError("p must be >= 1")
+
+        self.p = p
+
+        if np.isscalar(prior_mean):
+            self.prior_mean = np.full(p, prior_mean)
+        else:
+            self.prior_mean = _check_array_shape(
+                "prior_mean", prior_mean, (p,)
+            )
+
+        if np.isscalar(prior_cov):
+            self.prior_cov = np.eye(self.p) * cast(float, prior_cov)
+        else:
+            self.prior_cov = _check_array_shape("prior_cov", prior_cov, (p, p))
+
+        if prior_shape <= 0:
+            raise ValueError("prior_shape must be > 0")
+        self.prior_shape = prior_shape
+
+        if prior_scale <= 0:
+            raise ValueError("prior_scale must be > 0")
+        self.prior_scale = prior_scale
+
+        self.hazard = hazard
+        self._log_hazard = np.log(hazard)
+        self._log_1mhazard = np.log1p(-hazard)
+
+        self.distributions: list[_MultivariateNormalInverseGamma] = []
+        self.log_joint = np.array([0.0])  # lambda_0(0) = 1, log = 0
+        self._log_posteriors: list[np.ndarray] = []
+        self._log_predictives: list[np.ndarray] = []
+
+    def log_predictive(self) -> np.ndarray:
+        n = len(self._log_predictives)
+        log_predictive: np.ndarray = np.empty((n, n))
+        log_predictive[np.tril_indices(n)] = np.concat(self._log_predictives)
+        log_predictive[np.triu_indices(n, 1)] = -np.inf
+        return log_predictive.T
+
+    def log_posterior(self) -> np.ndarray:
+        """
+        Return an upper-triangular matrix where each column contains the
+        natural logarithm of the posterior probability of the segment running
+        length at that time point.
+
+        E.g. for 4 samples at time points `a`, `b`, `c`, and `d`, returns a
+        matrix:
+
+          ```
+          a0 b0 c0 d0
+          -  b1 c1 d1
+          -  -  c2 d2
+          -  -  -  d3
+          ```
+
+        where `c2` is the log probability of the point at time `c` belonging to
+        a segment that began 2 time points before, for example. The elements on
+        the lower diagonal are `-inf`, corresponding to a zero probability
+        (i.e. a point cannot belong to a segment longer than the number of
+        points observed so far).
+        """
+        n = len(self._log_posteriors)
+        log_posterior: np.ndarray = np.empty((n, n))
+        log_posterior[np.tril_indices(n)] = np.concat(self._log_posteriors)
+        log_posterior[np.triu_indices(n, 1)] = -np.inf
+        log_posterior = log_posterior.T
+        assert_allclose(
+            scipy.special.logsumexp(log_posterior, axis=0),
+            0,
+            atol=1e-10,
+        )
+        return log_posterior
+
+    def _normal_inv_gamma(self) -> "_MultivariateNormalInverseGamma":
+        return _MultivariateNormalInverseGamma(
+            mean=self.prior_mean,
+            cov=self.prior_cov,
+            shape=self.prior_shape,
+            scale=self.prior_scale,
+        )
+
+    def update(
+        self,
+        x: np.ndarray | float,
+        y: float,
+    ) -> None:
+        x = _check_array_shape("x", np.atleast_1d(x), (self.p,))
+
+        # Compute the predictive probabilities and update sufficient statistics
+        self.distributions.append(self._normal_inv_gamma())
+        log_predictive_probs = np.empty(len(self.distributions))
+        for i, distribution in enumerate(reversed(self.distributions)):
+            log_predictive_probs[i] = distribution.log_density(x, y)
+
+        log_joint = np.empty(len(log_predictive_probs))
+
+        # Compute the reset probability
+        log_joint[0] = scipy.special.logsumexp(
+            log_predictive_probs[0] + self._log_hazard + self.log_joint
+        )
+
+        # Compute the growth probabilities
+        log_joint[1:] = (
+            log_predictive_probs[1:] + self._log_1mhazard + self.log_joint
+        )
+
+        self._log_posteriors.append(
+            log_joint - scipy.special.logsumexp(log_joint)
+        )
+        self.log_joint = log_joint
+        self._log_predictives.append(log_predictive_probs)
+
+        for distribution in self.distributions:
+            distribution.update(x, y)
+
+
+_ScalarOrArray = TypeVar("_ScalarOrArray", bound=np.ndarray | float)
+
+
+class _MultivariateNormalInverseGamma:
+    def __init__(
+        self,
+        *,
+        mean: np.ndarray,
+        cov: np.ndarray,
+        shape: float,
+        scale: float,
+    ):
+        assert mean.ndim == 1
+        p = mean.shape[0]
+        assert cov.shape == (p, p)
+
+        self.mean = mean
+        self.cov = cov
+        self.shape = shape
+        self.scale = scale
+        self.p = p
+
+    def log_density(self, x: np.ndarray, y_: _ScalarOrArray) -> _ScalarOrArray:
+        ret_scalar = np.isscalar(y_)
+        y: np.ndarray = np.atleast_1d(y_)
+        x = np.atleast_2d(x)
+        n = len(x)
+        if x.shape != (n, self.p):
+            raise ValueError("invalid shape for x")
+        if y.shape != (n,):
+            raise ValueError("invalid shape for y")
+        mvt = scipy.stats.multivariate_t(
+            loc=x @ self.mean,
+            shape=self.scale / self.shape * (x @ self.cov @ x.T + np.eye(n)),
+            df=2 * self.shape,
+        )
+        logpdf = mvt.logpdf(y)
+        return logpdf.item() if ret_scalar else logpdf
+
+    def update(self, x: np.ndarray, y: float | np.ndarray) -> None:
+        # See e.g. p. 97, Clarke & Clarke "Predictive Statistics"
+        x = np.atleast_2d(x)
+        n = len(x)
+        if x.shape != (n, self.p):
+            raise ValueError("invalid shape for x")
+
+        y = np.atleast_1d(y)
+        if y.shape != (n,):
+            raise ValueError("invalid shape for y")
+
+        xx = x.T @ x
+        xy = x.T @ y
+        yy = np.dot(y, y)
+
+        mean0 = self.mean
+        cov0 = self.cov
+        cov0_inv = np.linalg.inv(cov0)
+        cov_inv = cov0_inv + xx
+        self.cov = np.linalg.inv(cov_inv)
+        self.mean = self.cov @ (cov0_inv @ mean0 + xy)
+        self.shape += n / 2
+        self.scale += (
+            mean0 @ cov0_inv @ mean0 + yy - self.mean @ cov_inv @ self.mean
+        ) / 2
+        assert self.scale > 0, self.scale
