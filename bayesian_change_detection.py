@@ -322,12 +322,24 @@ class Bcdm:
 
     """
 
-    def _validate_shape(self, name: str, exp: Sequence[int]):
-        shape = getattr(self, name).shape
+    def _validate_array(self, name: str, exp: Sequence[int]):
+        array: np.ndarray = getattr(self, name)
+        shape = array.shape
         if shape != exp:
             raise ValueError(
                 f"invalid shape for {name}: expected {exp}, got {shape}"
             )
+        if np.any(np.isnan(array)):
+            raise ValueError(f"{name} contains NaNs")
+        if np.any(np.isinf(array)):
+            raise ValueError(f"{name} must be finite")
+
+    def _validate_array_pos_def(self, name: str):
+        array: np.ndarray = getattr(self, name)
+        if not np.allclose(array, array.T):
+            raise ValueError(f"{name} must be symmetric")
+        if linalg.det(array) <= 0:
+            raise ValueError(f"{name} must be positive-definite")
 
     def __init__(
         self,
@@ -359,7 +371,7 @@ class Bcdm:
             self.mu = np.zeros((numpred, numresp))
         else:
             self.mu = np.atleast_2d(mu)
-            self._validate_shape("mu", (numpred, numresp))
+            self._validate_array("mu", (numpred, numresp))
 
         # Set uninformative prior for the scale parameter.
         self.omega: np.ndarray
@@ -367,7 +379,8 @@ class Bcdm:
             self.omega = np.eye(numpred)
         else:
             self.omega = np.atleast_2d(omega)
-            self._validate_shape("omega", (numpred, numpred))
+            self._validate_array("omega", (numpred, numpred))
+            self._validate_array_pos_def("omega")
 
         # Set uninformative prior for the dispersion/noise parameter.
         self.sigma: np.ndarray
@@ -375,7 +388,8 @@ class Bcdm:
             self.sigma = np.eye(numresp)
         else:
             self.sigma = np.atleast_2d(sigma)
-            self._validate_shape("sigma", (numresp, numresp))
+            self._validate_array("sigma", (numresp, numresp))
+            self._validate_array_pos_def("sigma")
 
         # Set uninformative prior for the shape parameter.
         self.eta: float
