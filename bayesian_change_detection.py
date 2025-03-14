@@ -19,6 +19,7 @@ are propagated and re-weighted to reflect this new knowledge.
 
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
+from functools import partial
 from itertools import pairwise
 from typing import overload
 
@@ -279,6 +280,10 @@ class RegressionParameters:
         return t * np.sqrt(self.var(X))
 
 
+def _constant_hazard(_, *, rate: float) -> float:
+    return rate
+
+
 class Bcdm:
     """Bayesian change detection model.
 
@@ -400,7 +405,9 @@ class Bcdm:
         self.maxprod_maxinds: list[int] = []
 
         self.hazardfunc: HazardFunction = (
-            hazardfunc if callable(hazardfunc) else lambda _: hazardfunc
+            hazardfunc
+            if callable(hazardfunc)
+            else partial(_constant_hazard, rate=hazardfunc)
         )
 
     def _linear_model(self) -> MatrixVariateNormalInvGamma:
