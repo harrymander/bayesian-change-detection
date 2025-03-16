@@ -765,7 +765,7 @@ class MultivariateBcdm:
         prior_cov: float | np.ndarray = 1,
         prior_shape: float = 1,
         prior_scale: float = 1,
-        hazard: HazardFunction | float = 0.1,
+        hazard: float = 0.1,
     ):
         """
         Bayesian change detection model for univariate response data.
@@ -778,7 +778,7 @@ class MultivariateBcdm:
                 scalar, it is set to be a diagonal matrix with that value.
             prior_shape: Shape of the prior noise distribution.
             prior_scale: Scale of the prior noise distribution.
-            hazard: Hazard function or a constant float value.
+            hazard: Hazard rate.
         """
         if p < 1:
             raise ValueError("p must be >= 1")
@@ -805,22 +805,17 @@ class MultivariateBcdm:
             raise ValueError("prior_scale must be > 0")
         self.prior_scale = prior_scale
 
-        self.hazardfunc: Callable[[int], float]
-        if callable(hazard):
-            self.hazardfunc = hazard
-        elif not (0 <= hazard <= 1):
-            raise ValueError("hazard must be in [0, 1]")
-        else:
-            self.hazardfunc = lambda _: hazard
+        self.hazard = hazard
+        self._log_hazard = np.log(hazard)
+        self._log_1mhazard = np.log1p(-hazard)
 
         self.x: list[np.ndarray] = []
         self.y: list[float] = []
 
         self.distributions: list[_MultivariateNormalInverseGamma] = []
 
-        self.log_likelihoods = [np.array([0.0])]  # lambda_0(0) = 1, log = 0
-        self.max_log_likelihoods: list[float] = []
-        self.argmax_log_likelihoods: list[int] = []  # j_k, after eq. 18
+        self.log_joint = np.array([0.0])  # lambda_0(0) = 1, log = 0
+        self.log_posterior: list[np.ndarray] = []
 
     def _normal_inv_gamma(self) -> "_MultivariateNormalInverseGamma":
         return _MultivariateNormalInverseGamma(
@@ -839,65 +834,30 @@ class MultivariateBcdm:
     ) -> None:
         x = _check_array_shape("x", np.atleast_1d(x), (self.p,))
 
-        # Calculate the log predictive probabilities (pi_{k}(i) for i = 0...k,
-        # equation 16) and max log likelihood (lambda_k(0) eq. 17b)
-        log_predictive_probs = []
-        max_log_likelihood = -np.inf
-        argmax_log_likelihood = 0
+        # Compute the predictive probabilities and update sufficient statistics
         self.distributions.append(self._normal_inv_gamma())
-        for i, (distribution, prev_log_likelihood) in enumerate(
-            zip(self.distributions, self.log_likelihoods[-1], strict=True)
-        ):
-            distribution = self.distributions[i]
-            prev_log_constant = distribution.log_constant
-
-            # Update sufficient statistics
+        log_predictive_probs = np.empty(len(self.distributions))
+        for i, distribution in enumerate(self.distributions):
+            c0 = distribution.log_constant
             distribution.update(x, y)
+            c1 = distribution.log_constant
+            log_predictive_probs[i] = c1 - c0 - self._LOG_2PI / 2
 
-            log_predictive_prob = (  # pi_k(i)
-                distribution.log_constant
-                - prev_log_constant
-                - self._LOG_2PI / 2
-            )
-            log_likelihood = (
-                np.log(self.hazardfunc(i))  # h(i + 1)
-                + log_predictive_prob  # pi_k(i)
-                + prev_log_likelihood  # lambda_{k - 1}(i)
-            )
-            assert log_likelihood <= 0
+        log_joint = np.empty(len(log_predictive_probs) + 1)
 
-            if log_likelihood > max_log_likelihood:
-                max_log_likelihood = log_likelihood  # lambda_k(0)
-                argmax_log_likelihood = i  # j_k, eq. 18
+        # Compute the reset probability
+        log_joint[0] = scipy.special.logsumexp(
+            self._log_hazard + log_predictive_probs + self.log_joint
+        )
 
-            if debug:
-                print(f"{log_predictive_prob=}")
-                print(f"{log_likelihood=}")
-                print(f"{max_log_likelihood=}")
-                print(f"{argmax_log_likelihood=}")
+        # Compute the growth probabilities
+        log_joint[1:] = (
+            self._log_1mhazard + log_predictive_probs + self.log_joint
+        )
 
-            log_predictive_probs.append(log_predictive_prob)
-
-        # Update the log likelihoods (eq. 17a)
-        new_log_likelihoods = np.empty(len(log_predictive_probs) + 1)
-        new_log_likelihoods[0] = max_log_likelihood  # lambda_k(0)
-        for i, (log_predictive_prob, prev_log_likelihood) in enumerate(
-            zip(log_predictive_probs, self.log_likelihoods[-1], strict=True)
-        ):
-            # lambda_k(i + 1) = (1 - hazard(i + 1)) * pi_k(i) + lambda_k(i)
-            new_log_likelihoods[i + 1] = (
-                np.log1p(-self.hazardfunc(i))  # (1 - h(i + 1))
-                + log_predictive_prob  # pi_k(i)
-                + prev_log_likelihood  # lambda_{k - 1}(i)
-            )
-
-        # Normalise likelihoods
-        new_log_likelihoods -= scipy.special.logsumexp(new_log_likelihoods)
-        assert np.isclose(0, scipy.special.logsumexp(new_log_likelihoods))
-
-        self.log_likelihoods.append(new_log_likelihoods)
-        self.max_log_likelihoods.append(max_log_likelihood)
-        self.argmax_log_likelihoods.append(argmax_log_likelihood)
+        log_posterior = log_joint - scipy.special.logsumexp(log_joint)
+        self.log_posterior.append(log_posterior)
+        self.log_joint = log_joint
 
 
 class _MultivariateNormalInverseGamma:
