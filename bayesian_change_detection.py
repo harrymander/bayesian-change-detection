@@ -755,8 +755,6 @@ def _check_array_shape(name: str, x, exp: Sequence[int]) -> np.ndarray:
 
 
 class MultivariateBcdm:
-    _LOG_2PI = np.log(2 * np.pi)
-
     def __init__(
         self,
         p: int,
@@ -829,38 +827,39 @@ class MultivariateBcdm:
         self,
         x: np.ndarray | float,
         y: float,
-        *,
-        debug: bool = False,
     ) -> None:
         x = _check_array_shape("x", np.atleast_1d(x), (self.p,))
 
         # Compute the predictive probabilities and update sufficient statistics
         self.distributions.append(self._normal_inv_gamma())
         log_predictive_probs = np.empty(len(self.distributions))
-        for i, distribution in enumerate(self.distributions):
-            c0 = distribution.log_constant
-            distribution.update(x, y)
-            c1 = distribution.log_constant
-            log_predictive_probs[i] = c1 - c0 - self._LOG_2PI / 2
+        for i, distribution in enumerate(reversed(self.distributions)):
+            log_predictive_probs[i] = distribution.log_density
 
-        log_joint = np.empty(len(log_predictive_probs) + 1)
+        log_joint = np.empty(len(log_predictive_probs))
 
         # Compute the reset probability
         log_joint[0] = scipy.special.logsumexp(
-            self._log_hazard + log_predictive_probs + self.log_joint
+            log_predictive_probs[0] + self._log_hazard + self.log_joint
         )
 
         # Compute the growth probabilities
         log_joint[1:] = (
-            self._log_1mhazard + log_predictive_probs + self.log_joint
+            log_predictive_probs[1:] + self._log_1mhazard + self.log_joint
         )
 
-        log_posterior = log_joint - scipy.special.logsumexp(log_joint)
-        self.log_posterior.append(log_posterior)
+        self.log_posterior.append(
+            log_joint - scipy.special.logsumexp(log_joint)
+        )
         self.log_joint = log_joint
+
+        for distribution in self.distributions:
+            distribution.update(x, y)
 
 
 class _MultivariateNormalInverseGamma:
+    _LOG_2PI = np.log(2 * np.pi)
+
     def __init__(
         self,
         *,
@@ -879,17 +878,20 @@ class _MultivariateNormalInverseGamma:
         self.xy = np.zeros(p)
         self.yy = 0.0
 
-        self.log_constant: float
-        self._set_log_constant()
+        self._log_density = self._log_constant()
 
-    def _set_log_constant(self) -> None:
+    def _log_constant(self) -> float:
         logdetsign, logdet = np.linalg.slogdet(self.cov)
         assert logdetsign > 0, "Covariance matrix not positive definite"
-        self.log_constant = (
+        return (
             scipy.special.gammaln(self.shape)
             - logdet / 2
             - self.shape * np.log(self.scale)
         )
+
+    @property
+    def log_density(self) -> float:
+        return self._log_density - self._LOG_2PI
 
     def update(self, x: np.ndarray, y: float) -> None:
         self.xx += np.outer(x, x)
@@ -910,4 +912,5 @@ class _MultivariateNormalInverseGamma:
             - self.mean.T @ inv_cov @ self.mean
         ) / 2
         assert self.scale > 0, self.scale
-        self._set_log_constant()
+
+        self._log_density = self._log_constant() - self._log_density
