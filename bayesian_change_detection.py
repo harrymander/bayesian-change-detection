@@ -807,11 +807,7 @@ class MultivariateBcdm:
         self._log_hazard = np.log(hazard)
         self._log_1mhazard = np.log1p(-hazard)
 
-        self.x: list[np.ndarray] = []
-        self.y: list[float] = []
-
         self.distributions: list[_MultivariateNormalInverseGamma] = []
-
         self.log_joint = np.array([0.0])  # lambda_0(0) = 1, log = 0
         self.log_posterior: list[np.ndarray] = []
 
@@ -834,7 +830,7 @@ class MultivariateBcdm:
         self.distributions.append(self._normal_inv_gamma())
         log_predictive_probs = np.empty(len(self.distributions))
         for i, distribution in enumerate(reversed(self.distributions)):
-            log_predictive_probs[i] = distribution.log_density
+            log_predictive_probs[i] = distribution.log_density(x, y)
 
         log_joint = np.empty(len(log_predictive_probs))
 
@@ -858,8 +854,6 @@ class MultivariateBcdm:
 
 
 class _MultivariateNormalInverseGamma:
-    _LOG_2PI = np.log(2 * np.pi)
-
     def __init__(
         self,
         *,
@@ -878,20 +872,15 @@ class _MultivariateNormalInverseGamma:
         self.xy = np.zeros(p)
         self.yy = 0.0
 
-        self._log_density = self._log_constant()
-
-    def _log_constant(self) -> float:
-        logdetsign, logdet = np.linalg.slogdet(self.cov)
-        assert logdetsign > 0, "Covariance matrix not positive definite"
-        return (
-            scipy.special.gammaln(self.shape)
-            - logdet / 2
-            - self.shape * np.log(self.scale)
+    def log_density(self, x: np.ndarray, y: float) -> float:
+        x = np.atleast_2d(x)
+        n = len(x)
+        mvt = scipy.stats.multivariate_t(
+            loc=np.dot(x, self.mean),
+            shape=self.scale / self.shape * (x @ self.cov @ x.T + np.eye(n)),
+            df=2 * self.shape,
         )
-
-    @property
-    def log_density(self) -> float:
-        return self._log_density - self._LOG_2PI
+        return mvt.logpdf(y)
 
     def update(self, x: np.ndarray, y: float) -> None:
         self.xx += np.outer(x, x)
@@ -907,10 +896,8 @@ class _MultivariateNormalInverseGamma:
         self.mean = self.cov @ (inv_cov0 @ mean0 + self.xy)
         self.shape += 0.5
         self.scale += (
-            mean0.T @ inv_cov0 @ mean0.T
+            mean0.T @ cov0 @ mean0.T
             + self.yy
-            - self.mean.T @ inv_cov @ self.mean
+            - self.mean.T @ self.cov @ self.mean
         ) / 2
         assert self.scale > 0, self.scale
-
-        self._log_density = self._log_constant() - self._log_density
