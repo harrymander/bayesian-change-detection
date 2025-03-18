@@ -3,6 +3,7 @@ from typing import cast
 import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.axes import Axes
+from matplotlib.colors import LogNorm
 from matplotlib.image import AxesImage
 from tqdm import tqdm
 
@@ -31,11 +32,13 @@ def plot_posterior_probabilities(
     posterior = np.exp(log_posterior)
     zero_row = np.where(np.isclose(posterior, 0).all(axis=1))[0][0]
     posterior = posterior[:zero_row]
+
     return posterior, ax.imshow(
         posterior,
         aspect="auto",
         origin="lower",
         cmap="gray_r",
+        norm=LogNorm(vmin=1e-4, vmax=1),
         extent=(x0, x1, 0, len(posterior)),
     )
 
@@ -120,7 +123,8 @@ def random_piecewise(rng: np.random.Generator):
         for ax in axes:
             ax.axvline(cp, color="red", linestyle="--")
 
-    plot_posterior_probabilities(axes[1], model.log_posterior)
+    im = plot_posterior_probabilities(axes[1], model.log_posterior)[1]
+    plt.colorbar(im, ax=axes)
 
 
 def main() -> None:
