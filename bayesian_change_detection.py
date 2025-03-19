@@ -871,6 +871,7 @@ class _MultivariateNormalInverseGamma:
         self.xx = np.zeros((p, p))
         self.xy = np.zeros(p)
         self.yy = 0.0
+        self.p = p
 
     def log_density(self, x: np.ndarray, y: float) -> float:
         x = np.atleast_2d(x)
@@ -883,6 +884,8 @@ class _MultivariateNormalInverseGamma:
         return mvt.logpdf(y)
 
     def update(self, x: np.ndarray, y: float) -> None:
+        # See e.g. p. 97, Clarke & Clarke "Predictive Statistics"
+        assert x.shape == (self.p,), f"Invalid shape {x.shape}"
         self.xx += np.outer(x, x)
         self.xy += x * y
         self.yy += y**2
@@ -896,8 +899,8 @@ class _MultivariateNormalInverseGamma:
         self.mean = self.cov @ (inv_cov0 @ mean0 + self.xy)
         self.shape += 0.5
         self.scale += (
-            mean0.T @ cov0 @ mean0.T
+            mean0.T @ inv_cov0 @ mean0.T
             + self.yy
-            - self.mean.T @ self.cov @ self.mean
+            - self.mean.T @ inv_cov @ self.mean
         ) / 2
         assert self.scale > 0, self.scale
