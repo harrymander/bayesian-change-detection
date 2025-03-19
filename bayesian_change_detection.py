@@ -865,15 +865,14 @@ class _MultivariateNormalInverseGamma:
         shape: float,
         scale: float,
     ):
+        assert mean.ndim == 1
+        p = mean.shape[0]
+        assert cov.shape == (p, p)
+
         self.mean = mean
         self.cov = cov
         self.shape = shape
         self.scale = scale
-
-        p = self.mean.shape[0]
-        self.xx = np.zeros((p, p))
-        self.xy = np.zeros(p)
-        self.yy = 0.0
         self.p = p
 
     def log_density(self, x: np.ndarray, y_: _ScalarOrArray) -> _ScalarOrArray:
@@ -881,6 +880,8 @@ class _MultivariateNormalInverseGamma:
         y: np.ndarray = np.atleast_1d(y_)
         x = np.atleast_2d(x)
         n = len(x)
+        if x.shape != (n, self.p):
+            raise ValueError("invalid shape for x")
         if y.shape != (n,):
             raise ValueError("invalid shape for y")
         mvt = scipy.stats.multivariate_t(
@@ -902,20 +903,18 @@ class _MultivariateNormalInverseGamma:
         if y.shape != (n,):
             raise ValueError("invalid shape for y")
 
-        self.xx += x.T @ x
-        self.xy += x.T @ y
-        self.yy += np.dot(y, y)
+        xx = x.T @ x
+        xy = x.T @ y
+        yy = np.dot(y, y)
 
         mean0 = self.mean
         cov0 = self.cov
         cov0_inv = np.linalg.inv(cov0)
-        cov_inv = cov0_inv + self.xx
+        cov_inv = cov0_inv + xx
         self.cov = np.linalg.inv(cov_inv)
-        self.mean = self.cov @ (cov0_inv @ mean0 + self.xy)
+        self.mean = self.cov @ (cov0_inv @ mean0 + xy)
         self.shape += n / 2
         self.scale += (
-            mean0.T @ cov0_inv @ mean0.T
-            + self.yy
-            - self.mean.T @ cov_inv @ self.mean
+            mean0 @ cov0_inv @ mean0 + yy - self.mean @ cov_inv @ self.mean
         ) / 2
         assert self.scale > 0, self.scale
