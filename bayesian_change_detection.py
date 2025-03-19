@@ -21,7 +21,7 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from functools import partial
 from itertools import pairwise
-from typing import cast, overload
+from typing import TypeVar, cast, overload
 
 import numpy as np
 import scipy
@@ -853,6 +853,9 @@ class MultivariateBcdm:
             distribution.update(x, y)
 
 
+_ScalarOrArray = TypeVar("_ScalarOrArray", bound=np.ndarray | float)
+
+
 class _MultivariateNormalInverseGamma:
     def __init__(
         self,
@@ -873,34 +876,46 @@ class _MultivariateNormalInverseGamma:
         self.yy = 0.0
         self.p = p
 
-    def log_density(self, x: np.ndarray, y: float) -> float:
+    def log_density(self, x: np.ndarray, y_: _ScalarOrArray) -> _ScalarOrArray:
+        ret_scalar = np.isscalar(y_)
+        y: np.ndarray = np.atleast_1d(y_)
         x = np.atleast_2d(x)
         n = len(x)
+        if y.shape != (n,):
+            raise ValueError("invalid shape for y")
         mvt = scipy.stats.multivariate_t(
-            loc=np.dot(x, self.mean),
+            loc=x @ self.mean,
             shape=self.scale / self.shape * (x @ self.cov @ x.T + np.eye(n)),
             df=2 * self.shape,
         )
-        return mvt.logpdf(y)
+        logpdf = mvt.logpdf(y)
+        return logpdf.item() if ret_scalar else logpdf
 
-    def update(self, x: np.ndarray, y: float) -> None:
+    def update(self, x: np.ndarray, y: float | np.ndarray) -> None:
         # See e.g. p. 97, Clarke & Clarke "Predictive Statistics"
-        assert x.shape == (self.p,), f"Invalid shape {x.shape}"
-        self.xx += np.outer(x, x)
-        self.xy += x * y
-        self.yy += y**2
+        x = np.atleast_2d(x)
+        n = len(x)
+        if x.shape != (n, self.p):
+            raise ValueError("invalid shape for x")
+
+        y = np.atleast_1d(y)
+        if y.shape != (n,):
+            raise ValueError("invalid shape for y")
+
+        self.xx += x.T @ x
+        self.xy += x.T @ y
+        self.yy += np.dot(y, y)
 
         mean0 = self.mean
         cov0 = self.cov
-        inv_cov0 = np.linalg.inv(cov0)
-
-        inv_cov = inv_cov0 + self.xx
-        self.cov = np.linalg.inv(inv_cov)
-        self.mean = self.cov @ (inv_cov0 @ mean0 + self.xy)
-        self.shape += 0.5
+        cov0_inv = np.linalg.inv(cov0)
+        cov_inv = cov0_inv + self.xx
+        self.cov = np.linalg.inv(cov_inv)
+        self.mean = self.cov @ (cov0_inv @ mean0 + self.xy)
+        self.shape += n / 2
         self.scale += (
-            mean0.T @ inv_cov0 @ mean0.T
+            mean0.T @ cov0_inv @ mean0.T
             + self.yy
-            - self.mean.T @ inv_cov @ self.mean
+            - self.mean.T @ cov_inv @ self.mean
         ) / 2
         assert self.scale > 0, self.scale
