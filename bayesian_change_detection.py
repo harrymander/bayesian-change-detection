@@ -26,6 +26,7 @@ from typing import TypeVar, cast, overload
 import numpy as np
 import scipy
 from numpy import linalg
+from numpy.testing import assert_allclose
 
 
 class MatrixVariateNormalInvGamma:
@@ -809,7 +810,41 @@ class MultivariateBcdm:
 
         self.distributions: list[_MultivariateNormalInverseGamma] = []
         self.log_joint = np.array([0.0])  # lambda_0(0) = 1, log = 0
-        self.log_posterior: list[np.ndarray] = []
+        self._log_posteriors: list[np.ndarray] = []
+
+    def log_posterior(self) -> np.ndarray:
+        """
+        Return an upper-triangular matrix where each column contains the
+        natural logarithm of the posterior probability of the segment running
+        length at that time point.
+
+        E.g. for 4 samples at time points `a`, `b`, `c`, and `d`, returns a
+        matrix:
+
+          ```
+          a0 b0 c0 d0
+          -  b1 c1 d1
+          -  -  c2 d2
+          -  -  -  d3
+          ```
+
+        where `c2` is the log probability of the point at time `c` belonging to
+        a segment that began 2 time points before, for example. The elements on
+        the lower diagonal are `-inf`, corresponding to a zero probability
+        (i.e. a point cannot belong to a segment longer than the number of
+        points observed so far).
+        """
+        n = len(self._log_posteriors)
+        log_posterior: np.ndarray = np.empty((n, n))
+        log_posterior[np.tril_indices(n)] = np.concat(self._log_posteriors)
+        log_posterior[np.triu_indices(n, 1)] = -np.inf
+        log_posterior = log_posterior.T
+        assert_allclose(
+            scipy.special.logsumexp(log_posterior, axis=0),
+            0,
+            atol=1e-10,
+        )
+        return log_posterior
 
     def _normal_inv_gamma(self) -> "_MultivariateNormalInverseGamma":
         return _MultivariateNormalInverseGamma(
@@ -844,7 +879,7 @@ class MultivariateBcdm:
             log_predictive_probs[1:] + self._log_1mhazard + self.log_joint
         )
 
-        self.log_posterior.append(
+        self._log_posteriors.append(
             log_joint - scipy.special.logsumexp(log_joint)
         )
         self.log_joint = log_joint

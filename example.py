@@ -11,27 +11,22 @@ from tqdm import tqdm
 from bayesian_change_detection import MultivariateBcdm
 from examples import triangle_wave
 
+FIGSIZE = (20, 10)
+
 
 def plot_posterior_probabilities(
     ax: Axes,
-    probs: list[np.ndarray],
+    log_posterior: np.ndarray,
     *,
     xlim=None,
     trim_zero: bool = True,
 ) -> tuple[np.ndarray, AxesImage]:
-    samples = len(probs)
-    log_posterior = np.empty((samples, samples))
-    for i, p in enumerate(probs):
-        n = len(p)
-        log_posterior[:n, i] = p
-        log_posterior[n:, i] = -np.inf
-
+    samples = len(log_posterior)
     if xlim is None:
         x0, x1 = (0, samples - 1)
     else:
         x0, x1 = xlim
 
-    # Plot run length posterior
     posterior = np.exp(log_posterior)
     if trim_zero:
         zero_row = np.where(np.isclose(posterior, 0).all(axis=1))[0][0]
@@ -72,23 +67,19 @@ def triangular(rng: np.random.Generator):
     for x, y in tqdm(zip(X, Y, strict=True), total=len(X)):
         model.update(np.array([1, x]), y)
 
-    log_posterior = np.empty((samples, samples))
-    for i, probs in enumerate(model.log_posterior):
-        n = len(probs)
-        log_posterior[:n, i] = probs
-        log_posterior[n:, i] = -np.inf
-
-    axes = plt.subplots(2, sharex=True)[1]
+    axes = plt.subplots(2, sharex=True, figsize=FIGSIZE)[1]
     axes[0].plot(X, Y)
-
-    # Plot run length posterior
     posterior, im = plot_posterior_probabilities(
-        axes[1], model.log_posterior, xlim=X[[0, -1]]
+        axes[1], model.log_posterior(), xlim=X[[0, -1]]
     )
     axes[1].plot(X, posterior.argmax(axis=0), color="red")
     for ax in axes[1:]:
         ax.set_ylabel("Run length")
+    for ax in axes:
+        for boundary in true_boundaries:
+            ax.axvline(boundary, color="red", linestyle="--")
 
+    plt.tight_layout()
     plt.colorbar(im, ax=axes)
 
 
@@ -121,7 +112,7 @@ def random_piecewise(rng: np.random.Generator):
     for y in tqdm(data):
         model.update(1, y)
 
-    axes = plt.subplots(2, 1, sharex=True, figsize=(20, 10))[1]
+    axes = plt.subplots(2, 1, sharex=True, figsize=FIGSIZE)[1]
     axes[0].plot(data, "-o")
     for cp in cps:
         for ax in axes:
@@ -129,7 +120,7 @@ def random_piecewise(rng: np.random.Generator):
 
     im = plot_posterior_probabilities(
         axes[1],
-        model.log_posterior,
+        model.log_posterior(),
         trim_zero=False,
     )[1]
     plt.tight_layout()
