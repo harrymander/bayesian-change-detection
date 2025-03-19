@@ -1,5 +1,3 @@
-from typing import cast
-
 import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.axes import Axes
@@ -23,10 +21,10 @@ def plot_posterior_probabilities(
         log_posterior[:n, i] = p
         log_posterior[n:, i] = -np.inf
 
-    if xlim:
-        x0, x1 = xlim
-    else:
+    if xlim is None:
         x0, x1 = (0, samples - 1)
+    else:
+        x0, x1 = xlim
 
     # Plot run length posterior
     posterior = np.exp(log_posterior)
@@ -59,14 +57,14 @@ def triangular(rng: np.random.Generator):
 
     model = MultivariateBcdm(
         2,
-        hazard=0.3,
-        # prior_cov=1.0e-3,
-        # prior_shape=1.0e-6,
+        hazard=0.001,
+        prior_cov=1.0e-3,
+        prior_scale=1.0e-6,
     )
 
     # Update the segment length hypotheses given the data.
     for x, y in tqdm(zip(X, Y, strict=True), total=len(X)):
-        model.update(np.array([1, x]), cast(float, y))
+        model.update(np.array([1, x]), y)
 
     log_posterior = np.empty((samples, samples))
     for i, probs in enumerate(model.log_posterior):
@@ -74,14 +72,14 @@ def triangular(rng: np.random.Generator):
         log_posterior[:n, i] = probs
         log_posterior[n:, i] = -np.inf
 
-    axes = plt.subplots(3, sharex=True)[1]
+    axes = plt.subplots(2, sharex=True)[1]
     axes[0].plot(X, Y)
 
     # Plot run length posterior
     posterior, im = plot_posterior_probabilities(
         axes[1], model.log_posterior, X[[0, -1]]
     )
-    axes[2].plot(X, posterior.argmax(axis=0))
+    axes[1].plot(X, posterior.argmax(axis=0), color="red")
     for ax in axes[1:]:
         ax.set_ylabel("Run length")
 
@@ -113,7 +111,7 @@ def random_piecewise(rng: np.random.Generator):
     data, cps = generate_random_piecewise_data(
         rng, varx, mean0, var0, T, hazard
     )
-    model = MultivariateBcdm(1, hazard=hazard)
+    model = MultivariateBcdm(1, prior_cov=var0, hazard=hazard)
     for y in tqdm(data):
         model.update(1, y)
 
@@ -128,8 +126,8 @@ def random_piecewise(rng: np.random.Generator):
 
 
 def main() -> None:
-    # triangular(np.random.default_rng(100))
-    random_piecewise(np.random.default_rng(42))
+    triangular(np.random.default_rng(100))
+    # random_piecewise(np.random.default_rng(42))
     plt.show()
 
 
