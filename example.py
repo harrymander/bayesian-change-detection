@@ -1,3 +1,6 @@
+from pathlib import Path
+
+import click
 import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.axes import Axes
@@ -12,7 +15,9 @@ from examples import triangle_wave
 def plot_posterior_probabilities(
     ax: Axes,
     probs: list[np.ndarray],
+    *,
     xlim=None,
+    trim_zero: bool = True,
 ) -> tuple[np.ndarray, AxesImage]:
     samples = len(probs)
     log_posterior = np.empty((samples, samples))
@@ -28,8 +33,9 @@ def plot_posterior_probabilities(
 
     # Plot run length posterior
     posterior = np.exp(log_posterior)
-    zero_row = np.where(np.isclose(posterior, 0).all(axis=1))[0][0]
-    posterior = posterior[:zero_row]
+    if trim_zero:
+        zero_row = np.where(np.isclose(posterior, 0).all(axis=1))[0][0]
+        posterior = posterior[:zero_row]
 
     return posterior, ax.imshow(
         posterior,
@@ -77,7 +83,7 @@ def triangular(rng: np.random.Generator):
 
     # Plot run length posterior
     posterior, im = plot_posterior_probabilities(
-        axes[1], model.log_posterior, X[[0, -1]]
+        axes[1], model.log_posterior, xlim=X[[0, -1]]
     )
     axes[1].plot(X, posterior.argmax(axis=0), color="red")
     for ax in axes[1:]:
@@ -115,20 +121,54 @@ def random_piecewise(rng: np.random.Generator):
     for y in tqdm(data):
         model.update(1, y)
 
-    axes = plt.subplots(2, 1, sharex=True)[1]
-    axes[0].plot(data)
+    axes = plt.subplots(2, 1, sharex=True, figsize=(20, 10))[1]
+    axes[0].plot(data, "-o")
     for cp in cps:
         for ax in axes:
             ax.axvline(cp, color="red", linestyle="--")
 
-    im = plot_posterior_probabilities(axes[1], model.log_posterior)[1]
+    im = plot_posterior_probabilities(
+        axes[1],
+        model.log_posterior,
+        trim_zero=False,
+    )[1]
+    plt.tight_layout()
     plt.colorbar(im, ax=axes)
 
 
-def main() -> None:
-    triangular(np.random.default_rng(100))
-    # random_piecewise(np.random.default_rng(42))
-    plt.show()
+EXAMPLES = {
+    "random": random_piecewise,
+    "triangular": triangular,
+}
+
+
+@click.command()
+@click.argument(
+    "examples",
+    type=click.Choice(list(EXAMPLES.keys())),
+    nargs=-1,
+)
+@click.option(
+    "--output",
+    "-o",
+    type=click.Path(dir_okay=False, writable=True, path_type=Path),
+)
+def main(examples, output: Path | None) -> None:
+    if output and len(examples) != 1:
+        raise click.UsageError(
+            "--output can only be specified with a single example"
+        )
+
+    if not examples:
+        examples = EXAMPLES.keys()
+    for example in examples:
+        click.echo(f"Running '{example}' example")
+        EXAMPLES[example](np.random.default_rng(42))
+
+    if output:
+        plt.savefig(output, format=None if output.suffix else "png")
+    else:
+        plt.show()
 
 
 if __name__ == "__main__":
