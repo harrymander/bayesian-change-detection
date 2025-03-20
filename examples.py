@@ -106,7 +106,7 @@ def gen_random_data(
     return boundaries, X, Y
 
 
-def plot_probability(axes, prob, scale=None, **arg):
+def plot_probability(axes, prob, scale=None, **kwargs):
     """Plot hypotheses probabilities as a raster image."""
 
     if scale is None:
@@ -117,15 +117,14 @@ def plot_probability(axes, prob, scale=None, **arg):
     j = ind.max()
 
     # Plot the posterior probabilities over segment length hypotheses.
-    arg["cmap"] = plt.cm.gray
-    axes.imshow(
-        1.0 - prob[: j + 1],
-        origin="lower",
-        aspect="auto",
-        extent=[scale(-0.5), scale(k + 0.5), -0.5, j + 0.5],
-        interpolation="none",
-        **arg,
-    )
+    kwargs = {
+        "cmap": "gray_r",
+        "origin": "lower",
+        "aspect": "auto",
+        "extent": [scale(-0.5), scale(k + 0.5), -0.5, j + 0.5],
+        "interpolation": "none",
+    } | kwargs
+    axes.imshow(prob[: j + 1], **kwargs)
 
 
 def batched_exact(it, n):
