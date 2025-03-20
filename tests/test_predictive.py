@@ -3,20 +3,32 @@ import pytest
 from numpy.testing import assert_allclose
 
 from bayesian_change_detection import _MultivariateNormalInverseGamma
+from tests.conftest import NDArraySnapshot
 
 PARAMETER_ATTRS = ("mean", "cov", "shape", "scale")
 
 
-@pytest.fixture
-def random_data() -> tuple[np.ndarray, np.ndarray]:
-    rng = np.random.default_rng(42)
-
-    n = 500
+def _generate_random_data(
+    seed: int,
+    n: int,
+    w0: float,
+    w1: float,
+) -> tuple[np.ndarray, np.ndarray]:
+    """
+    Using random seed, generate n paired observations according to the linear
+    model: y = w0 + x*w1.
+    """
+    rng = np.random.default_rng(seed)
     x: np.ndarray = np.linspace(0, 10, n)
-    y = x * 1.5 + 2 + rng.normal(0, 2, size=n)
+    y = w0 + x * w1 + rng.normal(0, 2, size=n)
     x = np.c_[np.ones_like(x), x]
     assert x.shape == (n, 2)
     return x, y
+
+
+@pytest.fixture
+def random_data() -> tuple[np.ndarray, np.ndarray]:
+    return _generate_random_data(42, 500, 2, 1.5)
 
 
 def _new_model() -> _MultivariateNormalInverseGamma:
@@ -52,3 +64,16 @@ def test_predictive_parameters_batch_and_iterative_are_equivalent(
         getattr(batch, attr),
         err_msg=f"iterative.{attr} ≉ batch.{attr}",
     )
+
+
+@pytest.mark.parametrize("attrname", PARAMETER_ATTRS)
+def test_predictive_parameters_snapshot(
+    random_data,
+    attrname: str,
+    ndarray_snapshot: NDArraySnapshot,
+):
+    model = _new_model()
+    _iterative_update_model(model, random_data)
+
+    attr = getattr(model, attrname)
+    assert_allclose(attr, ndarray_snapshot(attr))
