@@ -52,8 +52,8 @@ def test_predictive_parameters_batch_and_iterative_are_equivalent(
     attr: str, random_data
 ) -> None:
     """
-    Updating the model iterative or in batch with the same data should give
-    the same results.
+    Updating the model iteratively or in a single batch with the same data
+    should give the same results.
     """
     iterative = _new_model()
     _iterative_update_model(iterative, random_data)
