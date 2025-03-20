@@ -47,7 +47,7 @@ class NDArraySnapshot:
         self.snapshot_path = self.snapshot_dir / f"{self.full_test_name}.txt"
 
         self._generating = generating
-        self._data: "np.ndarray" | None = None  # noqa: UP037
+        self._data: np.ndarray | None = None
 
     def __call__(self, data: "np.ndarray") -> "np.ndarray":
         if self._generating:
