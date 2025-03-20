@@ -15,6 +15,20 @@ def pytest_addoption(parser: pytest.Parser):
     )
 
 
+def pytest_configure(config: pytest.Config):
+    config.addinivalue_line(
+        "markers",
+        "snapshot: marks a test as using a snapshot fixture",
+    )
+
+
+def pytest_collection_modifyitems(session, config, items: list[pytest.Item]):
+    for item in items:
+        if isinstance(item, pytest.Function):
+            if "ndarray_snapshot" in item.fixturenames:
+                item.add_marker("snapshot")
+
+
 class SnapshotError(RuntimeError):
     pass
 
