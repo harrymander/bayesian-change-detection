@@ -21,7 +21,7 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from functools import partial
 from itertools import pairwise
-from typing import TypeVar, cast, overload
+from typing import cast, overload
 
 import numpy as np
 import scipy
@@ -897,9 +897,6 @@ class MultivariateBcdm:
             distribution.update(x, y)
 
 
-_ScalarOrArray = TypeVar("_ScalarOrArray", bound=np.ndarray | float)
-
-
 class _MultivariateNormalInverseGamma:
     def __init__(
         self,
@@ -919,22 +916,16 @@ class _MultivariateNormalInverseGamma:
         self.scale = scale
         self.p = p
 
-    def log_density(self, x: np.ndarray, y_: _ScalarOrArray) -> _ScalarOrArray:
-        ret_scalar = np.isscalar(y_)
-        y: np.ndarray = np.atleast_1d(y_)
-        x = np.atleast_2d(x)
-        n = len(x)
-        if x.shape != (n, self.p):
+    def log_density(self, x: np.ndarray, y: float) -> float:
+        assert np.isscalar(y)
+        if x.shape != (self.p,):
             raise ValueError("invalid shape for x")
-        if y.shape != (n,):
-            raise ValueError("invalid shape for y")
         mvt = scipy.stats.multivariate_t(
-            loc=x @ self.mean,
-            shape=self.scale / self.shape * (x @ self.cov @ x.T + np.eye(n)),
+            loc=np.dot(x, self.mean),
+            shape=self.scale / self.shape * (x @ self.cov @ x + 1),
             df=2 * self.shape,
         )
-        logpdf = mvt.logpdf(y)
-        return logpdf.item() if ret_scalar else logpdf
+        return mvt.logpdf(y)
 
     def update(self, x: np.ndarray, y: float | np.ndarray) -> None:
         # See e.g. p. 97, Clarke & Clarke "Predictive Statistics"

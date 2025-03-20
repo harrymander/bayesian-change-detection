@@ -77,3 +77,19 @@ def test_predictive_parameters_snapshot(
 
     attr = getattr(model, attrname)
     assert_allclose(attr, ndarray_snapshot(attr))
+
+
+def test_predictive_log_density_snapshot(
+    random_data,
+    ndarray_snapshot: NDArraySnapshot,
+):
+    model = _new_model()
+    _iterative_update_model(model, random_data)
+
+    x, y = _generate_random_data(123, 50, 2.5, 1.2)
+    log_density = np.fromiter(
+        (model.log_density(xt, yt) for xt, yt in zip(x, y, strict=True)),
+        dtype=y.dtype,
+        count=y.size,
+    )
+    assert_allclose(log_density, ndarray_snapshot(log_density))
