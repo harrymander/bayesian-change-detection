@@ -11,7 +11,7 @@ def pytest_addoption(parser: pytest.Parser):
     parser.addoption(
         "--snapshot-generate",
         action="store_true",
-        help="Generate snapshots for all tests.",
+        help="Generate snapshots for selected tests.",
     )
 
 
