@@ -811,6 +811,14 @@ class MultivariateBcdm:
         self.distributions: list[_MultivariateNormalInverseGamma] = []
         self.log_joint = np.array([0.0])  # lambda_0(0) = 1, log = 0
         self._log_posteriors: list[np.ndarray] = []
+        self._log_predictives: list[np.ndarray] = []
+
+    def log_predictive(self) -> np.ndarray:
+        n = len(self._log_predictives)
+        log_predictive: np.ndarray = np.empty((n, n))
+        log_predictive[np.tril_indices(n)] = np.concat(self._log_predictives)
+        log_predictive[np.triu_indices(n, 1)] = -np.inf
+        return log_predictive.T
 
     def log_posterior(self) -> np.ndarray:
         """
@@ -883,6 +891,7 @@ class MultivariateBcdm:
             log_joint - scipy.special.logsumexp(log_joint)
         )
         self.log_joint = log_joint
+        self._log_predictives.append(log_predictive_probs)
 
         for distribution in self.distributions:
             distribution.update(x, y)

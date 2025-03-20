@@ -20,6 +20,7 @@ def plot_posterior_probabilities(
     *,
     xlim=None,
     trim_zero: bool = True,
+    **kwargs,
 ) -> tuple[np.ndarray, AxesImage]:
     samples = len(log_posterior)
     if xlim is None:
@@ -29,17 +30,19 @@ def plot_posterior_probabilities(
 
     posterior = np.exp(log_posterior)
     if trim_zero:
-        zero_row = np.where(np.isclose(posterior, 0).all(axis=1))[0][0]
-        posterior = posterior[:zero_row]
+        zeros = np.where(np.isclose(posterior, 0).all(axis=1))[0]
+        if zeros.size:
+            zero_row = zeros[0]
+            posterior = posterior[:zero_row]
 
-    return posterior, ax.imshow(
-        posterior,
-        aspect="auto",
-        origin="lower",
-        cmap="gray_r",
-        norm=LogNorm(vmin=1e-4, vmax=1),
-        extent=(x0, x1, 0, len(posterior)),
-    )
+    kwargs = {
+        "aspect": "auto",
+        "origin": "lower",
+        "cmap": "gray_r",
+        "norm": LogNorm(vmin=1e-4, vmax=1),
+        "extent": (x0, x1, 0, len(posterior)),
+    } | kwargs
+    return posterior, ax.imshow(posterior, **kwargs)  # type: ignore
 
 
 def triangular(rng: np.random.Generator):
@@ -56,19 +59,24 @@ def triangular(rng: np.random.Generator):
     true_boundaries = np.pi * np.arange(0, 6) + np.pi / 2
     true_boundaries = np.sort(true_boundaries[true_boundaries <= X.max()])
 
+    rate = 0.001
+    omega = 1.0e-3 * np.eye(2)
+    sigma = 1.0e-6
+    samples = 500
+
     model = MultivariateBcdm(
         2,
-        hazard=0.001,
-        prior_cov=1.0e-3,
-        prior_scale=1.0e-6,
+        hazard=rate,
+        prior_cov=omega,
+        prior_shape=sigma,
     )
 
     # Update the segment length hypotheses given the data.
     for x, y in tqdm(zip(X, Y, strict=True), total=len(X)):
         model.update(np.array([1, x]), y)
 
-    axes = plt.subplots(2, sharex=True, figsize=FIGSIZE)[1]
-    axes[0].plot(X, Y)
+    axes = plt.subplots(3, sharex=True, figsize=FIGSIZE)[1]
+    axes[0].plot(X, Y, "-o")
     posterior, im = plot_posterior_probabilities(
         axes[1], model.log_posterior(), xlim=X[[0, -1]]
     )
@@ -78,6 +86,15 @@ def triangular(rng: np.random.Generator):
     for ax in axes:
         for boundary in true_boundaries:
             ax.axvline(boundary, color="red", linestyle="--")
+
+    pred = model.log_predictive()
+    plot_posterior_probabilities(
+        axes[2],
+        pred.T,
+        xlim=X[[0, -1]],
+        norm=None,
+        origin="upper",
+    )
 
     plt.tight_layout()
     plt.colorbar(im, ax=axes)
