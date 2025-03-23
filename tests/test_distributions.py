@@ -2,13 +2,13 @@ import numpy as np
 import pytest
 from numpy.testing import assert_allclose
 
-from bayesian_change_detection import _MultivariateNormalInverseGamma
+from bayesian_change_detection import MultivariateNormalInverseGamma
 from tests.conftest import NDArraySnapshot
 
 PARAMETER_ATTRS = ("mean", "cov", "shape", "scale")
 
 
-def _generate_random_data(
+def generate_random_data(
     seed: int,
     n: int,
     w0: float,
@@ -28,11 +28,11 @@ def _generate_random_data(
 
 @pytest.fixture
 def random_data() -> tuple[np.ndarray, np.ndarray]:
-    return _generate_random_data(42, 500, 2, 1.5)
+    return generate_random_data(42, 500, 2, 1.5)
 
 
-def _new_model() -> _MultivariateNormalInverseGamma:
-    return _MultivariateNormalInverseGamma(
+def new_distribution() -> MultivariateNormalInverseGamma:
+    return MultivariateNormalInverseGamma(
         mean=np.zeros(2),
         cov=np.eye(2),
         shape=1,
@@ -40,7 +40,7 @@ def _new_model() -> _MultivariateNormalInverseGamma:
     )
 
 
-def _iterative_update_model(model, data):
+def update_model_iteratively(model, data):
     for xt, yt in zip(*data, strict=True):
         assert xt.shape == (2,)
         assert isinstance(yt, float)
@@ -48,16 +48,16 @@ def _iterative_update_model(model, data):
 
 
 @pytest.mark.parametrize("attr", PARAMETER_ATTRS)
-def test_predictive_parameters_batch_and_iterative_are_equivalent(
+def test_multivariate_normal_inv_gamma_iterative_update_equivalent_to_batch(
     attr: str, random_data
 ) -> None:
     """
     Updating the model iteratively or in a single batch with the same data
     should give the same results.
     """
-    iterative = _new_model()
-    _iterative_update_model(iterative, random_data)
-    batch = _new_model()
+    iterative = new_distribution()
+    update_model_iteratively(iterative, random_data)
+    batch = new_distribution()
     batch.update(*random_data)
     assert_allclose(
         getattr(iterative, attr),
@@ -67,13 +67,13 @@ def test_predictive_parameters_batch_and_iterative_are_equivalent(
 
 
 @pytest.mark.parametrize("attrname", PARAMETER_ATTRS)
-def test_predictive_parameters_snapshot(
+def test_multivariate_normal_inv_gamma_parameters_snapshot(
     random_data,
     attrname: str,
     ndarray_snapshot: NDArraySnapshot,
 ):
-    model = _new_model()
-    _iterative_update_model(model, random_data)
+    model = new_distribution()
+    update_model_iteratively(model, random_data)
 
     attr = getattr(model, attrname)
     assert_allclose(attr, ndarray_snapshot(attr))
@@ -83,10 +83,10 @@ def test_predictive_log_density_snapshot(
     random_data,
     ndarray_snapshot: NDArraySnapshot,
 ):
-    model = _new_model()
-    _iterative_update_model(model, random_data)
+    model = new_distribution()
+    update_model_iteratively(model, random_data)
 
-    x, y = _generate_random_data(123, 50, 2.5, 1.2)
+    x, y = generate_random_data(123, 50, 2.5, 1.2)
     log_density = np.fromiter(
         (model.log_density(xt, yt) for xt, yt in zip(x, y, strict=True)),
         dtype=y.dtype,
