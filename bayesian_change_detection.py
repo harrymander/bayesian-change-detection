@@ -808,7 +808,7 @@ class MultivariateBcdm:
         self._log_hazard = np.log(hazard)
         self._log_1mhazard = np.log1p(-hazard)
 
-        self.distributions: list[_MultivariateNormalInverseGamma] = []
+        self.distributions: list[MultivariateNormalInverseGamma] = []
         self.log_joint = np.array([0.0])  # lambda_0(0) = 1, log = 0
         self._log_posteriors: list[np.ndarray] = []
         self._log_predictives: list[np.ndarray] = []
@@ -854,8 +854,8 @@ class MultivariateBcdm:
         )
         return log_posterior
 
-    def _normal_inv_gamma(self) -> "_MultivariateNormalInverseGamma":
-        return _MultivariateNormalInverseGamma(
+    def _normal_inv_gamma(self) -> "MultivariateNormalInverseGamma":
+        return MultivariateNormalInverseGamma(
             mean=self.prior_mean,
             cov=self.prior_cov,
             shape=self.prior_shape,
@@ -897,7 +897,7 @@ class MultivariateBcdm:
             distribution.update(x, y)
 
 
-class _MultivariateNormalInverseGamma:
+class MultivariateNormalInverseGamma:
     def __init__(
         self,
         *,
