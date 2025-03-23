@@ -59,23 +59,19 @@ def triangular(rng: np.random.Generator):
     true_boundaries = np.pi * np.arange(0, 6) + np.pi / 2
     true_boundaries = np.sort(true_boundaries[true_boundaries <= X.max()])
 
-    rate = 0.001
-    omega = 1.0e-3 * np.eye(2)
-    sigma = 1.0e-6
-    samples = 500
-
     model = MultivariateBcdm(
         2,
-        hazard=rate,
-        prior_cov=omega,
-        prior_shape=sigma,
+        hazard=0.02,
+        prior_cov=1e6,
+        prior_shape=1e-3,
+        prior_scale=1e-6,
     )
 
     # Update the segment length hypotheses given the data.
     for x, y in tqdm(zip(X, Y, strict=True), total=len(X)):
         model.update(np.array([1, x]), y)
 
-    axes = plt.subplots(3, sharex=True, figsize=FIGSIZE)[1]
+    axes = plt.subplots(2, sharex=True, figsize=FIGSIZE)[1]
     axes[0].plot(X, Y, "-o")
     posterior, im = plot_posterior_probabilities(
         axes[1], model.log_posterior(), xlim=X[[0, -1]]
@@ -86,15 +82,6 @@ def triangular(rng: np.random.Generator):
     for ax in axes:
         for boundary in true_boundaries:
             ax.axvline(boundary, color="red", linestyle="--")
-
-    pred = model.log_predictive()
-    plot_posterior_probabilities(
-        axes[2],
-        pred.T,
-        xlim=X[[0, -1]],
-        norm=None,
-        origin="upper",
-    )
 
     plt.tight_layout()
     plt.colorbar(im, ax=axes)
@@ -135,11 +122,12 @@ def random_piecewise(rng: np.random.Generator):
         for ax in axes:
             ax.axvline(cp, color="red", linestyle="--")
 
-    im = plot_posterior_probabilities(
+    posterior, im = plot_posterior_probabilities(
         axes[1],
         model.log_posterior(),
         trim_zero=False,
-    )[1]
+    )
+    axes[1].plot(posterior.argmax(axis=0))
     plt.tight_layout()
     plt.colorbar(im, ax=axes)
 
