@@ -27,6 +27,7 @@ import numpy as np
 import scipy
 from numpy import linalg
 from numpy.testing import assert_allclose
+from scipy.linalg import lapack
 
 
 class MatrixVariateNormalInvGamma:
@@ -912,6 +913,7 @@ class MultivariateNormalInverseGamma:
 
         self.mean = mean
         self.cov = cov
+        self._cov_inv = _cholesky_inv(cov)
         self.shape = shape
         self.scale = scale
         self.p = p
@@ -943,13 +945,32 @@ class MultivariateNormalInverseGamma:
         yy = np.dot(y, y)
 
         mean0 = self.mean
-        cov0 = self.cov
-        cov0_inv = np.linalg.inv(cov0)
-        cov_inv = cov0_inv + xx
-        self.cov = np.linalg.inv(cov_inv)
+        cov0_inv = self._cov_inv
+        self._cov_inv = cov0_inv + xx
+        self.cov = _cholesky_inv(self._cov_inv)
         self.mean = self.cov @ (cov0_inv @ mean0 + xy)
         self.shape += n / 2
         self.scale += (
-            mean0 @ cov0_inv @ mean0 + yy - self.mean @ cov_inv @ self.mean
+            mean0 @ cov0_inv @ mean0
+            + yy
+            - self.mean @ self._cov_inv @ self.mean
         ) / 2
         assert self.scale > 0, self.scale
+
+
+def _cholesky_inv(a: np.ndarray) -> np.ndarray:
+    """Invert a positive-definite symmetrix matrix using the Cholesky
+    decomposition."""
+
+    # u is the upper triangular matrix of the Cholesky decomposition
+    # a = u.T @ u
+    u, info = lapack.dpotrf(a)
+    if info != 0:
+        raise RuntimeError("matrix is not positive-definite")
+
+    uinv, info = lapack.dpotri(u)
+    if info != 0:
+        raise RuntimeError("matrix is singular")
+
+    uinv += np.triu(uinv, 1).T
+    return uinv
