@@ -896,6 +896,8 @@ class MultivariateBcdm:
 
 
 class MultivariateNormalInverseGamma:
+    _LOG_2PI = np.log(2 * np.pi)
+
     def __init__(
         self,
         *,
@@ -916,11 +918,16 @@ class MultivariateNormalInverseGamma:
         self.p = p
 
     def _log_density(self, x: np.ndarray, y: float) -> float:
-        return scipy.stats.multivariate_t.logpdf(
-            y,
-            loc=np.dot(x, self.mean),
-            shape=self.scale / self.shape * (x @ self.cov @ x + 1),
-            df=2 * self.shape,
+        shape = self.scale / self.shape * (x @ self.cov @ x + 1)
+        assert np.isscalar(shape)
+        loc = np.dot(x, self.mean)
+        dev = y - loc
+        a = self.shape
+        return (
+            scipy.special.gammaln(a + 0.5)
+            - scipy.special.gammaln(a)
+            - 0.5 * (self._LOG_2PI + np.log(a) + np.log(shape))
+            - (a + 0.5) * np.log(1 + dev * dev / shape / a / 2)
         )
 
     def _update_sufficient_statistics(self, x: np.ndarray, y: float) -> None:
@@ -962,11 +969,11 @@ def _cholesky_inv(a: np.ndarray) -> np.ndarray:
     # a = u.T @ u
     u, info = lapack.dpotrf(a)
     if info != 0:
-        raise RuntimeError("matrix is not positive-definite")
+        raise ValueError("matrix is not positive-definite")
 
     uinv, info = lapack.dpotri(u)
     if info != 0:
-        raise RuntimeError("matrix is singular")
+        raise ValueError("matrix is singular")
 
     uinv += np.triu(uinv, 1).T
     return uinv
