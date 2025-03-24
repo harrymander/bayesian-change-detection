@@ -6,9 +6,8 @@ import numpy as np
 from matplotlib.axes import Axes
 from matplotlib.colors import LogNorm
 from matplotlib.image import AxesImage
-from tqdm import tqdm
 
-from bayesian_change_detection import MultivariateBcdm
+from bayesian_change_detection import multivariate_bcdm
 
 FIGSIZE = (20, 10)
 
@@ -55,22 +54,19 @@ def triangular(rng: np.random.Generator):
     Y = -np.arcsin(np.sin(X)) * 2 / np.pi + noise
     true_boundaries = np.pi * np.arange(0, 6) + np.pi / 2
 
-    model = MultivariateBcdm(
-        2,
+    res = multivariate_bcdm(
+        np.c_[np.ones_like(X), X],
+        Y,
         hazard=0.02,
         prior_cov=1e6,
         prior_shape=1e-3,
         prior_scale=1e-6,
     )
 
-    # Update the segment length hypotheses given the data.
-    for x, y in tqdm(zip(X, Y, strict=True), total=len(X)):
-        model.update(np.array([1, x]), y)
-
     axes = plt.subplots(2, sharex=True, figsize=FIGSIZE)[1]
     axes[0].plot(X, Y, "-o")
     posterior, im = plot_posterior_probabilities(
-        axes[1], model.log_posterior(), xlim=X[[0, -1]]
+        axes[1], res.log_posterior, xlim=X[[0, -1]]
     )
     axes[1].plot(X, posterior.argmax(axis=0), color="red")
     for ax in axes[1:]:
@@ -108,9 +104,13 @@ def random_piecewise(rng: np.random.Generator):
     data, cps = generate_random_piecewise_data(
         rng, varx, mean0, var0, T, hazard
     )
-    model = MultivariateBcdm(1, prior_cov=var0, hazard=hazard)
-    for y in tqdm(data):
-        model.update(1, y)
+    y = np.asarray(data)
+    res = multivariate_bcdm(
+        np.ones_like(y),
+        y,
+        prior_cov=var0,
+        hazard=hazard,
+    )
 
     axes = plt.subplots(2, 1, sharex=True, figsize=FIGSIZE)[1]
     axes[0].plot(data, "-o")
@@ -120,7 +120,7 @@ def random_piecewise(rng: np.random.Generator):
 
     posterior, im = plot_posterior_probabilities(
         axes[1],
-        model.log_posterior(),
+        res.log_posterior,
         trim_zero=False,
     )
     axes[1].plot(posterior.argmax(axis=0))
