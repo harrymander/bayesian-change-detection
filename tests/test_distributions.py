@@ -49,7 +49,7 @@ def test_multivariate_normal_inv_gamma_parameters_snapshot(
     ndarray_snapshot: NDArraySnapshot,
 ):
     for xt, yt in zip(*random_data, strict=True):
-        distribution.update(xt, yt)
+        distribution.predict_and_update(xt, yt)
 
     attr = getattr(distribution, attrname)
     assert_allclose(attr, ndarray_snapshot(attr))
@@ -61,8 +61,7 @@ def test_predictive_log_density_snapshot(
     ndarray_snapshot: NDArraySnapshot,
 ):
     log_density = np.empty(len(random_data[0]))
-    for i, (xt, yt) in enumerate(zip(*random_data, strict=True)):
-        log_density[i] = distribution.log_density(xt, yt)
-        distribution.update(xt, yt)
+    for i, (x, y) in enumerate(zip(*random_data, strict=True)):
+        log_density[i] = distribution.predict_and_update(x, y)
 
     assert_allclose(log_density, ndarray_snapshot(log_density))
