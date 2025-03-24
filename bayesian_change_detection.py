@@ -936,7 +936,7 @@ class MultivariateNormalInverseGamma:
 
         self.mean = mean
         self.cov = cov
-        self._prec = _matrix_inv(cov)
+        self._prec = _positive_definite_inv(cov)
         self.shape = shape
         self.scale = scale
         self.p = p
@@ -987,7 +987,7 @@ class MultivariateNormalInverseGamma:
         return log_density
 
 
-def _matrix_inv(a: np.ndarray) -> np.ndarray:
+def _positive_definite_inv(a: np.ndarray) -> np.ndarray:
     n = len(a)
     if n == 1:
         return 1 / a
