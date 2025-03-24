@@ -916,12 +916,28 @@ class MultivariateNormalInverseGamma:
         self.p = p
 
     def _log_density(self, x: np.ndarray, y: float) -> float:
-        mvt = scipy.stats.multivariate_t(
+        return scipy.stats.multivariate_t.logpdf(
+            y,
             loc=np.dot(x, self.mean),
             shape=self.scale / self.shape * (x @ self.cov @ x + 1),
             df=2 * self.shape,
         )
-        return mvt.logpdf(y)
+
+    def _update_sufficient_statistics(self, x: np.ndarray, y: float) -> None:
+        # Update sufficient statistics
+        # See e.g. p. 97, Clarke & Clarke "Predictive Statistics"
+        mean0 = self.mean
+        cov0_inv = self._cov_inv
+        self._cov_inv = cov0_inv + np.outer(x, x)
+        self.cov = _cholesky_inv(self._cov_inv)
+        self.mean = self.cov @ (cov0_inv @ mean0 + x * y)
+        self.shape += 0.5
+        self.scale += (
+            mean0 @ cov0_inv @ mean0
+            + y * y
+            - self.mean @ self._cov_inv @ self.mean
+        ) / 2
+        assert self.scale > 0, f"got negative scale ({self.scale})"
 
     def predict_and_update(self, x: np.ndarray, y: float) -> float:
         """Compute the predictive density of a new observation (x, y) and
@@ -935,25 +951,7 @@ class MultivariateNormalInverseGamma:
         # cast needed because return type of np.isscalar changes type
         y = cast(float, y)
         log_density = self._log_density(x, y)
-
-        # Update sufficient statistics
-        # See e.g. p. 97, Clarke & Clarke "Predictive Statistics"
-        xx = np.outer(x, x)
-        xy = x * y
-        yy = y * y
-        mean0 = self.mean
-        cov0_inv = self._cov_inv
-        self._cov_inv = cov0_inv + xx
-        self.cov = _cholesky_inv(self._cov_inv)
-        self.mean = self.cov @ (cov0_inv @ mean0 + xy)
-        self.shape += 0.5
-        self.scale += (
-            mean0 @ cov0_inv @ mean0
-            + yy
-            - self.mean @ self._cov_inv @ self.mean
-        ) / 2
-        assert self.scale > 0, f"got negative scale ({self.scale})"
-
+        self._update_sufficient_statistics(x, y)
         return log_density
 
 
