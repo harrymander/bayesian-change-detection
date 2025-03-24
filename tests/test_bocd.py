@@ -70,7 +70,32 @@ def test_predictive_log_density_snapshot(
     assert_allclose(log_density, ndarray_snapshot(log_density))
 
 
-def test_change_detection_snapshot(ndarray_snapshot: NDArraySnapshot):
+def test_1d_change_detection_snapshot(ndarray_snapshot: NDArraySnapshot):
+    samples = 100
+    hazard = 0.1  # Constant prior on changepoint probability.
+    mean0 = 0.0  # The prior mean on the mean parameter.
+    var0 = 2.0  # The prior variance for mean parameter.
+    varx = 1.0  # The known variance of the data.
+
+    rng = np.random.default_rng(42)
+
+    # Generate random piecewise data
+    data = []
+    meanx = mean0
+    for _ in range(samples):
+        if rng.random() < hazard:  # new changepoint
+            meanx = rng.normal(mean0, var0)
+        data.append(rng.normal(meanx, varx))
+
+    model = MultivariateBcdm(1, prior_cov=var0, hazard=hazard)
+    for y in data:
+        model.update(1, y)
+
+    log_posterior = model.log_posterior()
+    assert_allclose(log_posterior, ndarray_snapshot(log_posterior))
+
+
+def test_2d_change_detection_snapshot(ndarray_snapshot: NDArraySnapshot):
     rng = np.random.default_rng(42)
 
     # Create input and outputs.
