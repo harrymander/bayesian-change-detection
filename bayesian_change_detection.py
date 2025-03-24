@@ -910,9 +910,16 @@ class MultivariateNormalInverseGamma:
         p = mean.shape[0]
         assert cov.shape == (p, p)
 
+        if p == 1:
+            self._matrix_inv = _1x1_inv
+        elif p == 2:
+            self._matrix_inv = _2x2_inv
+        else:
+            self._matrix_inv = _cholesky_inv
+
         self.mean = mean
         self.cov = cov
-        self._cov_inv = _cholesky_inv(cov)
+        self._prec = self._matrix_inv(cov)
         self.shape = shape
         self.scale = scale
         self.p = p
@@ -934,15 +941,13 @@ class MultivariateNormalInverseGamma:
         # Update sufficient statistics
         # See e.g. p. 97, Clarke & Clarke "Predictive Statistics"
         mean0 = self.mean
-        cov0_inv = self._cov_inv
-        self._cov_inv = cov0_inv + np.outer(x, x)
-        self.cov = _cholesky_inv(self._cov_inv)
-        self.mean = self.cov @ (cov0_inv @ mean0 + x * y)
+        prec0 = self._prec
+        self._prec = prec0 + np.outer(x, x)
+        self.cov = self._matrix_inv(self._prec)
+        self.mean = self.cov @ (prec0 @ mean0 + x * y)
         self.shape += 0.5
         self.scale += (
-            mean0 @ cov0_inv @ mean0
-            + y * y
-            - self.mean @ self._cov_inv @ self.mean
+            mean0 @ prec0 @ mean0 + y * y - self.mean @ self._prec @ self.mean
         ) / 2
         assert self.scale > 0, f"got negative scale ({self.scale})"
 
@@ -960,6 +965,26 @@ class MultivariateNormalInverseGamma:
         log_density = self._log_density(x, y)
         self._update_sufficient_statistics(x, y)
         return log_density
+
+
+def _1x1_inv(a: np.ndarray) -> np.ndarray:
+    return 1 / a
+
+
+def _2x2_inv(a: np.ndarray) -> np.ndarray:
+    det = a[0, 0] * a[1, 1] - a[0, 1] * a[1, 0]
+    if det == 0:
+        raise ValueError("matrix is singular")
+
+    return (
+        np.array(
+            (
+                (a[1, 1], -a[0, 1]),
+                (-a[1, 0], a[0, 0]),
+            )
+        )
+        / det
+    )
 
 
 def _cholesky_inv(a: np.ndarray) -> np.ndarray:
