@@ -910,16 +910,9 @@ class MultivariateNormalInverseGamma:
         p = mean.shape[0]
         assert cov.shape == (p, p)
 
-        if p == 1:
-            self._matrix_inv = _1x1_inv
-        elif p == 2:
-            self._matrix_inv = _2x2_inv
-        else:
-            self._matrix_inv = _cholesky_inv
-
         self.mean = mean
         self.cov = cov
-        self._prec = self._matrix_inv(cov)
+        self._prec = _matrix_inv(cov)
         self.shape = shape
         self.scale = scale
         self.p = p
@@ -940,10 +933,13 @@ class MultivariateNormalInverseGamma:
     def _update_sufficient_statistics(self, x: np.ndarray, y: float) -> None:
         # Update sufficient statistics
         # See e.g. p. 97, Clarke & Clarke "Predictive Statistics"
-        mean0 = self.mean
         prec0 = self._prec
+        cov0 = self.cov
+        mean0 = self.mean
+
         self._prec = prec0 + np.outer(x, x)
-        self.cov = self._matrix_inv(self._prec)
+        vx = cov0 @ x
+        self.cov = cov0 - np.outer(vx, vx) / (1 + np.dot(x, vx))
         self.mean = self.cov @ (prec0 @ mean0 + x * y)
         self.shape += 0.5
         self.scale += (
@@ -967,8 +963,13 @@ class MultivariateNormalInverseGamma:
         return log_density
 
 
-def _1x1_inv(a: np.ndarray) -> np.ndarray:
-    return 1 / a
+def _matrix_inv(a: np.ndarray) -> np.ndarray:
+    n = len(a)
+    if n == 1:
+        return 1 / a
+    if n == 2:
+        return _2x2_inv(a)
+    return _cholesky_inv(a)
 
 
 def _2x2_inv(a: np.ndarray) -> np.ndarray:
