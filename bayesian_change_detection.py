@@ -874,7 +874,7 @@ class MultivariateBcdm:
         self.distributions.append(self._normal_inv_gamma())
         log_predictive_probs = np.empty(len(self.distributions))
         for i, distribution in enumerate(reversed(self.distributions)):
-            log_predictive_probs[i] = distribution.log_density(x, y)
+            log_predictive_probs[i] = distribution.predict_and_update(x, y)
 
         log_joint = np.empty(len(log_predictive_probs))
 
@@ -893,9 +893,6 @@ class MultivariateBcdm:
         )
         self.log_joint = log_joint
         self._log_predictives.append(log_predictive_probs)
-
-        for distribution in self.distributions:
-            distribution.update(x, y)
 
 
 class MultivariateNormalInverseGamma:
@@ -918,10 +915,7 @@ class MultivariateNormalInverseGamma:
         self.scale = scale
         self.p = p
 
-    def log_density(self, x: np.ndarray, y: float) -> float:
-        assert np.isscalar(y)
-        if x.shape != (self.p,):
-            raise ValueError("invalid shape for x")
+    def _log_density(self, x: np.ndarray, y: float) -> float:
         mvt = scipy.stats.multivariate_t(
             loc=np.dot(x, self.mean),
             shape=self.scale / self.shape * (x @ self.cov @ x + 1),
@@ -929,33 +923,38 @@ class MultivariateNormalInverseGamma:
         )
         return mvt.logpdf(y)
 
-    def update(self, x: np.ndarray, y: float | np.ndarray) -> None:
-        # See e.g. p. 97, Clarke & Clarke "Predictive Statistics"
-        x = np.atleast_2d(x)
-        n = len(x)
-        if x.shape != (n, self.p):
+    def predict_and_update(self, x: np.ndarray, y: float) -> float:
+        """Compute the predictive density of a new observation (x, y) and
+        update the model sufficient statistics. Returns the log predictive
+        density."""
+        if not np.isscalar(y):
+            raise ValueError("y must be a scalar")
+        if x.shape != (self.p,):
             raise ValueError("invalid shape for x")
 
-        y = np.atleast_1d(y)
-        if y.shape != (n,):
-            raise ValueError("invalid shape for y")
+        # cast needed because return type of np.isscalar changes type
+        y = cast(float, y)
+        log_density = self._log_density(x, y)
 
-        xx = x.T @ x
-        xy = x.T @ y
-        yy = np.dot(y, y)
-
+        # Update sufficient statistics
+        # See e.g. p. 97, Clarke & Clarke "Predictive Statistics"
+        xx = np.outer(x, x)
+        xy = x * y
+        yy = y * y
         mean0 = self.mean
         cov0_inv = self._cov_inv
         self._cov_inv = cov0_inv + xx
         self.cov = _cholesky_inv(self._cov_inv)
         self.mean = self.cov @ (cov0_inv @ mean0 + xy)
-        self.shape += n / 2
+        self.shape += 0.5
         self.scale += (
             mean0 @ cov0_inv @ mean0
             + yy
             - self.mean @ self._cov_inv @ self.mean
         ) / 2
-        assert self.scale > 0, self.scale
+        assert self.scale > 0, f"got negative scale ({self.scale})"
+
+        return log_density
 
 
 def _cholesky_inv(a: np.ndarray) -> np.ndarray:
