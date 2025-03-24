@@ -9,7 +9,6 @@ from matplotlib.image import AxesImage
 from tqdm import tqdm
 
 from bayesian_change_detection import MultivariateBcdm
-from examples import triangle_wave
 
 FIGSIZE = (20, 10)
 
@@ -53,11 +52,8 @@ def triangular(rng: np.random.Generator):
     # Create input and outputs.
     X = np.linspace(0, 3 * 2 * np.pi, samples)
     noise = 0.1 * rng.standard_normal(samples)
-    Y = triangle_wave(2 * np.pi, X - np.pi / 2) + noise
-
-    # Determine location of true boundaries.
+    Y = -np.arcsin(np.sin(X)) * 2 / np.pi + noise
     true_boundaries = np.pi * np.arange(0, 6) + np.pi / 2
-    true_boundaries = np.sort(true_boundaries[true_boundaries <= X.max()])
 
     model = MultivariateBcdm(
         2,
