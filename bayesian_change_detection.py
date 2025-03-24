@@ -958,8 +958,7 @@ class MultivariateNormalInverseGamma:
 
 
 def _cholesky_inv(a: np.ndarray) -> np.ndarray:
-    """Invert a positive-definite symmetrix matrix using the Cholesky
-    decomposition."""
+    """Invert a positive-definite matrix using the Cholesky decomposition."""
 
     # u is the upper triangular matrix of the Cholesky decomposition
     # a = u.T @ u
