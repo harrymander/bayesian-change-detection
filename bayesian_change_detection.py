@@ -29,6 +29,8 @@ from numpy import linalg
 from numpy.testing import assert_allclose
 from scipy.linalg import lapack
 
+_LOG_2PI = np.log(2 * np.pi)
+
 
 class MatrixVariateNormalInvGamma:
     """Matrix-variate normal, matrix-variate inverse gamma distribution
@@ -605,9 +607,7 @@ class MatrixVariateBcdm:
             # Evaluate the log-density of the predictive distribution.
             # (Equation 16)
             log_density = (
-                n_k
-                - n_o
-                - k * (self.numpred * self.numresp / 2) * np.log(2 * np.pi)
+                n_k - n_o - k * (self.numpred * self.numresp / 2) * _LOG_2PI
             )
 
             # Accumulate the log-likelihood of the data (Equation 17)
@@ -757,6 +757,23 @@ def _check_array_shape(name: str, x, exp: Sequence[int]) -> np.ndarray:
 
 
 class MultivariateBcdm:
+    __slots__ = [
+        "_log_1mhazard",
+        "_log_density",
+        "_log_hazard",
+        "_log_joint",
+        "_log_posteriors",
+        "_log_predictives",
+        "distributions",
+        "hazard",
+        "log_joint",
+        "p",
+        "prior_cov",
+        "prior_mean",
+        "prior_scale",
+        "prior_shape",
+    ]
+
     def __init__(
         self,
         p: int,
@@ -896,7 +913,14 @@ class MultivariateBcdm:
 
 
 class MultivariateNormalInverseGamma:
-    _LOG_2PI = np.log(2 * np.pi)
+    __slots__ = [
+        "_prec",
+        "cov",
+        "mean",
+        "p",
+        "scale",
+        "shape",
+    ]
 
     def __init__(
         self,
@@ -926,7 +950,7 @@ class MultivariateNormalInverseGamma:
         return (
             scipy.special.gammaln(a + 0.5)
             - scipy.special.gammaln(a)
-            - 0.5 * (self._LOG_2PI + np.log(a) + np.log(shape))
+            - 0.5 * (_LOG_2PI + np.log(a) + np.log(shape))
             - (a + 0.5) * np.log(1 + dev * dev / shape / a / 2)
         )
 
