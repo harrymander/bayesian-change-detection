@@ -50,16 +50,17 @@ class NDArraySnapshot:
     def __init__(
         self,
         *,
-        test_name: str,
+        nodeid: str,
         test_path: Path,
         generating: bool,
     ):
-        self.test_name = test_name
-        self.test_path = test_path
-        self.full_test_name = f"{self.test_path.stem}:{self.test_name}"
-        self.snapshot_dir = self.test_path.parent / "__snapshots__"
-        self.snapshot_path = self.snapshot_dir / f"{self.full_test_name}.txt"
-
+        # Assume the path does not contain any "::"
+        self.nodeid = nodeid
+        _, test_name = self.nodeid.split("::", maxsplit=1)
+        snapshot_dir = test_path.parent / "__snapshots__"
+        self.snapshot_path = (
+            snapshot_dir / f"{test_path.name}::{test_name}.txt"
+        )
         self._generating = generating
         self._data: np.ndarray | None = None
 
@@ -69,9 +70,7 @@ class NDArraySnapshot:
             return data
 
         if self._data is None:
-            self._data = _load_numpy_data(
-                self.snapshot_path, self.full_test_name
-            )
+            self._data = _load_numpy_data(self.snapshot_path, self.nodeid)
 
         return self._data
 
@@ -80,14 +79,14 @@ class NDArraySnapshot:
 
         data = np.atleast_1d(data)
         self._data = data
-        self.snapshot_dir.mkdir(exist_ok=True, parents=False)
+        self.snapshot_path.parent.mkdir(exist_ok=True, parents=False)
         np.savetxt(self.snapshot_path, data)
 
 
 @pytest.fixture
 def ndarray_snapshot(request: pytest.FixtureRequest) -> NDArraySnapshot:
     return NDArraySnapshot(
-        test_name=request.node.name,
+        nodeid=request.node.nodeid,
         test_path=request.path,
         generating=request.config.getoption("--snapshot-generate"),
     )
