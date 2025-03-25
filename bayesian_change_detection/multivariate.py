@@ -304,27 +304,32 @@ class NigParams:
         assert new_prec.shape == (t, p, p)
 
         # (t, p, p) @ (1, p, n) -> (t, p, n)
-        vx = cov0 @ matrix_transpose(x)
-        assert vx.shape == (t, p, n)
+        if p >= n:
+            # If p >= n, we can use the Woodbury matrix identity to avoid
+            # inverting the larger (p, p) matrix. See Eq. 30, second equality.
 
-        # (1, n, p) @ (t, p, n) -> (t, n, n)
-        xvx = x @ vx
-        assert xvx.shape == (t, n, n)
+            vx = cov0 @ matrix_transpose(x)
+            assert vx.shape == (t, p, n)
 
-        # Eq. 30, second equality
-        if n == 1:
-            # (t, p, n) @ (t, n, p) -> (t, p, p)
-            vxxv = vx @ matrix_transpose(vx)
-            assert vxxv.shape == (t, p, p)
+            # (1, n, p) @ (t, p, n) -> (t, n, n)
+            xvx = x @ vx
+            assert xvx.shape == (t, n, n)
 
-            # (t, p, p) - (t, p, p) / (t, 1, 1) -> (t, p, p)
-            new_cov = cov0 - vxxv / (xvx + 1)
+            if n == 1:
+                # (t, p, n) @ (t, n, p) -> (t, p, p)
+                vxxv = vx @ matrix_transpose(vx)
+                assert vxxv.shape == (t, p, p)
+
+                # (t, p, p) - (t, p, p) / (t, 1, 1) -> (t, p, p)
+                new_cov = cov0 - vxxv / (xvx + 1)
+            else:
+                xvx_p1_inv = np.linalg.inv(xvx + np.eye(n))
+
+                # (t, p, p) - (t, p, n) @ (t, n, n) @ (t, n, p) -> (t, p, p)
+                new_cov = cov0 - vx @ xvx_p1_inv @ matrix_transpose(vx)
         else:
-            # TODO: use more efficient matrix inversion code from below?
-            xvx_p1_inv = np.linalg.inv(xvx + np.eye(n))
-
-            # (t, p, p) - (t, p, n) @ (t, n, n) @ (t, n, p) -> (t, p, p)
-            new_cov = cov0 - vx @ xvx_p1_inv @ matrix_transpose(vx)
+            # Just invert the (p, p) matrix. See Eq. 30, first equality.
+            new_cov = np.linalg.inv(new_prec)
 
         assert new_cov.shape == (t, p, p)
 
