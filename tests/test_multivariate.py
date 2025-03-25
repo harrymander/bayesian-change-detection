@@ -75,6 +75,10 @@ class BocdTester(ABC):
         changepoints = self.results.changepoints()
         assert changepoints == json_snapshot(changepoints)
 
+    def test_changepoints_are_in_ascending_order(self) -> None:
+        changepoints = self.results.changepoints()
+        assert changepoints == sorted(changepoints)
+
 
 class Test1DChangeDetection(BocdTester):
     @classmethod
