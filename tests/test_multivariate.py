@@ -8,6 +8,7 @@ from bayesian_change_detection import (
     MultivariateBcdmResults,
     multivariate_bcdm,
 )
+from bayesian_change_detection.multivariate import NigParams
 from tests.conftest import JsonSnapshot, NDArraySnapshot
 
 RandomData = tuple[np.ndarray, np.ndarray]
@@ -34,6 +35,53 @@ def generate_random_data(
 @pytest.fixture
 def random_data() -> tuple[np.ndarray, np.ndarray]:
     return generate_random_data(42, 500, 2, 1.5)
+
+
+def new_params(t: int, p: int = 2) -> NigParams:
+    """
+    Generate new params for t NIG distributions of dimension p.
+    """
+    cov = np.stack([np.eye(p) * i for i in np.linspace(1, 4, t)])
+    assert cov.shape == (t, p, p)
+    return NigParams(
+        mean=np.linspace(0, 5, t).repeat(p).reshape(-1, p),
+        cov=cov,
+        prec=np.linalg.inv(cov),
+        shape=np.linspace(2, 5, t),
+        scale=np.linspace(2, 5, t),
+    )
+
+
+class TestNigParams:
+    iteratively_updated_params: NigParams
+    batch_updated_params: NigParams
+
+    @pytest.fixture(scope="class", autouse=True)
+    @classmethod
+    def _update_params(cls) -> None:
+        t = 5  # number of distributions
+        x, y = generate_random_data(42, 500, 2, 1.5)
+
+        cls.iteratively_updated_params = new_params(t)
+        for xt, yt in zip(x, y, strict=True):
+            cls.iteratively_updated_params.update(
+                xt.reshape(1, -1),
+                np.atleast_1d(yt),
+            )
+
+        cls.batch_updated_params = new_params(t)
+        cls.batch_updated_params.update(x, y)
+
+    @pytest.mark.parametrize(
+        "attrname", ("mean", "cov", "prec", "shape", "scale")
+    )
+    def test_batch_and_iteratively_updated_params_are_equivalent(
+        self, attrname: str
+    ) -> None:
+        assert_allclose(
+            getattr(self.batch_updated_params, attrname),
+            getattr(self.iteratively_updated_params, attrname),
+        )
 
 
 class BocdTester(ABC):
