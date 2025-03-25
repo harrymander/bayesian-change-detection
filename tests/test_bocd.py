@@ -60,6 +60,7 @@ class BocdTester(ABC):
         ndarray_snapshot: NDArraySnapshot,
     ):
         parameters = getattr(self.results, attrname)
+        assert parameters.ndim <= 3
         if parameters.ndim == 3:
             b, m, n = parameters.shape
             parameters_2d = parameters.reshape(-1, m * n)

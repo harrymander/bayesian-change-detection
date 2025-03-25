@@ -879,24 +879,18 @@ class _MultivariateBcdmWorker:
         self.prior_shape = prior_shape
         self.prior_scale = prior_scale
 
-        n, p = self.n, self.p
-        self.mean = np.empty((n, p))
-        self.cov = np.empty((n, p, p))
-        self.prec = np.empty((n, p, p))
-        self.shape = np.empty(n)
-        self.scale = np.empty(n)
+        self.params = _NigParams.empty(self.n, self.p)
         self.log_joint = np.array([0.0])
         self.log_posteriors: list[np.ndarray] = []
-
         self.log_hazard = np.log(hazard)
         self.log_1mhazard = np.log1p(-hazard)
 
     def _add_new_hypothesis(self, t: int) -> None:
-        self.mean[t] = self.prior_mean
-        self.cov[t] = self.prior_cov
-        self.shape[t] = self.prior_shape
-        self.scale[t] = self.prior_scale
-        self.prec[t] = self.prior_prec
+        self.params.mean[t] = self.prior_mean
+        self.params.cov[t] = self.prior_cov
+        self.params.shape[t] = self.prior_shape
+        self.params.scale[t] = self.prior_scale
+        self.params.prec[t] = self.prior_prec
 
     def fit(self) -> MultivariateBcdmResults:
         for t, (x, y) in enumerate(zip(self.x, self.y, strict=True)):
@@ -913,24 +907,16 @@ class _MultivariateBcdmWorker:
             atol=1e-10,
         )
         return MultivariateBcdmResults(
-            mean=self.mean,
-            cov=self.cov,
-            shape=self.shape,
-            scale=self.scale,
+            mean=self.params.mean,
+            cov=self.params.cov,
+            shape=self.params.shape,
+            scale=self.params.scale,
             log_posterior=log_posterior,
         )
 
     def _step(self, t: int, x: np.ndarray, y: float) -> None:
-        mask = slice(0, t + 1)
         self._add_new_hypothesis(t)
-        log_predictive_probs = _multivariate_t_log_pdf(
-            x,
-            y,
-            nig_mean=self.mean[mask],
-            nig_cov=self.cov[mask],
-            nig_shape=self.shape[mask],
-            nig_scale=self.scale[mask],
-        )
+        log_predictive_probs = _mvt_logpdf(self.params[: t + 1], x, y)
         assert log_predictive_probs.shape == (t + 1,)
 
         # Compute the (t + 1) changepoint probabilities
@@ -948,130 +934,158 @@ class _MultivariateBcdmWorker:
         log_posterior = log_joint - scipy.special.logsumexp(log_joint)
         self.log_posteriors.append(log_posterior)
         self.log_joint = log_joint
+        _update_sufficient_stats(self.params[: t + 1], x, y)
 
-        self._update_sufficient_stats(t, x, y)
 
-    def _update_sufficient_stats(
-        self,
-        t: int,
-        x: np.ndarray,
-        y: float,
-    ) -> None:
-        mask = slice(0, t + 1)
-        p = self.p
+@dataclass
+class _NigParams:
+    """
+    Parameters of n independent normal-inverse-gamma distributions.
+    """
 
-        cov0 = self.cov[mask]  # (t + 1, p, p)
-        prec0 = self.prec[mask]  # (t + 1, p, p)
-        mean0 = np.expand_dims(self.mean[mask], -1)  # (t + 1, p, 1)
+    mean: np.ndarray
+    """
+    (n, p) array of means.
+    """
 
-        x = x.reshape(1, -1, 1)  # (1, p, 1)
+    cov: np.ndarray
+    """
+    (n, p, p) array of covariances.
+    """
 
-        # (1, p, 1) @ (1, 1, p) -> (1, p, p)
-        xx = x @ np.matrix_transpose(x)
-        assert xx.shape == (1, p, p)
+    prec: np.ndarray
+    """
+    (n, p, p) array of precisions.
+    """
 
-        # (t + 1, p, p) + (1, p, p)
-        new_prec = prec0 + xx
-        assert new_prec.shape == (t + 1, p, p)
+    shape: np.ndarray
+    """
+    (n,) array of shape parameters.
+    """
 
-        # (t + 1, p, p) @ (1, p, 1) -> (t + 1, p, 1)
-        vx = cov0 @ x
-        assert vx.shape == (t + 1, p, 1)
+    scale: np.ndarray
+    """
+    (n,) array of scale parameters.
+    """
 
-        # (1, 1, p) @ (t + 1, p, 1) -> (t + 1, 1, 1)
-        xvx = np.matrix_transpose(x) @ vx
-        assert xvx.shape == (t + 1, 1, 1)
-
-        # (t + 1, p, 1) @ (t + 1, 1, p) -> (t + 1, p, p)
-        vx_squared = vx @ np.matrix_transpose(vx)
-        assert vx_squared.shape == (t + 1, p, p)
-
-        new_cov = cov0 - vx_squared / (xvx + 1)
-        assert new_cov.shape == (t + 1, p, p)
-
-        # (1, p, 1) * scalar -> (1, p, 1)
-        xy = x * y
-        assert xy.shape == (1, p, 1)
-
-        # (t + 1, p, p) @ ((t + 1, p, p) @ (t + 1, p, 1) + (1, p, 1))
-        # -> (t + 1, p, p) @ (t + 1, p, 1)
-        # -> (t + 1, p, 1)
-        new_mean = new_cov @ (prec0 @ mean0 + xy)
-        assert new_mean.shape == (t + 1, p, 1)
-
-        # (t + 1, 1, p) @ (t + 1, p, p) @ (t + 1, p, 1) -> (t + 1, 1, 1)
-        mean_prec_mean0 = np.matrix_transpose(mean0) @ prec0 @ mean0
-        assert mean_prec_mean0.shape == (t + 1, 1, 1)
-
-        # as above
-        mean_prec_mean_new = (
-            np.matrix_transpose(new_mean) @ new_prec @ new_mean
+    @classmethod
+    def empty(cls, n: int, p: int) -> "_NigParams":
+        return cls(
+            mean=np.empty((n, p)),
+            cov=np.empty((n, p, p)),
+            prec=np.empty((n, p, p)),
+            shape=np.empty(n),
+            scale=np.empty(n),
         )
-        assert mean_prec_mean_new.shape == (t + 1, 1, 1)
 
-        new_scale = 0.5 * (
-            mean_prec_mean0.ravel() + y * y - mean_prec_mean_new.ravel()
+    def __getitem__(self, i) -> "_NigParams":
+        return _NigParams(
+            mean=self.mean[i],
+            cov=self.cov[i],
+            prec=self.prec[i],
+            shape=self.shape[i],
+            scale=self.scale[i],
         )
-        assert new_scale.shape == (t + 1,)
-
-        self.mean[mask] = new_mean.squeeze(-1)
-        self.cov[mask] = new_cov
-        self.prec[mask] = new_prec
-        self.shape[mask] += 0.5
-        self.scale[mask] += new_scale
-        assert np.all(self.scale[mask] >= 0), "got negative scale"
 
 
-def _multivariate_t_log_pdf(
-    x: np.ndarray,
-    y: float,
-    *,
-    nig_mean: np.ndarray,
-    nig_cov: np.ndarray,
-    nig_shape: np.ndarray,
-    nig_scale: np.ndarray,
-) -> np.ndarray:
+def _update_sufficient_stats(nig: _NigParams, x: np.ndarray, y: float) -> None:
+    t, p = nig.mean.shape
+
+    cov0 = nig.cov  # (t, p, p)
+    prec0 = nig.prec  # (t, p, p)
+    mean0 = np.expand_dims(nig.mean, -1)  # (t, p, 1)
+
+    x = x.reshape(1, -1, 1)  # (1, p, 1)
+
+    # (1, p, 1) @ (1, 1, p) -> (1, p, p)
+    xx = x @ np.matrix_transpose(x)
+    assert xx.shape == (1, p, p)
+
+    # (t, p, p) + (1, p, p)
+    new_prec = prec0 + xx
+    assert new_prec.shape == (t, p, p)
+
+    # (t, p, p) @ (1, p, 1) -> (t, p, 1)
+    vx = cov0 @ x
+    assert vx.shape == (t, p, 1)
+
+    # (1, 1, p) @ (t, p, 1) -> (t, 1, 1)
+    xvx = np.matrix_transpose(x) @ vx
+    assert xvx.shape == (t, 1, 1)
+
+    # (t, p, 1) @ (t, 1, p) -> (t, p, p)
+    vx_squared = vx @ np.matrix_transpose(vx)
+    assert vx_squared.shape == (t, p, p)
+
+    new_cov = cov0 - vx_squared / (xvx + 1)
+    assert new_cov.shape == (t, p, p)
+
+    # (1, p, 1) * scalar -> (1, p, 1)
+    xy = x * y
+    assert xy.shape == (1, p, 1)
+
+    # (t, p, p) @ ((t, p, p) @ (t, p, 1) + (1, p, 1))
+    # -> (t, p, p) @ (t, p, 1)
+    # -> (t, p, 1)
+    new_mean = new_cov @ (prec0 @ mean0 + xy)
+    assert new_mean.shape == (t, p, 1)
+
+    # (t, 1, p) @ (t, p, p) @ (t, p, 1) -> (t, 1, 1)
+    mean_prec_mean0 = np.matrix_transpose(mean0) @ prec0 @ mean0
+    assert mean_prec_mean0.shape == (t, 1, 1)
+
+    # as above
+    mean_prec_mean_new = np.matrix_transpose(new_mean) @ new_prec @ new_mean
+    assert mean_prec_mean_new.shape == (t, 1, 1)
+
+    new_scale = 0.5 * (
+        mean_prec_mean0.ravel() + y * y - mean_prec_mean_new.ravel()
+    )
+    assert new_scale.shape == (t,)
+
+    nig.mean[:] = new_mean.squeeze(-1)
+    nig.cov[:] = new_cov
+    nig.prec[:] = new_prec
+    nig.shape += 0.5
+    nig.scale += new_scale
+    assert np.all(nig.scale >= 0), "got negative scale"
+
+
+def _mvt_logpdf(prior: _NigParams, x: np.ndarray, y: float) -> np.ndarray:
     """
     Calculate the log PDFs of the predictive distributions of n multiple
     independent Bayesian linear regression models with normal inverse gamma
     prior.
 
     Args:
+        prior: n prior parameters of p-dimensional NIG prior distributions.
         x: (p,) array of predictor variables.
         y: response variable.
-        nig_mean: (n, p) array of means.
-        nig_cov: (n, p, p) array of covariances.
-        nig_shape: (n,) array of shape parameters.
-        nig_shape: (n,) array of shape parameters.
 
     Returns:
         (n,) array of log predictive probabilities.
     """
+
     assert x.ndim == 1
-    p = len(x)
     assert np.isscalar(y)
-    n = len(nig_mean)
-    assert nig_mean.shape == (n, p)
-    assert nig_cov.shape == (n, p, p)
-    assert nig_shape.shape == (n,)
-    assert nig_scale.shape == (n,)
+    n = len(prior.mean)
 
     x = x.reshape(1, -1, 1)  # (1, p, 1)
 
     # (1, 1, p) @ (n, p, p) @ (1, p, 1) -> (n, 1, 1)
-    xvx = np.matrix_transpose(x) @ nig_cov @ x + 1
+    xvx = np.matrix_transpose(x) @ prior.cov @ x + 1
     assert xvx.shape == (n, 1, 1)
-    shape = nig_scale / nig_shape * xvx.ravel()  # (n,)
+    shape = prior.scale / prior.shape * xvx.ravel()  # (n,)
 
     # (1, 1, p) @ (n, p, 1) -> (n, 1, 1)
-    loc = np.matrix_transpose(x) @ np.expand_dims(nig_mean, -1)
+    loc = np.matrix_transpose(x) @ np.expand_dims(prior.mean, -1)
     assert loc.shape == (n, 1, 1)
 
     # Quadratic term in PDF
     dev_squared = np.square(y - loc.ravel())
     assert dev_squared.shape == (n,)
 
-    a = nig_shape  # 0.5 * degrees of freedom
+    a = prior.shape  # 0.5 * degrees of freedom
     a_plus_half = a + 0.5
     logpdf = (
         scipy.special.gammaln(a_plus_half)

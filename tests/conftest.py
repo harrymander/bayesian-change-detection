@@ -78,6 +78,9 @@ class NDArraySnapshot:
         import numpy as np
 
         data = np.atleast_1d(data)
+        if data.ndim > 2:
+            raise SnapshotError("Only 1D and 2D arrays are supported.")
+
         self._data = data
         self.snapshot_path.parent.mkdir(exist_ok=True, parents=False)
         np.savetxt(self.snapshot_path, data)
