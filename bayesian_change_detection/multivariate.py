@@ -162,7 +162,7 @@ class _MultivariateBcdmWorker:
         self.prior_shape = prior_shape
         self.prior_scale = prior_scale
 
-        self.params = _NigParams.empty(self.n, self.p)
+        self.params = NigParams.empty(self.n, self.p)
         self.log_joint = np.array([0.0])
         self.log_posteriors: list[np.ndarray] = []
         self.log_hazard = np.log(hazard)
@@ -217,52 +217,53 @@ class _MultivariateBcdmWorker:
         log_posterior = log_joint - scipy.special.logsumexp(log_joint)
         self.log_posteriors.append(log_posterior)
         self.log_joint = log_joint
-        self.params[: t + 1].update(x, y)
+        self.params[: t + 1].update(x.reshape(1, -1), np.asarray((y,)))
 
 
 @dataclass
-class _NigParams:
+class NigParams:
     """
-    Parameters of n independent normal-inverse-gamma distributions.
+    Parameters of t independent p-dimensional normal-inverse-gamma
+    distributions.
     """
 
     mean: np.ndarray
     """
-    (n, p) array of means.
+    (t, p) array of means.
     """
 
     cov: np.ndarray
     """
-    (n, p, p) array of covariances.
+    (t, p, p) array of covariances.
     """
 
     prec: np.ndarray
     """
-    (n, p, p) array of precisions.
+    (t, p, p) array of precisions.
     """
 
     shape: np.ndarray
     """
-    (n,) array of shape parameters.
+    (t,) array of shape parameters.
     """
 
     scale: np.ndarray
     """
-    (n,) array of scale parameters.
+    (t,) array of scale parameters.
     """
 
     @classmethod
-    def empty(cls, n: int, p: int) -> "_NigParams":
+    def empty(cls, t: int, p: int) -> "NigParams":
         return cls(
-            mean=np.empty((n, p)),
-            cov=np.empty((n, p, p)),
-            prec=np.empty((n, p, p)),
-            shape=np.empty(n),
-            scale=np.empty(n),
+            mean=np.empty((t, p)),
+            cov=np.empty((t, p, p)),
+            prec=np.empty((t, p, p)),
+            shape=np.empty(t),
+            scale=np.empty(t),
         )
 
-    def __getitem__(self, i) -> "_NigParams":
-        return _NigParams(
+    def __getitem__(self, i) -> "NigParams":
+        return NigParams(
             mean=self.mean[i],
             cov=self.cov[i],
             prec=self.prec[i],
@@ -270,17 +271,31 @@ class _NigParams:
             scale=self.scale[i],
         )
 
-    def update(self, x: np.ndarray, y: float) -> None:
-        """Update sufficient statistics given a new observation (x, y)"""
+    def update(self, x: np.ndarray, y: np.ndarray) -> None:
+        """
+        Update sufficient statistics given n new observations (x, y).
+
+        Args:
+            x: (n, p) array of independent (predictor) variables.
+            y: (n,) array of dependent (response) variables.
+        """
+        if x.ndim != 2:
+            raise ValueError("x must be 2-D")
+        n, xp = x.shape
+        _check_array_shape("y", y, (n,))
         t, p = self.mean.shape
+        if xp != p:
+            raise ValueError(f"expected {p}-dimensional predictors, got {xp}")
+
         cov0 = self.cov  # (t, p, p)
         prec0 = self.prec  # (t, p, p)
         mean0 = np.expand_dims(self.mean, -1)  # (t, p, 1)
 
-        x = x.reshape(1, -1, 1)  # (1, p, 1)
+        # Add dimension for broadcasting
+        x = np.expand_dims(x, 0)  # (1, n, p)
 
-        # (1, p, 1) @ (1, 1, p) -> (1, p, p)
-        xx = x @ matrix_transpose(x)
+        # (1, p, n) @ (1, n, p) -> (1, p, p)
+        xx = matrix_transpose(x) @ x
         assert xx.shape == (1, p, p)
 
         # Eq. 30, first equality
@@ -288,24 +303,33 @@ class _NigParams:
         new_prec = prec0 + xx
         assert new_prec.shape == (t, p, p)
 
-        # (t, p, p) @ (1, p, 1) -> (t, p, 1)
-        vx = cov0 @ x
-        assert vx.shape == (t, p, 1)
+        # (t, p, p) @ (1, p, n) -> (t, p, n)
+        vx = cov0 @ matrix_transpose(x)
+        assert vx.shape == (t, p, n)
 
-        # (1, 1, p) @ (t, p, 1) -> (t, 1, 1)
-        xvx = matrix_transpose(x) @ vx
-        assert xvx.shape == (t, 1, 1)
-
-        # (t, p, 1) @ (t, 1, p) -> (t, p, p)
-        vx_squared = vx @ matrix_transpose(vx)
-        assert vx_squared.shape == (t, p, p)
+        # (1, n, p) @ (t, p, n) -> (t, n, n)
+        xvx = x @ vx
+        assert xvx.shape == (t, n, n)
 
         # Eq. 30, second equality
-        new_cov = cov0 - vx_squared / (xvx + 1)
+        if n == 1:
+            # (t, p, n) @ (t, n, p) -> (t, p, p)
+            vxxv = vx @ matrix_transpose(vx)
+            assert vxxv.shape == (t, p, p)
+
+            # (t, p, p) - (t, p, p) / (t, 1, 1) -> (t, p, p)
+            new_cov = cov0 - vxxv / (xvx + 1)
+        else:
+            # TODO: use more efficient matrix inversion code from below?
+            xvx_p1_inv = np.linalg.inv(xvx + np.eye(n))
+
+            # (t, p, p) - (t, p, n) @ (t, n, n) @ (t, n, p) -> (t, p, p)
+            new_cov = cov0 - vx @ xvx_p1_inv @ matrix_transpose(vx)
+
         assert new_cov.shape == (t, p, p)
 
-        # (1, p, 1) * scalar -> (1, p, 1)
-        xy = x * y
+        # (1, p, n) * (1, n, 1) -> (1, p, 1)
+        xy = matrix_transpose(x) @ y.reshape(1, -1, 1)
         assert xy.shape == (1, p, 1)
 
         # Eq. 31
@@ -325,14 +349,14 @@ class _NigParams:
 
         # Eq. 33
         new_scale = (
-            mean_prec_mean0.ravel() + y * y - mean_prec_mean_new.ravel()
+            mean_prec_mean0.ravel() + np.dot(y, y) - mean_prec_mean_new.ravel()
         ) / 2
         assert new_scale.shape == (t,)
 
         self.mean[:] = new_mean.squeeze(-1)
         self.cov[:] = new_cov
         self.prec[:] = new_prec
-        self.shape += 0.5  # Eq. 32
+        self.shape += n / 2  # Eq. 32
         self.scale += new_scale
         assert np.all(self.scale >= 0), "got negative scale"
 
