@@ -130,15 +130,12 @@ class MultivariateBcdmResults:
     def changepoints(self) -> list[int]:
         """Compute indices of changepoints in ascending order. Returned list
         does not include first and last indices, which may be changepoints."""
-        n = len(self.log_posterior)
         changepoints: list[int] = []
         run_length = self.log_posterior[:, -1].argmax()
-        for i in range(n - 1, -1, -1):
-            if run_length:
-                run_length -= 1
-            else:
-                changepoints.append(i)
-                run_length = self.log_posterior[: i + 1, i].argmax()
+        i = len(self.log_posterior) - 1 - run_length
+        while i > 0:
+            changepoints.append(i.item())
+            i -= 1 + self.log_posterior[: i + 1, i].argmax()
 
         changepoints.reverse()
         return changepoints
