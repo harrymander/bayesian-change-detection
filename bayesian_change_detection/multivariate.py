@@ -12,7 +12,7 @@ try:
     from numpy import matrix_transpose  # type: ignore
 except ImportError:
 
-    def matrix_transpose(a: np.ndarray) -> np.ndarray:
+    def matrix_transpose(a: np.ndarray) -> np.ndarray:  # type: ignore
         return np.swapaxes(a, -1, -2)
 
 
