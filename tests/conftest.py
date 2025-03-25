@@ -57,7 +57,7 @@ class NDArraySnapshot:
         # Assume the path does not contain any "::"
         self.nodeid = nodeid
         _, test_name = self.nodeid.split("::", maxsplit=1)
-        snapshot_dir = test_path.parent / "__snapshots__"
+        snapshot_dir = test_path.parent / "snapshots"
         self.snapshot_path = (
             snapshot_dir / f"{test_path.name}::{test_name}.txt"
         )
