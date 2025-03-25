@@ -68,7 +68,7 @@ def triangular(rng: np.random.Generator):
     posterior, im = plot_posterior_probabilities(
         axes[1], res.log_posterior, xlim=X[[0, -1]]
     )
-    axes[1].plot(X, posterior.argmax(axis=0), color="red")
+    axes[1].plot(X, posterior.argmax(axis=0), color="green")
     changepoints = res.changepoints()
     for ax in axes:
         for cp in true_changepoints:
@@ -129,7 +129,7 @@ def random_piecewise(rng: np.random.Generator):
         res.log_posterior,
         trim_zero=False,
     )
-    axes[1].plot(posterior.argmax(axis=0))
+    axes[1].plot(posterior.argmax(axis=0), color="green")
     plt.tight_layout()
     plt.colorbar(im, ax=axes)
 
