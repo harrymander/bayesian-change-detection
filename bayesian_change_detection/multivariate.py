@@ -249,8 +249,8 @@ class _NigParams:
         )
 
     def update(self, x: np.ndarray, y: float) -> None:
+        """Update sufficient statistics given a new observation (x, y)"""
         t, p = self.mean.shape
-
         cov0 = self.cov  # (t, p, p)
         prec0 = self.prec  # (t, p, p)
         mean0 = np.expand_dims(self.mean, -1)  # (t, p, 1)
@@ -261,6 +261,7 @@ class _NigParams:
         xx = x @ np.matrix_transpose(x)
         assert xx.shape == (1, p, p)
 
+        # Eq. 30, first equality
         # (t, p, p) + (1, p, p)
         new_prec = prec0 + xx
         assert new_prec.shape == (t, p, p)
@@ -277,6 +278,7 @@ class _NigParams:
         vx_squared = vx @ np.matrix_transpose(vx)
         assert vx_squared.shape == (t, p, p)
 
+        # Eq. 30, second equality
         new_cov = cov0 - vx_squared / (xvx + 1)
         assert new_cov.shape == (t, p, p)
 
@@ -284,6 +286,7 @@ class _NigParams:
         xy = x * y
         assert xy.shape == (1, p, 1)
 
+        # Eq. 31
         # (t, p, p) @ ((t, p, p) @ (t, p, 1) + (1, p, 1))
         # -> (t, p, p) @ (t, p, 1)
         # -> (t, p, 1)
@@ -300,15 +303,16 @@ class _NigParams:
         )
         assert mean_prec_mean_new.shape == (t, 1, 1)
 
-        new_scale = 0.5 * (
+        # Eq. 33
+        new_scale = (
             mean_prec_mean0.ravel() + y * y - mean_prec_mean_new.ravel()
-        )
+        ) / 2
         assert new_scale.shape == (t,)
 
         self.mean[:] = new_mean.squeeze(-1)
         self.cov[:] = new_cov
         self.prec[:] = new_prec
-        self.shape += 0.5
+        self.shape += 0.5  # Eq. 32
         self.scale += new_scale
         assert np.all(self.scale >= 0), "got negative scale"
 
@@ -316,7 +320,7 @@ class _NigParams:
         """
         Calculate the log PDFs of the predictive distributions of n multiple
         independent Bayesian linear regression models using self as the NIG
-        priors.
+        priors. (Logarithm of Eq. 27.)
 
         Args:
             x: (p,) array of predictor variables.
@@ -332,10 +336,12 @@ class _NigParams:
 
         x = x.reshape(1, -1, 1)  # (1, p, 1)
 
+        # Σ from Eq. 27
         # (1, 1, p) @ (n, p, p) @ (1, p, 1) -> (n, 1, 1)
-        xvx = np.matrix_transpose(x) @ self.cov @ x + 1
+        xvx = np.matrix_transpose(x) @ self.cov @ x
         assert xvx.shape == (n, 1, 1)
-        shape = self.scale / self.shape * xvx.ravel()  # (n,)
+        sigma = self.scale * (xvx.ravel() + 1)
+        assert sigma.shape == (n,)
 
         # (1, 1, p) @ (n, p, 1) -> (n, 1, 1)
         loc = np.matrix_transpose(x) @ np.expand_dims(self.mean, -1)
@@ -350,8 +356,8 @@ class _NigParams:
         logpdf = (
             scipy.special.gammaln(a_plus_half)
             - scipy.special.gammaln(a)
-            - 0.5 * (_LOG_2PI + np.log(a) + np.log(shape))
-            - a_plus_half * np.log(1 + dev_squared / shape / a / 2)
+            - (_LOG_2PI + np.log(sigma)) / 2
+            - a_plus_half * np.log(1 + dev_squared / sigma / 2)
         )
         assert logpdf.shape == (n,)
         return logpdf
