@@ -8,7 +8,7 @@ from bayesian_change_detection import (
     MultivariateBcdmResults,
     multivariate_bcdm,
 )
-from tests.conftest import NDArraySnapshot
+from tests.conftest import JsonSnapshot, NDArraySnapshot
 
 RandomData = tuple[np.ndarray, np.ndarray]
 
@@ -70,6 +70,10 @@ class BocdTester(ABC):
             snapshot = ndarray_snapshot(parameters).reshape(*parameters.shape)
 
         assert_allclose(parameters, snapshot)
+
+    def test_changepoints_snapshot(self, json_snapshot: JsonSnapshot):
+        changepoints = self.results.changepoints()
+        assert changepoints == json_snapshot(changepoints)
 
 
 class Test1DChangeDetection(BocdTester):

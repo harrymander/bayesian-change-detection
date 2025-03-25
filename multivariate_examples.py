@@ -52,7 +52,7 @@ def triangular(rng: np.random.Generator):
     X = np.linspace(0, 3 * 2 * np.pi, samples)
     noise = 0.1 * rng.standard_normal(samples)
     Y = -np.arcsin(np.sin(X)) * 2 / np.pi + noise
-    true_boundaries = np.pi * np.arange(0, 6) + np.pi / 2
+    true_changepoints = np.pi * np.arange(0, 6) + np.pi / 2
 
     res = multivariate_bcdm(
         np.c_[np.ones_like(X), X],
@@ -69,11 +69,14 @@ def triangular(rng: np.random.Generator):
         axes[1], res.log_posterior, xlim=X[[0, -1]]
     )
     axes[1].plot(X, posterior.argmax(axis=0), color="red")
+    changepoints = res.changepoints()
+    for ax in axes:
+        for cp in true_changepoints:
+            ax.axvline(cp, color="red", linestyle="--")
+        for idx in changepoints:
+            ax.axvline(X[idx], color="green", linestyle="--")
     for ax in axes[1:]:
         ax.set_ylabel("Run length")
-    for ax in axes:
-        for boundary in true_boundaries:
-            ax.axvline(boundary, color="red", linestyle="--")
 
     plt.tight_layout()
     plt.colorbar(im, ax=axes)
@@ -101,7 +104,7 @@ def random_piecewise(rng: np.random.Generator):
     var0 = 2  # The prior variance for mean parameter.
     varx = 1  # The known variance of the data.
 
-    data, cps = generate_random_piecewise_data(
+    data, true_changepoints = generate_random_piecewise_data(
         rng, varx, mean0, var0, T, hazard
     )
     y = np.asarray(data)
@@ -114,9 +117,12 @@ def random_piecewise(rng: np.random.Generator):
 
     axes = plt.subplots(2, 1, sharex=True, figsize=FIGSIZE)[1]
     axes[0].plot(data, "-o")
-    for cp in cps:
-        for ax in axes:
+    change_points = res.changepoints()
+    for ax in axes:
+        for cp in true_changepoints:
             ax.axvline(cp, color="red", linestyle="--")
+        for cp in change_points:
+            ax.axvline(cp, color="green", linestyle="--")
 
     posterior, im = plot_posterior_probabilities(
         axes[1],
