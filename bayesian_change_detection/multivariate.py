@@ -417,9 +417,14 @@ def _cholesky_inv(a: np.ndarray) -> np.ndarray:
     if info != 0:
         raise ValueError("matrix is not positive-definite")
 
+    # dpotri only returns the upper triangular part of the inverse
     uinv, info = lapack.dpotri(u)
     if info != 0:
         raise ValueError("matrix is singular")
 
-    uinv += np.triu(uinv, 1).T
+    # Not sure if lapack sets the lower diagonal to zero or if it leaves it
+    # unset: explicitly set the lower diagonal indices, which is slightly
+    # slower than `uinv += np.triu(uinv, 1).T`.
+    idx = np.tril_indices_from(uinv, -1)
+    uinv[idx] = uinv.T[idx]
     return uinv
