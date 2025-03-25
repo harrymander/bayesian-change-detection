@@ -7,6 +7,15 @@ import scipy
 from numpy.testing import assert_allclose
 from scipy.linalg import lapack
 
+try:
+    # matrix_transpose is added in numpy v2
+    from numpy import matrix_transpose  # type: ignore
+except ImportError:
+
+    def matrix_transpose(a: np.ndarray) -> np.ndarray:
+        return np.swapaxes(a, -1, -2)
+
+
 _LOG_2PI = np.log(2 * np.pi)
 
 
@@ -159,7 +168,7 @@ class _MultivariateBcdmWorker:
 
         n = len(self.log_posteriors)
         log_posterior: np.ndarray = np.empty((n, n))
-        log_posterior[np.tril_indices(n)] = np.concat(self.log_posteriors)
+        log_posterior[np.tril_indices(n)] = np.concatenate(self.log_posteriors)
         log_posterior[np.triu_indices(n, 1)] = -np.inf
         log_posterior = log_posterior.T
         assert_allclose(
@@ -258,7 +267,7 @@ class _NigParams:
         x = x.reshape(1, -1, 1)  # (1, p, 1)
 
         # (1, p, 1) @ (1, 1, p) -> (1, p, p)
-        xx = x @ np.matrix_transpose(x)
+        xx = x @ matrix_transpose(x)
         assert xx.shape == (1, p, p)
 
         # Eq. 30, first equality
@@ -271,11 +280,11 @@ class _NigParams:
         assert vx.shape == (t, p, 1)
 
         # (1, 1, p) @ (t, p, 1) -> (t, 1, 1)
-        xvx = np.matrix_transpose(x) @ vx
+        xvx = matrix_transpose(x) @ vx
         assert xvx.shape == (t, 1, 1)
 
         # (t, p, 1) @ (t, 1, p) -> (t, p, p)
-        vx_squared = vx @ np.matrix_transpose(vx)
+        vx_squared = vx @ matrix_transpose(vx)
         assert vx_squared.shape == (t, p, p)
 
         # Eq. 30, second equality
@@ -294,13 +303,11 @@ class _NigParams:
         assert new_mean.shape == (t, p, 1)
 
         # (t, 1, p) @ (t, p, p) @ (t, p, 1) -> (t, 1, 1)
-        mean_prec_mean0 = np.matrix_transpose(mean0) @ prec0 @ mean0
+        mean_prec_mean0 = matrix_transpose(mean0) @ prec0 @ mean0
         assert mean_prec_mean0.shape == (t, 1, 1)
 
         # as above
-        mean_prec_mean_new = (
-            np.matrix_transpose(new_mean) @ new_prec @ new_mean
-        )
+        mean_prec_mean_new = matrix_transpose(new_mean) @ new_prec @ new_mean
         assert mean_prec_mean_new.shape == (t, 1, 1)
 
         # Eq. 33
@@ -338,13 +345,13 @@ class _NigParams:
 
         # Σ from Eq. 27
         # (1, 1, p) @ (n, p, p) @ (1, p, 1) -> (n, 1, 1)
-        xvx = np.matrix_transpose(x) @ self.cov @ x
+        xvx = matrix_transpose(x) @ self.cov @ x
         assert xvx.shape == (n, 1, 1)
         sigma = self.scale * (xvx.ravel() + 1)
         assert sigma.shape == (n,)
 
         # (1, 1, p) @ (n, p, 1) -> (n, 1, 1)
-        loc = np.matrix_transpose(x) @ np.expand_dims(self.mean, -1)
+        loc = matrix_transpose(x) @ np.expand_dims(self.mean, -1)
         assert loc.shape == (n, 1, 1)
 
         # Quadratic term in PDF
