@@ -107,9 +107,11 @@ class TestNigParams:
     def _mvt_logpdf_iterative(
         cls, params: NigParams, x: np.ndarray, y: np.ndarray
     ) -> np.ndarray:
-        logpdf = np.empty((len(x), cls.t))
+        logpdf = np.empty((cls.t, len(x)))
         for i, (xt, yt) in enumerate(zip(x, y, strict=True)):
-            logpdf[i] = params.mvt_logpdf(xt.reshape(1, -1), np.atleast_1d(yt))
+            pdf = params.mvt_logpdf(xt.reshape(1, -1), np.atleast_1d(yt))
+            assert pdf.shape == (cls.t, 1)
+            logpdf[:, i] = pdf.ravel()
         return logpdf
 
     def test_mvt_logpdf_snapshot(self, ndarray_snapshot: NDArraySnapshot):
