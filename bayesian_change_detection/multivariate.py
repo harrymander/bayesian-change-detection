@@ -164,7 +164,7 @@ class _MultivariateBcdmWorker:
 
         self.params = NigParams.empty(self.n, self.p)
         self.log_joint = np.array([0.0])
-        self.log_posteriors: list[np.ndarray] = []
+        self.log_joints: list[np.ndarray] = []
         self.log_hazard = np.log(hazard)
         self.log_1mhazard = np.log1p(-hazard)
 
@@ -175,26 +175,37 @@ class _MultivariateBcdmWorker:
         self.params.scale[t] = self.prior_scale
         self.params.prec[t] = self.prior_prec
 
-    def fit(self) -> MultivariateBcdmResults:
-        for t, (x, y) in enumerate(zip(self.x, self.y, strict=True)):
-            self._step(t, x, y)
+    def _log_posterior(self) -> np.ndarray:
+        """Convert joint probabilities to a triangular matrix of posterior
+        probabilities. See docstring in MultivariateBcdmResults for description
+        of the matrix."""
 
-        n = len(self.log_posteriors)
+        n = len(self.log_joints)
         log_posterior: np.ndarray = np.empty((n, n))
-        log_posterior[np.tril_indices(n)] = np.concatenate(self.log_posteriors)
+        log_posterior[np.tril_indices(n)] = np.concatenate(self.log_joints)
         log_posterior[np.triu_indices(n, 1)] = -np.inf
         log_posterior = log_posterior.T
+
+        # Normalise to get posterior
+        log_posterior -= scipy.special.logsumexp(log_posterior, axis=0)
         assert_allclose(
             scipy.special.logsumexp(log_posterior, axis=0),
             0,
             atol=1e-10,
         )
+
+        return log_posterior
+
+    def fit(self) -> MultivariateBcdmResults:
+        for t, (x, y) in enumerate(zip(self.x, self.y, strict=True)):
+            self._step(t, x, y)
+
         return MultivariateBcdmResults(
             mean=self.params.mean,
             cov=self.params.cov,
             shape=self.params.shape,
             scale=self.params.scale,
-            log_posterior=log_posterior,
+            log_posterior=self._log_posterior(),
         )
 
     def _step(self, t: int, x: np.ndarray, y: float) -> None:
@@ -213,9 +224,7 @@ class _MultivariateBcdmWorker:
             + self.log_joint
         )
 
-        # Normalise to get the posterior
-        log_posterior = log_joint - scipy.special.logsumexp(log_joint)
-        self.log_posteriors.append(log_posterior)
+        self.log_joints.append(log_joint)
         self.log_joint = log_joint
         self.params[: t + 1].update(x.reshape(1, -1), np.asarray((y,)))
 
