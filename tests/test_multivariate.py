@@ -2,6 +2,7 @@ from abc import ABC, abstractmethod
 
 import numpy as np
 import pytest
+import scipy
 from numpy.testing import assert_allclose
 
 from bayesian_change_detection import (
@@ -109,6 +110,10 @@ class BocdTester(ABC):
     def test_log_posterior_snapshot(self, ndarray_snapshot: NDArraySnapshot):
         log_posterior = self.results.log_posterior
         assert_allclose(log_posterior, ndarray_snapshot(log_posterior))
+
+    def test_log_posteriors_are_normalised(self) -> None:
+        col_sums = scipy.special.logsumexp(self.results.log_posterior, axis=0)
+        assert_allclose(col_sums, 0, atol=1e-12, rtol=1e-12)
 
     @pytest.mark.parametrize("attrname", ("mean", "cov", "shape", "scale"))
     def test_parameters_snapshot(

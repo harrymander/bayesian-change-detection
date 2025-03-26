@@ -4,7 +4,6 @@ from typing import cast
 
 import numpy as np
 import scipy
-from numpy.testing import assert_allclose
 from scipy.linalg import lapack
 
 try:
@@ -163,10 +162,10 @@ class _MultivariateBcdmWorker:
         self.prior_scale = prior_scale
 
         self.params = NigParams.empty(self.n, self.p)
-        self.log_joint = np.array([0.0])
-        self.log_joints: list[np.ndarray] = []
         self.log_hazard = np.log(hazard)
         self.log_1mhazard = np.log1p(-hazard)
+        self.prev_log_joint = np.array([0.0])
+        self.log_joint = np.full((self.n, self.n), -np.inf)
 
     def _add_new_hypothesis(self, t: int) -> None:
         self.params.mean[t] = self.prior_mean
@@ -179,22 +178,9 @@ class _MultivariateBcdmWorker:
         """Convert joint probabilities to a triangular matrix of posterior
         probabilities. See docstring in MultivariateBcdmResults for description
         of the matrix."""
-
-        n = len(self.log_joints)
-        log_posterior: np.ndarray = np.empty((n, n))
-        log_posterior[np.tril_indices(n)] = np.concatenate(self.log_joints)
-        log_posterior[np.triu_indices(n, 1)] = -np.inf
-        log_posterior = log_posterior.T
-
-        # Normalise to get posterior
-        log_posterior -= scipy.special.logsumexp(log_posterior, axis=0)
-        assert_allclose(
-            scipy.special.logsumexp(log_posterior, axis=0),
-            0,
-            atol=1e-10,
-        )
-
-        return log_posterior
+        log_joint_trans = self.log_joint.T
+        col_sums = scipy.special.logsumexp(log_joint_trans, axis=0)
+        return log_joint_trans - col_sums
 
     def fit(self) -> MultivariateBcdmResults:
         for t, (x, y) in enumerate(zip(self.x, self.y, strict=True)):
@@ -214,18 +200,17 @@ class _MultivariateBcdmWorker:
         assert log_predictive_probs.shape == (t + 1,)
 
         # Compute the (t + 1) changepoint probabilities
-        log_joint = np.empty(t + 1)
+        log_joint = self.log_joint[t, : t + 1]
         log_joint[0] = scipy.special.logsumexp(  # reset proabability
-            log_predictive_probs[-1] + self.log_hazard + self.log_joint
+            log_predictive_probs[-1] + self.log_hazard + self.prev_log_joint
         )
         log_joint[1:] = (  # growth probabilities
             log_predictive_probs[:-1][::-1]
             + self.log_1mhazard
-            + self.log_joint
+            + self.prev_log_joint
         )
 
-        self.log_joints.append(log_joint)
-        self.log_joint = log_joint
+        self.prev_log_joint = log_joint
         self.params[: t + 1].update(x.reshape(1, -1), np.asarray((y,)))
 
 
