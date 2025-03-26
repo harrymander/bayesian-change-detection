@@ -267,6 +267,14 @@ class NigParams:
             scale=self.scale[i],
         )
 
+    def _validate_x_arg(self, x: np.ndarray) -> None:
+        if x.ndim != 2:
+            raise ValueError("x must be 2-D")
+        xp = x.shape[1]
+        p = self.mean.shape[1]
+        if xp != p:
+            raise ValueError(f"expected {p}-dimensional predictors, got {xp}")
+
     def update(self, x: np.ndarray, y: np.ndarray) -> None:
         """
         Update sufficient statistics given n new observations (x, y).
@@ -275,13 +283,10 @@ class NigParams:
             x: (n, p) array of independent (predictor) variables.
             y: (n,) array of dependent (response) variables.
         """
-        if x.ndim != 2:
-            raise ValueError("x must be 2-D")
-        n, xp = x.shape
+        self._validate_x_arg(x)
+        n = x.shape[0]
         _check_array_shape("y", y, (n,))
         t, p = self.mean.shape
-        if xp != p:
-            raise ValueError(f"expected {p}-dimensional predictors, got {xp}")
 
         cov0 = self.cov  # (t, p, p)
         prec0 = self.prec  # (t, p, p)
@@ -362,47 +367,103 @@ class NigParams:
         self.scale += new_scale
         assert np.all(self.scale >= 0), "got negative scale"
 
+    def _mvt_mean(self, x: np.ndarray) -> np.ndarray:
+        """
+        Mean of the t-distribution. Assumes has valid shape.
+
+          x(j)^T @ μ(i) for i = 1...t and j=1...n
+        """
+        mean = np.einsum("np,tp->tn", x, self.mean)
+        assert mean.shape == (len(self.mean), len(x))
+        return mean
+
+    def mvt_mean(self, x: np.ndarray) -> np.ndarray:
+        """
+        Calculate the expected value of y given x using t independent Bayesian
+        linear regression models with NIG priors.
+
+        This is the mean of the t-distribution, the PDF of which can be
+        obtained from mvt_logpdf.
+
+        Args:
+            x: (n, p) array of predictor variables.
+
+        Returns:
+            (t, n) array of expected values.
+        """
+        self._validate_x_arg(x)
+        return self._mvt_mean(x)
+
+    def mvt_variance(self, x: np.ndarray) -> np.ndarray:
+        """
+        Calculate the variances of y given x using t independent Bayesian
+        linear regression models with NIG priors.
+
+        This the variance of the t-distribution, the PDF of which can be
+        obtained from mvt_logpdf. The variance of a t-distribution with v
+        degrees of freedom and Σ shape parameter is
+
+          v * Σ / (v - 2)
+
+        The degrees of freedom are 2*self.shape; Σ is equivalent to the term in
+        Eq. 26.
+
+        Args:
+            x: (n, p) array of predictor variables.
+
+        Returns:
+            (t, n) array of variances.
+        """
+        self._validate_x_arg(x)
+
+        coeff = self.scale / (self.shape - 1)
+
+        # Product across columns: (t, 1) * (t, n) -> (t, n)
+        var = coeff.reshape(-1, 1) * (1 + self._xvx_product(x))
+        assert var.shape == (self.mean.shape[0], len(x))
+        return var
+
+    def _xvx_product(self, x: np.ndarray) -> np.ndarray:
+        """
+        Computes the quadratic form in the t-distribution shape param (Eq. 26):
+
+          x(j)^T V(i) x(j) for i = 1...t and j=1...n
+
+        where V(i) is the (p, p) covariance matrix of the i-th distribution.
+
+        Returns: (t, n) array
+        """
+        res = np.einsum("tij,nj,ni->tn", self.cov, x, x)
+        assert res.shape == (self.mean.shape[0], len(x))
+        return res
+
     def mvt_logpdf(self, x: np.ndarray, y: np.ndarray) -> np.ndarray:
         """
-        Calculate the log PDFs of the predictive distributions of t multiple
-        independent Bayesian linear regression models using self as the NIG
-        priors. (Logarithm of Eq. 27.)
+        Calculate the log PDFs of the predictive distributions of t independent
+        Bayesian linear regression models using self as the NIG priors.
+        (Logarithm of Eq. 27.)
 
         Args:
             x: (n, p) array of predictor variables.
             y: (n,) response variable.
 
         Returns:
-            (t, n) array of log predictive probabilities.
+            (t, n) array of log predictive probabilities, the i-th row contains
+            the probabilities over (x, y) given the i-th model.
         """
-        if x.ndim != 2:
-            raise ValueError("x must be 2-D")
-
-        t, p = self.mean.shape
-        n, xp = x.shape
-        if xp != p:
-            raise ValueError(f"expected {p}-dimensional predictors, got {xp}")
-
+        self._validate_x_arg(x)
+        n = x.shape[0]
         _check_array_shape("y", y, (n,))
-
-        # Product in the t-distribution shape parameter (Eq. 26)
-        # x(j)^T V(i) x(j) for i = 1...t and j=1...n
-        xvx = np.einsum("tij,nj,ni->tn", self.cov, x, x)
-        assert xvx.shape == (t, n)
+        t = self.mean.shape[0]
 
         # Σ from Eq. 27
         # Product across columns: (t, 1) * (t, n) -> (t, n)
-        sigma = self.scale.reshape(-1, 1) * (xvx + 1)
+        sigma = self.scale.reshape(-1, 1) * (self._xvx_product(x) + 1)
         assert sigma.shape == (t, n)
-
-        # Mean of the t-distribution
-        # x(j)^T @ μ(i) for i = 1...t and j=1...n
-        loc = np.einsum("np,tp->tn", x, self.mean)
-        assert loc.shape == (t, n)
 
         # Quadratic term in PDF
         # (n,) - (t, n) -> (t, n)
-        dev_squared = np.square(y - loc)
+        dev_squared = np.square(y - self._mvt_mean(x))
         assert dev_squared.shape == (t, n)
 
         # 0.5 * degrees of freedom - reshape for broadcasting
