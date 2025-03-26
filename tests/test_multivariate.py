@@ -126,3 +126,29 @@ class Test2DChangeDetection(BocdTester):
             prior_shape=1e-3,
             prior_scale=1e-6,
         )
+
+
+class Test3DChangeDetection(BocdTester):
+    @classmethod
+    def run_bocd(cls) -> MultivariateBcdmResults:
+        rng = np.random.default_rng(42)
+
+        # Generate random piecewise data
+        samples = 100
+        w = rng.random(3)
+        hazard = 0.1
+        x = np.linspace(0, 5, samples)
+        x = np.stack((np.ones_like(x), x, x * 2), axis=1)
+        data = []
+        for xt in x:
+            if rng.random() <= hazard:
+                w = rng.random(3)  # new changepoint
+            data.append(np.dot(xt, w))
+
+        assert x.shape == (samples, 3)
+        return multivariate_bcdm(
+            x,
+            np.asarray(data),
+            hazard=hazard,
+            prior_mean=np.full_like(w, 0.5),
+        )
