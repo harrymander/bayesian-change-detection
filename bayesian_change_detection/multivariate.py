@@ -323,13 +323,14 @@ class NigParams:
                 # (t, p, p) - (t, p, p) / (t, 1, 1) -> (t, p, p)
                 new_cov = cov0 - vxxv / (xvx + 1)
             else:
+                # Matrix may not be positive definite
                 xvx_p1_inv = np.linalg.inv(xvx + np.eye(n))
 
                 # (t, p, p) - (t, p, n) @ (t, n, n) @ (t, n, p) -> (t, p, p)
                 new_cov = cov0 - vx @ xvx_p1_inv @ matrix_transpose(vx)
         else:
-            # Just invert the (p, p) matrix. See Eq. 30, first equality.
-            new_cov = np.linalg.inv(new_prec)
+            # Just invert the (t, p, p) matrix. See Eq. 30, first equality.
+            new_cov = _positive_definite_inv(new_prec)
 
         assert new_cov.shape == (t, p, p)
 
@@ -413,28 +414,34 @@ class NigParams:
 
 
 def _positive_definite_inv(a: np.ndarray) -> np.ndarray:
-    n = len(a)
-    if n == 1:
-        return 1 / a
-    if n == 2:
-        return _2x2_inv(a)
-    return _cholesky_inv(a)
+    if a.ndim == 2:
+        a = np.expand_dims(a, 0)
+    elif a.ndim != 3:
+        raise ValueError("a must be 2- or 3-D")
+
+    m, n = a.shape[1:]
+    if m != n:
+        raise ValueError("a must be square")
+
+    if m == 1:
+        inv = 1 / a
+    elif m == 2:
+        inv = _2x2_inv(a)
+    else:
+        inv = _cholesky_inv(a)
+
+    return inv.squeeze()
 
 
 def _2x2_inv(a: np.ndarray) -> np.ndarray:
-    det = a[0, 0] * a[1, 1] - a[0, 1] * a[1, 0]
-    if det == 0:
-        raise ValueError("matrix is singular")
+    """Inverts t arrays stacked along the first dimension such that a has shape
+    (t, m, m)."""
+    dets = a[:, 0, 0] * a[:, 1, 1] - a[:, 0, 1] * a[:, 1, 0]
+    if np.any(dets == 0):
+        raise ValueError("at least one matrix is singular")
 
-    return (
-        np.array(
-            (
-                (a[1, 1], -a[0, 1]),
-                (-a[1, 0], a[0, 0]),
-            )
-        )
-        / det
-    )
+    flat = np.vstack((a[:, 1, 1], -a[:, 0, 1], -a[:, 1, 0], a[:, 0, 0])) / dets
+    return flat.T.reshape(-1, 2, 2)
 
 
 def _cholesky_inv(a: np.ndarray) -> np.ndarray:
