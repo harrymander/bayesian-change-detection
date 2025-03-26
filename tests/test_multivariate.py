@@ -103,16 +103,37 @@ class TestNigParams:
             getattr(self.iteratively_updated_params, attrname),
         )
 
+    @classmethod
+    def _mvt_logpdf_iterative(
+        cls, params: NigParams, x: np.ndarray, y: np.ndarray
+    ) -> np.ndarray:
+        logpdf = np.empty((len(x), cls.t))
+        for i, (xt, yt) in enumerate(zip(x, y, strict=True)):
+            logpdf[i] = params.mvt_logpdf(xt.reshape(1, -1), np.atleast_1d(yt))
+        return logpdf
+
     def test_mvt_logpdf_snapshot(self, ndarray_snapshot: NDArraySnapshot):
         n = 500
         rng = np.random.default_rng(1234)
         x: np.ndarray = rng.normal(size=(n, self.p))
         y: np.ndarray = rng.normal(size=(n,))
-        logpdf = np.empty((n, self.t))
-        for i, d in enumerate(zip(x, y, strict=True)):
-            logpdf[i] = self.iteratively_updated_params.mvt_logpdf(*d)
-
+        logpdf = self._mvt_logpdf_iterative(
+            self.iteratively_updated_params, x, y
+        )
         assert_allclose(logpdf, ndarray_snapshot(logpdf))
+
+    def test_iteratively_and_batch_computed_mvt_logpdf_are_equivalent(
+        self,
+    ) -> None:
+        n = 500
+        rng = np.random.default_rng(1234)
+        x: np.ndarray = rng.normal(size=(n, self.p))
+        y: np.ndarray = rng.normal(size=(n,))
+        iterative_logpdf = self._mvt_logpdf_iterative(
+            self.iteratively_updated_params, x, y
+        )
+        batch_logpdf = self.iteratively_updated_params.mvt_logpdf(x, y)
+        assert_allclose(batch_logpdf, iterative_logpdf)
 
 
 class BocdTester(ABC):
