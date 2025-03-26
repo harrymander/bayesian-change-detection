@@ -1,9 +1,9 @@
 from abc import ABC, abstractmethod
 
 import numpy as np
+import numpy.testing
 import pytest
 import scipy
-from numpy.testing import assert_allclose
 
 from bayesian_change_detection import (
     MultivariateBcdmResults,
@@ -13,6 +13,14 @@ from bayesian_change_detection.multivariate import NigParams
 from tests.conftest import JsonSnapshot, NDArraySnapshot
 
 RandomData = tuple[np.ndarray, np.ndarray]
+
+
+def assert_allclose(a, b, **kwargs) -> None:
+    """Same as numpy.testing.assert_allclose, but NaNs do not compare equal by
+    default."""
+    __tracebackhide__ = True
+    kwargs = {"equal_nan": False} | kwargs
+    numpy.testing.assert_allclose(a, b, **kwargs)
 
 
 def generate_random_data(
