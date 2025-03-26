@@ -196,7 +196,9 @@ class _MultivariateBcdmWorker:
 
     def _step(self, t: int, x: np.ndarray, y: float) -> None:
         self._add_new_hypothesis(t)
-        log_predictive_probs = self.params[: t + 1].mvt_logpdf(x, y)
+        log_predictive_probs = self.params[: t + 1].mvt_logpdf(
+            x.reshape(1, -1), np.atleast_1d(y)
+        )
         assert log_predictive_probs.shape == (t + 1,)
 
         # Compute the (t + 1) changepoint probabilities
@@ -360,50 +362,68 @@ class NigParams:
         self.scale += new_scale
         assert np.all(self.scale >= 0), "got negative scale"
 
-    def mvt_logpdf(self, x: np.ndarray, y: float) -> np.ndarray:
+    def mvt_logpdf(self, x: np.ndarray, y: np.ndarray) -> np.ndarray:
         """
-        Calculate the log PDFs of the predictive distributions of n multiple
+        Calculate the log PDFs of the predictive distributions of t multiple
         independent Bayesian linear regression models using self as the NIG
         priors. (Logarithm of Eq. 27.)
 
         Args:
-            x: (p,) array of predictor variables.
-            y: response variable.
+            x: (n, p) array of predictor variables.
+            y: (n,) response variable.
 
         Returns:
-            (n,) array of log predictive probabilities.
+            (t, n) array of log predictive probabilities.
         """
+        if x.ndim != 2:
+            raise ValueError("x must be 2-D")
 
-        assert x.ndim == 1
-        assert np.isscalar(y)
-        n = len(self.mean)
+        t, p = self.mean.shape
+        n, xp = x.shape
+        if xp != p:
+            raise ValueError(f"expected {p}-dimensional predictors, got {xp}")
+        _check_array_shape("y", y, (n,))
 
-        x = x.reshape(1, -1, 1)  # (1, p, 1)
+        # Add dimension for broadcasting
+        x = np.expand_dims(x, 0)  # (1, n, p)
 
         # Σ from Eq. 27
-        # (1, 1, p) @ (n, p, p) @ (1, p, 1) -> (n, 1, 1)
-        xvx = matrix_transpose(x) @ self.cov @ x
-        assert xvx.shape == (n, 1, 1)
-        sigma = self.scale * (xvx.ravel() + 1)
-        assert sigma.shape == (n,)
+        # (1, n, p) @ (t, p, p) @ (1, p, n) -> (t, n, n)
+        xvx = x @ self.cov @ matrix_transpose(x)
+        assert xvx.shape == (t, n, n)
+        sigma = xvx + np.eye(n)
+        if n == 1:
+            sigma_inv = 1 / sigma
+            sigma_logdet = np.log(sigma).ravel()
+        else:
+            sigma_u = _cholesky_upper(sigma)
+            sigma_logdet = _cholesky_upper_logdet(sigma_u)
+            sigma_inv = _cholesky_upper_inv(sigma_u)
 
-        # (1, 1, p) @ (n, p, 1) -> (n, 1, 1)
-        loc = matrix_transpose(x) @ np.expand_dims(self.mean, -1)
-        assert loc.shape == (n, 1, 1)
+        assert sigma_inv.shape == (t, n, n)
+        assert sigma_logdet.shape == (t,)
+
+        # (1, n, p) @ (t, p, 1) -> (t, n, 1)
+        loc = x @ np.expand_dims(self.mean, -1)
+
+        #  (1, n, 1) - (t, n, 1) -> (t, n, 1)
+        dev = y.reshape(1, -1, 1) - loc
 
         # Quadratic term in PDF
-        dev_squared = np.square(y - loc.ravel())
-        assert dev_squared.shape == (n,)
+        # (t, 1, n) @ (t, n, n) @ (t, n, 1) -> (t, 1, 1)
+        quad = matrix_transpose(dev) @ sigma_inv @ dev
+        assert quad.shape == (t, 1, 1)
 
-        a = self.shape  # 0.5 * degrees of freedom
-        a_plus_half = a + 0.5
+        a = self.shape  # 0.5 * degrees of freedom of the t-distribution
+        a_plus = a + n / 2
         logpdf = (
-            scipy.special.gammaln(a_plus_half)
+            scipy.special.gammaln(a_plus)
             - scipy.special.gammaln(a)
-            - (_LOG_2PI + np.log(sigma)) / 2
-            - a_plus_half * np.log(1 + dev_squared / sigma / 2)
+            - n * (_LOG_2PI + np.log(self.scale)) / 2
+            - sigma_logdet / 2
+            - a_plus * np.log(1 + quad.ravel() / self.scale / 2)
         )
-        assert logpdf.shape == (n,)
+        assert logpdf.shape == (t,)
         return logpdf
 
 
@@ -441,18 +461,53 @@ def _2x2_inv(a: np.ndarray) -> np.ndarray:
 
 
 def _cholesky_inv(a: np.ndarray) -> np.ndarray:
-    """Invert a positive-definite matrix using the Cholesky decomposition.
-    Assumes a is a 3D array of square matrices across the first axis."""
-    uinv = np.empty_like(a)
+    return _cholesky_upper_inv(_cholesky_upper(a))
+
+
+def _cholesky_upper(a: np.ndarray) -> np.ndarray:
+    """
+    Return the upper triangular Cholesky factor of matrices in a. Assumes a is
+    a 3D array with positive-definite matrices stacked along the first
+    dimension.
+    """
+    u = np.empty_like(a)
     for i in range(len(a)):
-        # u is the upper triangular matrix of the Cholesky decomposition
-        # a[i] = u.T @ u
-        u, info = lapack.dpotrf(a[i])
+        u[i], info = lapack.dpotrf(a[i])
         if info != 0:
             raise ValueError("matrix is not positive-definite")
+    return u
 
+
+def _cholesky_upper_logdet(u: np.ndarray) -> np.ndarray:
+    """
+    Returns the log determinants of a batch of positive-definite matrices given
+    their upper triangular Cholesky factors in u. Assumes u is a 3D array as
+    returned by _cholesky_upper.
+
+    The Cholesky decomposition decomposes a positive-definite matrix A:
+
+      A = U^T U
+
+    Where U is an upper triangular matrix. Therefore:
+
+      det(A) = det(U)**2
+
+    Where the determinant of U is simply the product of the diagonal terms
+    (since it is upper-triangular).
+    """
+    return 2 * np.log(np.diagonal(u, axis1=-2, axis2=-1)).sum(axis=1)
+
+
+def _cholesky_upper_inv(u: np.ndarray) -> np.ndarray:
+    """
+    Inverts a batch of positive-definite matrices given their upper triangular
+    Cholesky factors in u. Assumes u is a 3D array as returned by
+    _cholesky_upper.
+    """
+    uinv = np.empty_like(u)
+    for i in range(len(u)):
         # dpotri only returns the upper triangular part of the inverse
-        uinv[i], info = lapack.dpotri(u)
+        uinv[i], info = lapack.dpotri(u[i])
         if info != 0:
             raise ValueError("matrix is singular")
 
@@ -460,6 +515,6 @@ def _cholesky_inv(a: np.ndarray) -> np.ndarray:
     # unset, so explicitly set the lower diagonal indices, which seems to be
     # slightly slower than simply adding the transpose of the upper triangular
     # matrix.
-    idx = np.tril_indices(a.shape[1], -1)
+    idx = np.tril_indices(u.shape[1], -1)
     uinv[:, *idx] = matrix_transpose(uinv)[:, *idx]
     return uinv
