@@ -64,6 +64,8 @@ def new_params(t: int, p: int) -> NigParams:
 class TestNigParams:
     iteratively_updated_params: NigParams
     batch_updated_params: NigParams
+    p: int  # dimensionality of independent variable
+    t = 5  # number of distributions
 
     @pytest.fixture(
         scope="class",
@@ -73,22 +75,22 @@ class TestNigParams:
     )
     @classmethod
     def _update_params(cls, request: pytest.FixtureRequest) -> None:
-        p: int = request.param
         n = 500  # number of observations
-        t = 5  # number of distributions
+        p: int = request.param
 
         rng = np.random.default_rng(p)
         x = rng.normal(size=(n, p))
         y = rng.normal(size=n)
 
-        cls.iteratively_updated_params = new_params(t, p)
+        cls.iteratively_updated_params = new_params(cls.t, p)
         for xt, yt in zip(x, y, strict=True):
             cls.iteratively_updated_params.update(
                 xt.reshape(1, p), np.atleast_1d(yt)
             )
 
-        cls.batch_updated_params = new_params(t, p)
+        cls.batch_updated_params = new_params(cls.t, p)
         cls.batch_updated_params.update(x, y)
+        cls.p = p
 
     @pytest.mark.parametrize(
         "attrname", ("mean", "cov", "prec", "shape", "scale")
@@ -100,6 +102,17 @@ class TestNigParams:
             getattr(self.batch_updated_params, attrname),
             getattr(self.iteratively_updated_params, attrname),
         )
+
+    def test_mvt_logpdf_snapshot(self, ndarray_snapshot: NDArraySnapshot):
+        n = 500
+        rng = np.random.default_rng(1234)
+        x: np.ndarray = rng.normal(size=(n, self.p))
+        y: np.ndarray = rng.normal(size=(n,))
+        logpdf = np.empty((n, self.t))
+        for i, d in enumerate(zip(x, y, strict=True)):
+            logpdf[i] = self.iteratively_updated_params.mvt_logpdf(*d)
+
+        assert_allclose(logpdf, ndarray_snapshot(logpdf))
 
 
 class BocdTester(ABC):
