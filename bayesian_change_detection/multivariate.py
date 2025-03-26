@@ -414,7 +414,9 @@ class NigParams:
 
 
 def _positive_definite_inv(a: np.ndarray) -> np.ndarray:
+    squeeze = False
     if a.ndim == 2:
+        squeeze = True
         a = np.expand_dims(a, 0)
     elif a.ndim != 3:
         raise ValueError("a must be 2- or 3-D")
@@ -430,7 +432,7 @@ def _positive_definite_inv(a: np.ndarray) -> np.ndarray:
     else:
         inv = _cholesky_inv(a)
 
-    return inv.squeeze()
+    return inv[0] if squeeze else inv
 
 
 def _2x2_inv(a: np.ndarray) -> np.ndarray:
@@ -445,22 +447,25 @@ def _2x2_inv(a: np.ndarray) -> np.ndarray:
 
 
 def _cholesky_inv(a: np.ndarray) -> np.ndarray:
-    """Invert a positive-definite matrix using the Cholesky decomposition."""
+    """Invert a positive-definite matrix using the Cholesky decomposition.
+    Assumes a is a 3D array of square matrices across the first axis."""
+    uinv = np.empty_like(a)
+    for i in range(len(a)):
+        # u is the upper triangular matrix of the Cholesky decomposition
+        # a[i] = u.T @ u
+        u, info = lapack.dpotrf(a[i])
+        if info != 0:
+            raise ValueError("matrix is not positive-definite")
 
-    # u is the upper triangular matrix of the Cholesky decomposition
-    # a = u.T @ u
-    u, info = lapack.dpotrf(a)
-    if info != 0:
-        raise ValueError("matrix is not positive-definite")
-
-    # dpotri only returns the upper triangular part of the inverse
-    uinv, info = lapack.dpotri(u)
-    if info != 0:
-        raise ValueError("matrix is singular")
+        # dpotri only returns the upper triangular part of the inverse
+        uinv[i], info = lapack.dpotri(u)
+        if info != 0:
+            raise ValueError("matrix is singular")
 
     # Not sure if lapack sets the lower diagonal to zero or if it leaves it
-    # unset: explicitly set the lower diagonal indices, which is slightly
-    # slower than `uinv += np.triu(uinv, 1).T`.
-    idx = np.tril_indices_from(uinv, -1)
-    uinv[idx] = uinv.T[idx]
+    # unset, so explicitly set the lower diagonal indices, which seems to be
+    # slightly slower than simply adding the transpose of the upper triangular
+    # matrix.
+    idx = np.tril_indices(a.shape[1], -1)
+    uinv[:, *idx] = matrix_transpose(uinv)[:, *idx]
     return uinv

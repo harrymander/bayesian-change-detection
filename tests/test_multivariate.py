@@ -37,7 +37,7 @@ def random_data() -> tuple[np.ndarray, np.ndarray]:
     return generate_random_data(42, 500, 2, 1.5)
 
 
-def new_params(t: int, p: int = 2) -> NigParams:
+def new_params(t: int, p: int) -> NigParams:
     """
     Generate new params for t NIG distributions of dimension p.
     """
@@ -56,20 +56,29 @@ class TestNigParams:
     iteratively_updated_params: NigParams
     batch_updated_params: NigParams
 
-    @pytest.fixture(scope="class", autouse=True)
+    @pytest.fixture(
+        scope="class",
+        autouse=True,
+        params=range(1, 4),
+        ids=[f"{i}D" for i in range(1, 4)],
+    )
     @classmethod
-    def _update_params(cls) -> None:
+    def _update_params(cls, request: pytest.FixtureRequest) -> None:
+        p: int = request.param
+        n = 500  # number of observations
         t = 5  # number of distributions
-        x, y = generate_random_data(42, 500, 2, 1.5)
 
-        cls.iteratively_updated_params = new_params(t)
+        rng = np.random.default_rng(p)
+        x = rng.normal(size=(n, p))
+        y = rng.normal(size=n)
+
+        cls.iteratively_updated_params = new_params(t, p)
         for xt, yt in zip(x, y, strict=True):
             cls.iteratively_updated_params.update(
-                xt.reshape(1, -1),
-                np.atleast_1d(yt),
+                xt.reshape(1, p), np.atleast_1d(yt)
             )
 
-        cls.batch_updated_params = new_params(t)
+        cls.batch_updated_params = new_params(t, p)
         cls.batch_updated_params.update(x, y)
 
     @pytest.mark.parametrize(
