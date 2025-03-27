@@ -258,3 +258,13 @@ class Test3DChangeDetection(BocdTester):
             hazard=hazard,
             mean=np.full_like(w, 0.5),
         )
+
+
+def test_params_index_with_scalar_maintains_shape() -> None:
+    params = NigParams.empty(10, 5)
+    param = params[0]
+    assert param.mean.shape == (1, 5)
+    assert param.cov.shape == (1, 5, 5)
+    assert param.prec.shape == (1, 5, 5)
+    assert param.shape.shape == (1,)
+    assert param.scale.shape == (1,)
