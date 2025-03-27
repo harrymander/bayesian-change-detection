@@ -1,3 +1,4 @@
+from itertools import chain, pairwise
 from pathlib import Path
 
 import click
@@ -8,6 +9,9 @@ from matplotlib.colors import LogNorm
 from matplotlib.image import AxesImage
 
 from bayesian_change_detection import multivariate_bcdm
+from bayesian_change_detection.multivariate import (
+    NigParams,
+)
 
 FIGSIZE = (20, 10)
 
@@ -49,34 +53,36 @@ def triangular(rng: np.random.Generator):
     samples = 500
 
     # Create input and outputs.
-    X = np.linspace(0, 3 * 2 * np.pi, samples)
+    t = np.linspace(0, 3 * 2 * np.pi, samples)
     noise = 0.1 * rng.standard_normal(samples)
-    Y = -np.arcsin(np.sin(X)) * 2 / np.pi + noise
+    Y = -np.arcsin(np.sin(t)) * 2 / np.pi + noise
     true_changepoints = np.pi * np.arange(0, 6) + np.pi / 2
 
-    res = multivariate_bcdm(
-        np.c_[np.ones_like(X), X],
-        Y,
-        hazard=0.02,
-        prior_cov=1e6,
-        prior_shape=1e-3,
-        prior_scale=1e-6,
+    X = np.c_[np.ones_like(t), t]  # add bias (intercept) term
+    prior = NigParams.from_priors(
+        2,
+        cov=1e6,
+        shape=1e-3,
+        scale=1e-6,
     )
+    res = multivariate_bcdm(X, Y, prior=prior, hazard=0.02)
 
     axes = plt.subplots(2, sharex=True, figsize=FIGSIZE)[1]
-    axes[0].plot(X, Y, "-o")
+    axes[0].plot(t, Y, "-o")
     posterior, im = plot_posterior_probabilities(
-        axes[1], res.log_posterior, xlim=X[[0, -1]]
+        axes[1], res.log_posterior, xlim=t[[0, -1]]
     )
-    axes[1].plot(X, posterior.argmax(axis=0), color="green")
+    axes[1].plot(t, posterior.argmax(axis=0), color="green")
     changepoints = res.changepoints()
     for ax in axes:
         for cp in true_changepoints:
             ax.axvline(cp, color="red", linestyle="--")
         for idx in changepoints:
-            ax.axvline(X[idx], color="green", linestyle="--")
+            ax.axvline(t[idx], color="green", linestyle="--")
     for ax in axes[1:]:
         ax.set_ylabel("Run length")
+
+    plot_segment_predictions(axes[0], prior, changepoints, X, Y, t)
 
     plt.tight_layout()
     plt.colorbar(im, ax=axes)
@@ -108,22 +114,19 @@ def random_piecewise(rng: np.random.Generator):
         rng, varx, mean0, var0, T, hazard
     )
     y = np.asarray(data)
-    res = multivariate_bcdm(
-        np.ones_like(y),
-        y,
-        prior_cov=var0,
-        hazard=hazard,
-    )
+    prior = NigParams.from_priors(1, cov=var0)
+    res = multivariate_bcdm(np.ones_like(y), y, prior=prior, hazard=hazard)
 
     axes = plt.subplots(2, 1, sharex=True, figsize=FIGSIZE)[1]
     axes[0].plot(data, "-o")
-    change_points = res.changepoints()
+    changepoints = res.changepoints()
     for ax in axes:
         for cp in true_changepoints:
             ax.axvline(cp, color="red", linestyle="--")
-        for cp in change_points:
+        for cp in changepoints:
             ax.axvline(cp, color="green", linestyle="--")
 
+    plot_segment_predictions(axes[0], prior, changepoints, np.ones_like(y), y)
     posterior, im = plot_posterior_probabilities(
         axes[1],
         res.log_posterior,
@@ -132,6 +135,44 @@ def random_piecewise(rng: np.random.Generator):
     axes[1].plot(posterior.argmax(axis=0), color="green")
     plt.tight_layout()
     plt.colorbar(im, ax=axes)
+
+
+def predict_segment(
+    params: NigParams,
+    x: np.ndarray,
+    y: np.ndarray,
+) -> tuple[np.ndarray, np.ndarray]:
+    model = params.fit_regression(x, y)
+    var = model.mvt_variance(x, axis="t")
+    var[var < 0] = np.nan
+    return model.mvt_mean(x, axis="t"), var
+
+
+def atleast_2d_col(x: np.ndarray) -> np.ndarray:
+    return np.expand_dims(x, 1) if x.ndim < 2 else x
+
+
+def plot_segment_predictions(
+    ax,
+    prior: NigParams,
+    changepoints: list[int],
+    x: np.ndarray,
+    y: np.ndarray,
+    t: np.ndarray | None = None,
+) -> None:
+    n = len(x)
+    if t is None:
+        t = np.arange(n)
+
+    for i1, i2 in pairwise(chain((0,), changepoints, (n,))):
+        xseg = x[i1:i2]
+        yseg = y[i1:i2]
+        tseg = t[i1:i2]
+        pmean, pvar = predict_segment(prior, atleast_2d_col(xseg), yseg)
+        ax.plot(tseg, pmean, color="green")
+        sd = np.sqrt(pvar)
+        ax.plot(tseg, pmean + sd, color="green", linestyle="--")
+        ax.plot(tseg, pmean - sd, color="green", linestyle="--")
 
 
 EXAMPLES = {

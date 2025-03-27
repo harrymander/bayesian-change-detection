@@ -1,6 +1,6 @@
 from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import cast
+from typing import Literal, TypedDict, Unpack, cast, overload
 
 import numpy as np
 import scipy
@@ -23,15 +23,38 @@ def _check_array_shape(name: str, x, exp: Sequence[int]) -> np.ndarray:
     return x
 
 
+class NigPriorKwargs(TypedDict, total=False):
+    mean: float | np.ndarray
+    cov: float | np.ndarray
+    shape: float
+    scale: float
+
+
+@overload
 def multivariate_bcdm(
     x: np.ndarray,
     y: np.ndarray,
-    *,
-    prior_mean: float | np.ndarray = 0,
-    prior_cov: float | np.ndarray = 1,
-    prior_shape: float = 1,
-    prior_scale: float = 1,
-    hazard: float = 0.1,
+    hazard: float,
+    prior: None = None,
+    **prior_kwargs: Unpack[NigPriorKwargs],
+) -> "MultivariateBcdmResults": ...
+
+
+@overload
+def multivariate_bcdm(
+    x: np.ndarray,
+    y: np.ndarray,
+    hazard: float,
+    prior: "NigParams" = ...,
+) -> "MultivariateBcdmResults": ...
+
+
+def multivariate_bcdm(
+    x: np.ndarray,
+    y: np.ndarray,
+    hazard: float,
+    prior: "None | NigParams" = None,
+    **prior_kwargs: Unpack[NigPriorKwargs],
 ) -> "MultivariateBcdmResults":
     """
     Bayesian change detection model for univariate response data.
@@ -39,15 +62,10 @@ def multivariate_bcdm(
     Args:
         x: (n, p) or (n,) predictor variables.
         y: (n,) response variables.
-        prior_mean: Prior mean (Lambda) of the model. If a scalar, it is
-            a constant vector of that value.
-        prior_cov: Prior covariance matrix (Omega^-1) of the model. If a
-            scalar, it is set to be a diagonal matrix with that value.
-        prior_shape: Shape of the prior noise distribution.
-        prior_scale: Scale of the prior noise distribution.
         hazard: Hazard rate.
+        prior: NIG prior parameters
+        **prior_kwargs: Parameters for NIG prior if prior is None.
     """
-
     if x.ndim == 1:
         n = len(x)
         p = 1
@@ -59,35 +77,16 @@ def multivariate_bcdm(
 
     _check_array_shape("y", y, (n,))
 
-    if np.isscalar(prior_mean):
-        prior_mean = np.full(p, prior_mean, dtype=np.float64)
-    else:
-        prior_mean = _check_array_shape("prior_mean", prior_mean, (p,))
+    if prior is None:
+        prior = NigParams.from_priors(p, t=1, **prior_kwargs)
+    elif prior_kwargs:
+        raise ValueError(
+            "cannot pass prior keyword arguments if a prior object is passed"
+        )
+    elif prior.mean.shape[0] != 1:
+        raise ValueError("prior must have a single distribution")
 
-    if np.isscalar(prior_cov):
-        prior_cov = np.eye(p, dtype=np.float64) * cast(float, prior_cov)
-    else:
-        prior_cov = _check_array_shape("prior_cov", prior_cov, (p, p))
-        if np.any(np.linalg.eigvals(prior_cov) <= 0):
-            raise ValueError("prior_cov must be positive-definite")
-
-    if prior_shape <= 0:
-        raise ValueError("prior_shape must be > 0")
-    prior_shape = float(prior_shape)
-
-    if prior_scale <= 0:
-        raise ValueError("prior_scale must be > 0")
-    prior_scale = float(prior_scale)
-
-    worker = _MultivariateBcdmWorker(
-        x,
-        y,
-        prior_mean=prior_mean,
-        prior_cov=prior_cov,
-        prior_shape=prior_shape,
-        prior_scale=prior_scale,
-        hazard=hazard,
-    )
+    worker = _MultivariateBcdmWorker(x, y, prior=prior, hazard=hazard)
     return worker.fit()
 
 
@@ -141,21 +140,14 @@ class _MultivariateBcdmWorker:
         x: np.ndarray,
         y: np.ndarray,
         *,
-        prior_mean: np.ndarray,
-        prior_cov: np.ndarray,
-        prior_shape: float,
-        prior_scale: float,
+        prior: "NigParams",
         hazard: float,
     ):
+        # Assumes parameters have been validated
         self.n, self.p = x.shape
         self.x = x
         self.y = y
-        self.prior_mean = prior_mean
-        self.prior_cov = prior_cov
-        self.prior_prec = inv_positive_definite(prior_cov)
-        self.prior_shape = prior_shape
-        self.prior_scale = prior_scale
-
+        self.prior = prior
         self.params = NigParams.empty(self.n, self.p)
         self.log_hazard = np.log(hazard)
         self.log_1mhazard = np.log1p(-hazard)
@@ -163,11 +155,11 @@ class _MultivariateBcdmWorker:
         self.log_joint = np.full((self.n, self.n), -np.inf)
 
     def _add_new_hypothesis(self, t: int) -> None:
-        self.params.mean[t] = self.prior_mean
-        self.params.cov[t] = self.prior_cov
-        self.params.shape[t] = self.prior_shape
-        self.params.scale[t] = self.prior_scale
-        self.params.prec[t] = self.prior_prec
+        self.params.mean[t] = self.prior.mean[0]
+        self.params.cov[t] = self.prior.cov[0]
+        self.params.shape[t] = self.prior.shape[0]
+        self.params.scale[t] = self.prior.scale[0]
+        self.params.prec[t] = self.prior.prec[0]
 
     def _log_posterior(self) -> np.ndarray:
         """Convert joint probabilities to a triangular matrix of posterior
@@ -216,6 +208,9 @@ class NigParams:
     """
     Parameters of t independent p-dimensional normal-inverse-gamma
     distributions.
+
+    Recommended to use from_priors to initialise, rather than constructing
+    directly.
     """
 
     mean: np.ndarray
@@ -228,11 +223,6 @@ class NigParams:
     (t, p, p) array of covariances.
     """
 
-    prec: np.ndarray
-    """
-    (t, p, p) array of precisions.
-    """
-
     shape: np.ndarray
     """
     (t,) array of shape parameters.
@@ -242,6 +232,69 @@ class NigParams:
     """
     (t,) array of scale parameters.
     """
+
+    prec: np.ndarray
+    """
+    (t, p, p) array of precisions.
+    """
+
+    def __post_init__(self) -> None:
+        if self.mean.ndim != 2:
+            raise ValueError("mean must be a 2D array")
+
+        t, p = self.mean.shape
+
+        def _validate_param(name: str, ndims: int) -> None:
+            param = getattr(self, name)
+            if param.ndim != ndims + 1:
+                raise ValueError(f"{name} must be a {ndims + 1}D array")
+
+            expected_shape = (t, *(p for _ in range(ndims)))
+            if param.shape != expected_shape:
+                raise ValueError(
+                    f"expected {name} to be array of shape {expected_shape}, "
+                    f"got {param.shape}"
+                )
+
+        _validate_param("cov", 2)
+        _validate_param("shape", 0)
+        _validate_param("scale", 0)
+        _validate_param("prec", 2)
+
+    @classmethod
+    def from_priors(
+        cls,
+        p: int,
+        t: int = 1,
+        *,
+        mean: float | np.ndarray = 0,
+        cov: float | np.ndarray = 1,
+        shape: float = 1,
+        scale: float = 1,
+    ):
+        if np.isscalar(mean):
+            mean = np.full(p, mean, dtype=np.float64)
+        else:
+            _check_array_shape("mean", mean, (p,))
+
+        if np.isscalar(cov):
+            cov = np.eye(p, dtype=np.float64) * cast(float, cov)
+        else:
+            _check_array_shape("cov", cov, (p, p))
+
+        if shape <= 0:
+            raise ValueError("shape must be > 0")
+        if scale <= 0:
+            raise ValueError("scale must be > 0")
+
+        prec = inv_positive_definite(cast(np.ndarray, cov))
+        return cls(
+            mean=np.expand_dims(mean, 0).repeat(t, axis=0),
+            cov=np.expand_dims(cov, 0).repeat(t, axis=0),
+            prec=np.expand_dims(prec, 0).repeat(t, axis=0),
+            shape=np.full(t, shape, dtype=np.float64),
+            scale=np.full(t, scale, dtype=np.float64),
+        )
 
     @classmethod
     def empty(cls, t: int, p: int) -> "NigParams":
@@ -372,52 +425,6 @@ class NigParams:
         assert mean.shape == (len(self.mean), len(x))
         return mean
 
-    def mvt_mean(self, x: np.ndarray) -> np.ndarray:
-        """
-        Calculate the expected value of y given x using t independent Bayesian
-        linear regression models with NIG priors.
-
-        This is the mean of the t-distribution, the PDF of which can be
-        obtained from mvt_logpdf.
-
-        Args:
-            x: (n, p) array of predictor variables.
-
-        Returns:
-            (t, n) array of expected values.
-        """
-        self._validate_x_arg(x)
-        return self._mvt_mean(x)
-
-    def mvt_variance(self, x: np.ndarray) -> np.ndarray:
-        """
-        Calculate the variances of y given x using t independent Bayesian
-        linear regression models with NIG priors.
-
-        This the variance of the t-distribution, the PDF of which can be
-        obtained from mvt_logpdf. The variance of a t-distribution with v
-        degrees of freedom and Σ shape parameter is
-
-          v * Σ / (v - 2)
-
-        The degrees of freedom are 2*self.shape; Σ is equivalent to the term in
-        Eq. 26.
-
-        Args:
-            x: (n, p) array of predictor variables.
-
-        Returns:
-            (t, n) array of variances.
-        """
-        self._validate_x_arg(x)
-
-        coeff = self.scale / (self.shape - 1)
-
-        # Product across columns: (t, 1) * (t, n) -> (t, n)
-        var = coeff.reshape(-1, 1) * (1 + self._xvx_product(x))
-        assert var.shape == (self.mean.shape[0], len(x))
-        return var
-
     def _xvx_product(self, x: np.ndarray) -> np.ndarray:
         """
         Computes the quadratic form in the t-distribution shape param (Eq. 26):
@@ -473,3 +480,157 @@ class NigParams:
 
         assert logpdf.shape == (t, n)
         return logpdf
+
+    def _validate_axis_t_arg(self, x: np.ndarray) -> None:
+        t = len(self.mean)
+        n = len(x)
+        if n != t:
+            msg = (
+                f"in axis='t' mode, x, which has {n} rows, must have the same"
+                f" number of rows as there are models ({t})"
+            )
+            raise ValueError(msg)
+
+    def mvt_mean(
+        self,
+        x: np.ndarray,
+        axis: Literal["n", "t"] = "n",
+    ) -> np.ndarray:
+        """
+        Calculate the expected value of y given x using t independent Bayesian
+        linear regression models with NIG priors.
+
+        This is the mean of the t-distribution, the PDF of which can be
+        obtained from mvt_logpdf.
+
+        Args:
+            x: array of predictor variables; (n, p) if axis == 'n', otherwise
+                must be shape (t, p) if axis == 't' (i.e. have the same number
+                of rows as models).
+            axis: Axis along which to calculate the expected values. If 'n',
+                returns the expected value for each model across all
+                observations. If 't', returns the expected value of each
+                observation given the corresponding model index.
+
+        Returns: array of expected values; has shape (t, n) if axis == 'n' or
+            shape (t,) if axis == 't'.
+        """
+        if axis not in "nt":
+            raise ValueError("axis must be 'n' or 't'")
+
+        self._validate_x_arg(x)
+        if axis == "n":
+            return self._mvt_mean(x)
+
+        self._validate_axis_t_arg(x)
+
+        # The dot products between the rows of x and self.mean
+        return np.einsum("tp,tp->t", x, self.mean)
+
+    def mvt_variance(
+        self,
+        x: np.ndarray,
+        axis: Literal["n", "t"] = "n",
+    ) -> np.ndarray:
+        """
+        Calculate the variances of y given x using t independent Bayesian
+        linear regression models with NIG priors.
+
+        This the variance of the t-distribution, the PDF of which can be
+        obtained from mvt_logpdf. The variance of a t-distribution with v
+        degrees of freedom and Σ shape parameter is
+
+          v * Σ / (v - 2)
+
+        The degrees of freedom are 2*self.shape; Σ is equivalent to the term in
+        Eq. 26.
+
+        Args:
+            x: array of predictor variables; (n, p) if axis == 'n', otherwise
+                must be shape (t, p) if axis == 't' (i.e. have the same number
+                of rows as models).
+            axis: Axis along which to calculate the variances. If 'n', returns
+                the variance for each model across all observations. If 't',
+                returns the variance of each observation given the
+                corresponding model index.
+
+        Returns: array of variances; has shape (t, n) if axis == 'n' or shape
+            (t,) if axis == 't'.
+        """
+        if axis not in "nt":
+            raise ValueError("axis must be 'n' or 't'")
+
+        self._validate_x_arg(x)
+
+        coeff = self.scale / (self.shape - 1)
+
+        if axis == "n":
+            # Product across columns: (t, 1) * (t, n) -> (t, n)
+            var = coeff.reshape(-1, 1) * (1 + self._xvx_product(x))
+            assert var.shape == (self.mean.shape[0], len(x))
+            return var
+
+        self._validate_axis_t_arg(x)
+
+        # Compute x[i]^T @ V[i] @ x[i] for i = 1...t
+        # This is equivalent to the diagonal of the value when axis == "n"
+        xvx = np.einsum("tij,tj,ti->t", self.cov, x, x)
+        assert xvx.shape == (len(x),)
+        return coeff / (1 + xvx)
+
+    def fit_regression(
+        self,
+        x: np.ndarray,
+        y: np.ndarray,
+    ) -> "NigParams":
+        """
+        Fit a Bayesian linear regression model using this NIG prior.
+
+        Returns the NIG parameters after each observation.
+
+        ```python
+        prior = NigPrior.from_priors(2)
+        # x.shape == is (n, 2) and y.shape == (n,)
+        model = prior.fit_regression(x, y)
+
+        # The MAP estimate for the regression coefficients is the mean of the
+        # final model:
+        beta = model.mean[-1]
+
+        # Compute the mean and variance after each observation
+        mean = model.mvt_mean(x, axis="t")
+        var = model.mvt_variance(x, axis="t")
+        ```
+
+        Note that if the prior shape if small enough (< 1), then the variance
+        may be negative for the first observation or two.
+
+        Args:
+            x: (n, p) array of predictor variables.
+            y: (n,) array of response variables.
+
+        Returns: NigParams object with n distributions, representing the model
+            parameters after observing each (x, y).
+        """
+        self._validate_x_arg(x)
+        n, p = x.shape
+        _check_array_shape("y", y, (n,))
+
+        if self.mean.shape[0] != 1:
+            msg = "can only fit regression model from a single prior"
+            raise ValueError(msg)
+
+        params = NigParams.from_priors(
+            p=p,
+            t=n,
+            cov=self.cov[0],
+            mean=self.mean[0],
+            shape=self.shape[0],
+            scale=self.scale[0],
+        )
+        for t, (xt, yt) in enumerate(zip(x, y, strict=True)):
+            assert xt.ndim == 1, xt.shape
+            assert np.isscalar(yt), yt
+            params[t:].update(xt.reshape(1, -1), np.atleast_1d(yt))
+
+        return params

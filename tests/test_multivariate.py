@@ -209,7 +209,7 @@ class Test1DChangeDetection(BocdTester):
         return multivariate_bcdm(
             np.ones_like(y),
             y,
-            prior_cov=var0,
+            cov=var0,
             hazard=hazard,
         )
 
@@ -228,9 +228,9 @@ class Test2DChangeDetection(BocdTester):
             np.c_[np.ones_like(x), x],
             y,
             hazard=0.02,
-            prior_cov=1e6,
-            prior_shape=1e-3,
-            prior_scale=1e-6,
+            cov=1e6,
+            shape=1e-3,
+            scale=1e-6,
         )
 
 
@@ -256,5 +256,5 @@ class Test3DChangeDetection(BocdTester):
             x,
             np.asarray(data),
             hazard=hazard,
-            prior_mean=np.full_like(w, 0.5),
+            mean=np.full_like(w, 0.5),
         )
