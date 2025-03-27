@@ -74,6 +74,9 @@ def _inv_2x2_positive_definite(a: np.ndarray) -> np.ndarray:
 def _inv_cholesky(a: np.ndarray) -> np.ndarray:
     """Invert a positive-definite matrix using the Cholesky decomposition.
     Assumes a is a 3D array of square matrices across the first axis."""
+    if not np.allclose(a, matrix_transpose(a)):
+        raise PositiveDefiniteError()
+
     uinv = np.empty_like(a)
     for i in range(len(a)):
         # u is the upper triangular matrix of the Cholesky decomposition
