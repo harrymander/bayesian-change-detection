@@ -1,4 +1,5 @@
-from itertools import chain, pairwise
+from collections.abc import Callable
+from itertools import batched, chain, pairwise
 from pathlib import Path
 
 import click
@@ -14,6 +15,7 @@ from bayesian_change_detection.multivariate import (
 )
 
 FIGSIZE = (20, 10)
+DATA_DIR = Path(__file__).parent / "data"
 
 
 def plot_posterior_probabilities(
@@ -37,6 +39,7 @@ def plot_posterior_probabilities(
             zero_row = zeros[0]
             posterior = posterior[:zero_row]
 
+    ax.set_ylabel("Run length")
     kwargs = {
         "aspect": "auto",
         "origin": "lower",
@@ -137,6 +140,39 @@ def random_piecewise(rng: np.random.Generator):
     plt.colorbar(im, ax=axes)
 
 
+def well_data() -> None:
+    # Format the data.
+    y = np.loadtxt(DATA_DIR / "well-data.txt", comments="#")
+    assert y.ndim == 1
+    x = np.ones_like(y)
+
+    prior = NigParams.from_priors(1, mean=1e5, scale=1e4)
+    hazard = 0.01
+    results = multivariate_bcdm(x, y, hazard, prior)
+
+    axes = plt.subplots(2, 1, figsize=FIGSIZE, sharex=True)[1]
+    axes[0].plot(y)
+    axes[0].set_ylabel("Nuclear magnetic response")
+    axes[-1].set_xlabel("Time")
+    plot_posterior_probabilities(axes[1], results.log_posterior)
+
+    changepoints = results.changepoints()
+    for cp in changepoints:
+        for ax in axes:
+            ax.axvline(cp, color="black", linewidth=0.5, linestyle="--")
+
+    for segment in batched(chain((0,), changepoints, (len(x) - 1,)), 2):
+        if len(segment) < 2:
+            break
+        for ax in axes:
+            ax.axvspan(
+                *segment,
+                facecolor="yellow",
+                edgecolor="none",
+                alpha=0.3,
+            )
+
+
 def predict_segment(
     params: NigParams,
     x: np.ndarray,
@@ -175,9 +211,10 @@ def plot_segment_predictions(
         ax.plot(tseg, pmean - sd, color="green", linestyle="--")
 
 
-EXAMPLES = {
+EXAMPLES: dict[str, Callable[[np.random.Generator], None]] = {
     "random": random_piecewise,
     "triangular": triangular,
+    "well": lambda _: well_data(),
 }
 
 
