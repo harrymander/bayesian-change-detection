@@ -86,13 +86,6 @@ def multivariate_bcdm(
     elif prior.mean.shape[0] != 1:
         raise ValueError("prior must have a single distribution")
 
-    # FIXME(?) - the NigParams.from_priors constructor inverts the covariance.
-    # If it is 3x3 or larger it will check for positive-definiteness before
-    # inverting, otherwise it will not give an error as long as the matrix is
-    # non-singular. So we check here...
-    if np.any(np.linalg.eigvals(prior.cov[0]) <= 0):
-        raise ValueError("covariance matrix must be positive-definite")
-
     worker = _MultivariateBcdmWorker(x, y, prior=prior, hazard=hazard)
     return worker.fit()
 

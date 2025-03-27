@@ -10,7 +10,23 @@ except ImportError:
         return np.swapaxes(a, -1, -2)
 
 
+class PositiveDefiniteError(ValueError):
+    def __init__(self):
+        super().__init__("at least one matrix is not positive-definite")
+
+
 def inv_positive_definite(a: np.ndarray) -> np.ndarray:
+    """
+    Inverts a positive definite matrix or array of matrices.
+
+    Args:
+        a: (m, m) or (n, m, m) array of positive-definite matrices.
+
+    Returns: (m, m) or (n, m, m) array of inverses of matrix/matrices in a.
+
+    Raises: PositiveDefiniteError if any of the matrices are not
+        positive-definite.
+    """
     squeeze = False
     if a.ndim == 2:
         squeeze = True
@@ -23,21 +39,33 @@ def inv_positive_definite(a: np.ndarray) -> np.ndarray:
         raise ValueError("a must be square")
 
     if m == 1:
+        if np.any(a <= 0):
+            raise PositiveDefiniteError()
         inv = 1 / a
     elif m == 2:
-        inv = _inv_2x2(a)
+        inv = _inv_2x2_positive_definite(a)
     else:
         inv = _inv_cholesky(a)
 
     return inv[0] if squeeze else inv
 
 
-def _inv_2x2(a: np.ndarray) -> np.ndarray:
+def _inv_2x2_positive_definite(a: np.ndarray) -> np.ndarray:
     """Inverts t arrays stacked along the first dimension such that a has shape
     (t, m, m)."""
+
+    # Check leading principals are >0
+    if np.any(a[:, 0, 0] <= 0):
+        raise PositiveDefiniteError()
+
+    # Check matrices are symmetric
+    if not np.isclose(a[:, 0, 1], a[:, 1, 0]).all():
+        raise PositiveDefiniteError()
+
+    # Check determinants are >0
     dets = a[:, 0, 0] * a[:, 1, 1] - a[:, 0, 1] * a[:, 1, 0]
-    if np.any(dets == 0):
-        raise ValueError("at least one matrix is singular")
+    if np.any(dets <= 0):
+        raise PositiveDefiniteError()
 
     flat = np.vstack((a[:, 1, 1], -a[:, 0, 1], -a[:, 1, 0], a[:, 0, 0])) / dets
     return flat.T.reshape(-1, 2, 2)
@@ -52,12 +80,12 @@ def _inv_cholesky(a: np.ndarray) -> np.ndarray:
         # a[i] = u.T @ u
         u, info = lapack.dpotrf(a[i])
         if info != 0:
-            raise ValueError("matrix is not positive-definite")
+            raise PositiveDefiniteError()
 
         # dpotri only returns the upper triangular part of the inverse
         uinv[i], info = lapack.dpotri(u)
         if info != 0:
-            raise ValueError("matrix is singular")
+            raise PositiveDefiniteError()
 
     # Not sure if lapack sets the lower diagonal to zero or if it leaves it
     # unset, so explicitly set the lower diagonal indices, which seems to be
