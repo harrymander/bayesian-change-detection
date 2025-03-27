@@ -83,8 +83,17 @@ def multivariate_bcdm(
         raise ValueError(
             "cannot pass prior keyword arguments if a prior object is passed"
         )
-    elif prior.mean.shape[0] != 1:
-        raise ValueError("prior must have a single distribution")
+    else:
+        t = prior.mean.shape[0]
+        if t != 1:
+            raise ValueError(f"prior must have a single distribution, got {t}")
+
+        prior_p = prior.mean.shape[1]
+        if prior_p != p:
+            raise ValueError(
+                f"dimensionality of prior ({prior_p}) does not match "
+                f"that of the data ({p})"
+            )
 
     worker = _MultivariateBcdmWorker(x, y, prior=prior, hazard=hazard)
     return worker.fit()
