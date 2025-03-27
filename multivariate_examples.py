@@ -1,4 +1,3 @@
-from collections.abc import Callable
 from itertools import batched, chain, pairwise
 from pathlib import Path
 
@@ -50,8 +49,9 @@ def plot_posterior_probabilities(
     return posterior, ax.imshow(posterior, **kwargs)  # type: ignore
 
 
-def triangular(rng: np.random.Generator):
+def triangular() -> None:
     """Simple example with triangular wave data."""
+    rng = np.random.default_rng(42)
 
     samples = 500
 
@@ -106,7 +106,9 @@ def generate_random_piecewise_data(rng, varx, mean0, var0, T, cp_prob):
     return data, cps
 
 
-def random_piecewise(rng: np.random.Generator):
+def random_piecewise() -> None:
+    rng = np.random.default_rng(42)
+
     T = 500  # Number of observations.
     hazard = 1 / 100  # Constant prior on changepoint probability.
     mean0 = 0  # The prior mean on the mean parameter.
@@ -211,10 +213,10 @@ def plot_segment_predictions(
         ax.plot(tseg, pmean - sd, color="green", linestyle="--")
 
 
-EXAMPLES: dict[str, Callable[[np.random.Generator], None]] = {
+EXAMPLES = {
     "random": random_piecewise,
     "triangular": triangular,
-    "well": lambda _: well_data(),
+    "well": well_data,
 }
 
 
@@ -239,7 +241,7 @@ def main(examples, output: Path | None) -> None:
         examples = EXAMPLES.keys()
     for example in examples:
         click.echo(f"Running '{example}' example")
-        EXAMPLES[example](np.random.default_rng(42))
+        EXAMPLES[example]()
 
     if output:
         plt.savefig(output, format=None if output.suffix else "png")
