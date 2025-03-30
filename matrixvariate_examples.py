@@ -1,5 +1,3 @@
-#!/usr/bin/env python3
-
 """Examples of the Bayesian model-based change detection model in action
 
 This script runs a set of examples that demonstrate the Bayesian change
