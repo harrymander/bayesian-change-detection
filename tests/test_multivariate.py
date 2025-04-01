@@ -138,18 +138,18 @@ class TestNigParams:
         assert_allclose(batch_logpdf, iterative_logpdf)
 
 
-class BocdTester(ABC):
+class BcdmTester(ABC):
     results: MultivariateBcdmResults
 
     @classmethod
     @abstractmethod
-    def run_bocd(cls) -> MultivariateBcdmResults:
+    def run_bcdm(cls) -> MultivariateBcdmResults:
         pass
 
     @pytest.fixture(scope="class", autouse=True)
     @classmethod
-    def _setup_bocd(cls) -> None:
-        cls.results = cls.run_bocd()
+    def _setup_bcdm(cls) -> None:
+        cls.results = cls.run_bcdm()
 
     def test_log_posterior_snapshot(self, ndarray_snapshot: NDArraySnapshot):
         log_posterior = self.results.log_posterior
@@ -186,9 +186,9 @@ class BocdTester(ABC):
         assert changepoints == sorted(changepoints)
 
 
-class Test1DChangeDetection(BocdTester):
+class Test1DChangeDetection(BcdmTester):
     @classmethod
-    def run_bocd(cls) -> MultivariateBcdmResults:
+    def run_bcdm(cls) -> MultivariateBcdmResults:
         samples = 100
         hazard = 0.1  # Constant prior on changepoint probability.
         mean0 = 0.0  # The prior mean on the mean parameter.
@@ -214,9 +214,9 @@ class Test1DChangeDetection(BocdTester):
         )
 
 
-class Test2DChangeDetection(BocdTester):
+class Test2DChangeDetection(BcdmTester):
     @classmethod
-    def run_bocd(cls) -> MultivariateBcdmResults:
+    def run_bcdm(cls) -> MultivariateBcdmResults:
         rng = np.random.default_rng(42)
 
         # Create input and outputs.
@@ -234,9 +234,9 @@ class Test2DChangeDetection(BocdTester):
         )
 
 
-class Test3DChangeDetection(BocdTester):
+class Test3DChangeDetection(BcdmTester):
     @classmethod
-    def run_bocd(cls) -> MultivariateBcdmResults:
+    def run_bcdm(cls) -> MultivariateBcdmResults:
         rng = np.random.default_rng(42)
 
         # Generate random piecewise data
