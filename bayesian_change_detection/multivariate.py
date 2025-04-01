@@ -65,6 +65,9 @@ def multivariate_bcdm(
         hazard: Hazard rate.
         prior: NIG prior parameters
         **prior_kwargs: Parameters for NIG prior if prior is None.
+
+    Returns:
+        Change detection results.
     """
     if x.ndim == 1:
         n = len(x)
@@ -115,12 +118,12 @@ class MultivariateBcdmResults:
     E.g. for 4 samples at time points `a`, `b`, `c`, and `d`, returns a
     matrix:
 
-      ```
-      a0 b0 c0 d0
-      -  b1 c1 d1
-      -  -  c2 d2
-      -  -  -  d3
-      ```
+    ```
+    a0 b0 c0 d0
+    -  b1 c1 d1
+    -  -  c2 d2
+    -  -  -  d3
+    ```
 
     where `c2` is the log probability of the point at time `c` belonging to
     a segment that began 2 time points before, for example. The elements on
@@ -130,8 +133,12 @@ class MultivariateBcdmResults:
     """
 
     def changepoints(self) -> list[int]:
-        """Compute indices of changepoints in ascending order. Returned list
-        does not include first and last indices, which may be changepoints."""
+        """Compute indices of changepoints in ascending order.
+
+        Returns:
+            List of (0-indexed) changepoint indices. Does not include first and
+            last indices, which may be changepoints.
+        """
         changepoints: list[int] = []
         run_length = self.log_posterior[:, -1].argmax()
         i = len(self.log_posterior) - 1 - run_length
@@ -218,7 +225,7 @@ class NigParams:
     Parameters of t independent p-dimensional normal-inverse-gamma
     distributions.
 
-    Recommended to use from_priors to initialise, rather than constructing
+    Recommended to use `from_priors` to initialise, rather than constructing
     directly.
     """
 
@@ -453,7 +460,8 @@ class NigParams:
 
         where V(i) is the (p, p) covariance matrix of the i-th distribution.
 
-        Returns: (t, n) array
+        Returns:
+            (t, n) array
         """
         res = np.einsum("tij,nj,ni->tn", self.cov, x, x)
         assert res.shape == (self.mean.shape[0], len(x))
@@ -532,8 +540,9 @@ class NigParams:
                 observations. If 't', returns the expected value of each
                 observation given the corresponding model index.
 
-        Returns: array of expected values; has shape (t, n) if axis == 'n' or
-            shape (t,) if axis == 't'.
+        Returns:
+            Array of expected values; has shape (t, n) if `axis == 'n'` or
+            shape (t,) if `axis == 't'`.
         """
         if axis not in "nt":
             raise ValueError("axis must be 'n' or 't'")
@@ -560,7 +569,7 @@ class NigParams:
         obtained from mvt_logpdf. The variance of a t-distribution with v
         degrees of freedom and Σ shape parameter is
 
-          v * Σ / (v - 2)
+        v * Σ / (v - 2)
 
         The degrees of freedom are 2*self.shape; Σ is equivalent to the term in
         Eq. 26.
@@ -574,8 +583,9 @@ class NigParams:
                 returns the variance of each observation given the
                 corresponding model index.
 
-        Returns: array of variances; has shape (t, n) if axis == 'n' or shape
-            (t,) if axis == 't'.
+        Returns:
+            Array of variances; has shape (t, n) if `axis == 'n'` or shape
+            (t,) if `axis == 't'`.
         """
         if axis not in "nt":
             raise ValueError("axis must be 'n' or 't'")
@@ -629,7 +639,8 @@ class NigParams:
             x: (n, p) array of predictor variables.
             y: (n,) array of response variables.
 
-        Returns: NigParams object with n distributions, representing the model
+        Returns:
+            NigParams object with n distributions, representing the model
             parameters after observing each (x, y).
         """
         self._validate_x_arg(x)

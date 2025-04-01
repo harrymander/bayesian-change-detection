@@ -31,7 +31,7 @@ _LOG_2PI = np.log(2 * np.pi)
 
 
 class MatrixVariateNormalInvGamma:
-    """Matrix-variate normal, matrix-variate inverse gamma distribution
+    """Matrix-variate normal, matrix-variate inverse gamma distribution.
 
     The matrix-variate normal, inverse-gamma distribution is the conjugate
     prior for a matrix-variate normal distribution. As a result the
@@ -129,7 +129,6 @@ class MatrixVariateNormalInvGamma:
         in order to reflect this new knowledge. Performing updates allows the
         sufficient statistics to summarise all information contained in the
         data observed so far.
-
         """
 
         # (Equation 5a, b)
@@ -186,7 +185,6 @@ class MatrixVariateNormalInvGamma:
         statistics. As a result the posterior parameters are a function of the
         sufficient statistics. This is a consequence of the conjugacy of the
         matrix-variate Gaussian-inverse-Gamma distribution.
-
         """
 
         m = self.m
@@ -289,38 +287,30 @@ class MatrixVariateBcdm:
     """Bayesian change detection model.
 
     Args:
-        numpred (int): Number of predictor variables, M
-                       (dimensionality of input).
-        numresp (int): Number of response variables, N
-                       (dimensionality of output).
-        mu (numpy.array): (M x N) location parameters of the prior
-                          distribution.
-        omega (numpy.array): (M x M) scale parameters of the prior
-                             distribution.
-        sigma (numpy.array): (N x N) dispersion parameters of the prior
-                             distribution.
-        eta (float): shape parameter of the prior distribution.
-        hazardfunc (float): Relative chance of a new segments being generated.
-                            ``hazardfunc`` is a value between 0 and 1. Segments
-                            are MORE likely to be created with values closer to
-                            zero. Segments are LESS likely to form with values
-                            closer to 1. Alternatively, hazardfunc can be set
-                            to an executable hazard function. The hazard
-                            function must accept non-negative integers and
-                            return non-negative floating-point numbers.
-        minprob (float): Minimum probability required for a
-                         hypothesis. Hypotheses with insignificant support
-                         (probabilities below this value) will be pruned.
-        maxhypot (int): Maximum number of segmentation hypotheses to
-                        consider. After each update, pruning will take place to
-                        limit the number of hypotheses. If set to ``None``, no
-                        pruning will NOT take place after updates, however,
-                        pruning can be initiated manually by calling
-                        :py:meth:`.trim`.
+        numpred: Number of predictor variables, M (dimensionality of input).
+        numresp: Number of response variables, N (dimensionality of output).
+        mu: (M x N) location parameters of the prior distribution.
+        omega: (M x M) scale parameters of the prior distribution.
+        sigma: (N x N) dispersion parameters of the prior distribution.
+        eta: shape parameter of the prior distribution.
+        hazardfunc: Relative chance of a new segments being generated.
+            ``hazardfunc`` is a value between 0 and 1. Segments are MORE likely
+            to be created with values closer to zero. Segments are LESS likely
+            to form with values closer to 1. Alternatively, hazardfunc can be
+            set to an executable hazard function. The hazard function must
+            accept non-negative integers and return non-negative floating-point
+            numbers.
+        minprob: Minimum probability required for a hypothesis. Hypotheses with
+            insignificant support (probabilities below this value) will be
+            pruned.
+        maxhypot: Maximum number of segmentation hypotheses to consider. After
+            each update, pruning will take place to limit the number of
+            hypotheses. If set to ``None``, no pruning will NOT take place
+            after updates, however, pruning can be initiated manually by
+            calling `trim_hypotheses`.
 
     Raises:
         ValueError: If the any of the inputs are invalid.
-
     """
 
     def _validate_array(self, name: str, exp: Sequence[int]):
@@ -568,12 +558,10 @@ class MatrixVariateBcdm:
         class with ``maxhypot`` set to ``None``.
 
         Args:
-            X (numpy.array): Observed (k x M) or (M) input data
-                             (predictor variable).
-            Y (numpy.array): Observed (k x N) or (N) output data
-                             (response variable).
-            basis (callable | None): Basis function. If None, defaults to the
-                                     identity function.
+            X: Observed (k x M) or (M) input data (predictor variable).
+            Y: Observed (k x N) or (N) output data (response variable).
+            basis: Basis function. If `None`, defaults to the identity
+                function.
         """
 
         basis = basis or _identity_basis
@@ -665,12 +653,11 @@ class MatrixVariateBcdm:
         limiting the number of hypotheses maintained. This method limits the
         number of hypotheses maintained by the model by:
 
-            1) Removing any hypotheses with a support (probability) less than
-               ``minprob``.
+        1. Removing any hypotheses with a support (probability) less than
+           ``minprob``.
 
-            2) Preserving the first ``maxhypot`` likely hypotheses and
-               discarding the rest.
-
+        2. Preserving the first ``maxhypot`` likely hypotheses and discarding
+           the rest.
         """
 
         # Skip pruning if less hypotheses exist than the maximum allowed.
@@ -723,8 +710,8 @@ class MatrixVariateBcdm:
 
     def segmentations(self) -> list[int]:
         """
-        Calculate the most likely sequence segmentation as a list of
-        integers. Each integer in the list marks where a segment begins.
+        Calculate the most likely sequence segmentation as a list of integers.
+        Each integer in the list marks where a segment begins.
         """
         # The most likely hypotheses are tracked. Recover the most likely
         # segment boundaries by performing a back-trace.

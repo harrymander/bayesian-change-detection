@@ -1,3 +1,5 @@
+"""Linear algebra helpers."""
+
 import numpy as np
 from scipy.linalg import lapack
 
@@ -22,10 +24,12 @@ def inv_positive_definite(a: np.ndarray) -> np.ndarray:
     Args:
         a: (m, m) or (n, m, m) array of positive-definite matrices.
 
-    Returns: (m, m) or (n, m, m) array of inverses of matrix/matrices in a.
+    Returns:
+        (m, m) or (n, m, m) array of inverses of matrix/matrices in a.
 
-    Raises: PositiveDefiniteError if any of the matrices are not
-        positive-definite.
+    Raises:
+        PositiveDefiniteError: If any of the matrices are not
+            positive-definite.
     """
     squeeze = False
     if a.ndim == 2:
