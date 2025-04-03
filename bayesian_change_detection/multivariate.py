@@ -135,6 +135,20 @@ class MultivariateBcdmResults:
     of points observed so far).
     """
 
+    log_predictive: np.ndarray
+    """
+    `(n, n)` array of log probabilities of the predictive distributions at each
+    time point.
+
+    Has a similar structure to `log_posterior`, i.e., an upper-triangular
+    matrix where the columns corresponds to the time points. In each column,
+    the elements are the log density of the predictive distribution of the
+    model given the elements in the segment up to that timepoint. E.g., the
+    element in row `i` and column `j` is the log predictive probability of the
+    `j`th observation given the model for the segment containing the `i`
+    previous observations.
+    """
+
     def changepoints(self) -> list[int]:
         """Compute indices of changepoints in ascending order.
 
@@ -172,6 +186,7 @@ class _MultivariateBcdmWorker:
         self.log_1mhazard = np.log1p(-hazard)
         self.prev_log_joint = np.array([0.0])
         self.log_joint = np.full((self.n, self.n), -np.inf)
+        self.log_pred = self.log_joint.copy()
 
     def _add_new_hypothesis(self, t: int) -> None:
         self.params.mean[t] = self.prior.mean[0]
@@ -190,7 +205,7 @@ class _MultivariateBcdmWorker:
 
     def fit(self) -> MultivariateBcdmResults:
         for t, (x, y) in enumerate(zip(self.x, self.y, strict=True)):
-            self._step(t, x, y)
+            self._update(t, x, y)
 
         return MultivariateBcdmResults(
             mean=self.params.mean,
@@ -198,9 +213,10 @@ class _MultivariateBcdmWorker:
             shape=self.params.shape,
             scale=self.params.scale,
             log_posterior=self._log_posterior(),
+            log_predictive=self.log_pred.T,
         )
 
-    def _step(self, t: int, x: np.ndarray, y: float) -> None:
+    def _update(self, t: int, x: np.ndarray, y: float) -> None:
         self._add_new_hypothesis(t)
         log_pred = self.params[: t + 1].mvt_logpdf(
             x.reshape(1, -1),
@@ -218,6 +234,7 @@ class _MultivariateBcdmWorker:
             log_pred[:-1][::-1] + self.log_1mhazard + self.prev_log_joint
         )
 
+        self.log_pred[t, : t + 1] = log_pred[::-1]
         self.prev_log_joint = log_joint
         self.params[: t + 1].update(x.reshape(1, -1), np.asarray((y,)))
 

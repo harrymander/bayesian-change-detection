@@ -21,15 +21,17 @@ def plot_posterior_probabilities(
     ax: Axes,
     log_posterior: np.ndarray,
     *,
-    xlim=None,
+    x: np.ndarray | None = None,
+    use_x_for_y: bool = True,
     trim_zero: bool = True,
+    inset_scale: bool = True,
     **kwargs,
 ) -> tuple[np.ndarray, AxesImage]:
     samples = len(log_posterior)
-    if xlim is None:
-        x0, x1 = (0, samples - 1)
-    else:
-        x0, x1 = xlim
+    if x is None:
+        x = np.arange(samples)
+    elif x.shape != (samples,):
+        raise ValueError(f"invalid shape for x: must be ({samples},)")
 
     posterior = np.exp(log_posterior)
     if trim_zero:
@@ -38,13 +40,21 @@ def plot_posterior_probabilities(
             zero_row = zeros[0]
             posterior = posterior[:zero_row]
 
+    idx_y_end = len(posterior) - 1
+    if use_x_for_y:
+        y0 = x[0]
+        y1 = x[idx_y_end]
+    else:
+        y0 = 0
+        y1 = idx_y_end
+
     ax.set_ylabel("Run length")
     kwargs = {
         "aspect": "auto",
         "origin": "lower",
         "cmap": "gray_r",
         "norm": LogNorm(vmin=1e-4, vmax=1),
-        "extent": (x0, x1, 0, len(posterior)),
+        "extent": (x[0], x[-1], y0, y1),
     } | kwargs
     return posterior, ax.imshow(posterior, **kwargs)  # type: ignore
 
@@ -70,12 +80,29 @@ def triangular() -> None:
     )
     res = multivariate_bcdm(X, Y, prior=prior, hazard=0.02)
 
-    axes = plt.subplots(2, sharex=True, figsize=FIGSIZE)[1]
+    axes = plt.subplots(3, sharex=True, figsize=FIGSIZE)[1]
     axes[0].plot(t, Y, "-o")
     posterior, im = plot_posterior_probabilities(
-        axes[1], res.log_posterior, xlim=t[[0, -1]]
+        axes[1],
+        res.log_posterior,
+        x=t,
     )
-    axes[1].plot(t, posterior.argmax(axis=0), color="green")
+    axes[1].plot(t, t[posterior.argmax(axis=0)], color="green")
+
+    plot_posterior_probabilities(
+        axes[2],
+        res.log_predictive,
+        x=t,
+        trim_zero=False,
+    )
+    axes[2].plot(
+        t,
+        t[res.log_predictive.argmax(axis=0)],
+        color="orange",
+        linewidth=0.8,
+        alpha=0.7,
+    )
+
     changepoints = res.changepoints()
     for ax in axes:
         for cp in true_changepoints:
@@ -122,7 +149,7 @@ def random_piecewise() -> None:
     prior = NigParams.from_priors(1, cov=var0)
     res = multivariate_bcdm(np.ones_like(y), y, prior=prior, hazard=hazard)
 
-    axes = plt.subplots(2, 1, sharex=True, figsize=FIGSIZE)[1]
+    axes = plt.subplots(3, 1, sharex=True, figsize=FIGSIZE)[1]
     axes[0].plot(data, "-o")
     changepoints = res.changepoints()
     for ax in axes:
@@ -137,6 +164,14 @@ def random_piecewise() -> None:
         res.log_posterior,
         trim_zero=False,
     )
+    plot_posterior_probabilities(axes[2], res.log_predictive, trim_zero=False)
+    axes[2].plot(
+        res.log_predictive.argmax(axis=0),
+        color="orange",
+        linewidth=0.8,
+        alpha=0.7,
+    )
+
     axes[1].plot(posterior.argmax(axis=0), color="green")
     plt.tight_layout()
     plt.colorbar(im, ax=axes)
