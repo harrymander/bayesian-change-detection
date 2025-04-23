@@ -21,7 +21,7 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from functools import partial
 from itertools import pairwise
-from typing import overload
+from typing import cast, overload
 
 import numpy as np
 import scipy
@@ -101,7 +101,7 @@ class MatrixVariateNormalInvGamma:
             np.isscalar(eta)
             and not np.isnan(eta)
             and np.isfinite(eta)
-            and eta > n - 1.0
+            and cast(float, eta) > n - 1.0
         ):
             raise ValueError(
                 "The shape parameter must be greater than one minus the "
