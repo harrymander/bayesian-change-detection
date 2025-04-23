@@ -6,7 +6,6 @@ import sys
 from tempfile import TemporaryDirectory
 
 import click
-import numpy as np
 
 # Import these to avoid additional overhead from imports in profiling
 import scipy.linalg.lapack
@@ -14,18 +13,7 @@ import scipy.special
 import scipy.stats  # noqa: F401
 from scipy.stats import multivariate_t  # noqa: F401
 
-from bayesian_change_detection import multivariate_bcdm
-
-
-def run_segmentation(x: np.ndarray, y: np.ndarray) -> None:
-    multivariate_bcdm(
-        x,
-        y,
-        hazard=0.02,
-        cov=1e6,
-        shape=1e-3,
-        scale=1e-6,
-    )
+from multivariate_examples import load_well_data, well_data_multivarate_bcdm
 
 
 def run_snakeviz(file: str) -> int:
@@ -45,21 +33,15 @@ def run_snakeviz(file: str) -> int:
 @click.option("--snakeviz", "-v", is_flag=True)
 @click.option("--output", "-o", type=click.Path(dir_okay=False, writable=True))
 def main(output: str | None, snakeviz: bool) -> None:
-    # Generate triangular data
-    rng = np.random.default_rng(42)
-    samples = 1000
-    X = np.linspace(0, 3 * 2 * np.pi, samples)
-    Y = -np.arcsin(np.sin(X)) * 2 / np.pi + 0.1 * rng.standard_normal(samples)
-    X = np.c_[np.ones_like(X), X]
-
     def run_profile(filename: str | None) -> None:
+        x, y = load_well_data()
         cProfile.runctx(
             "run_segmentation(x, y)",
             globals={},
             locals={
-                "run_segmentation": run_segmentation,
-                "x": X,
-                "y": Y,
+                "run_segmentation": well_data_multivarate_bcdm,
+                "x": x,
+                "y": y,
             },
             filename=filename,
         )

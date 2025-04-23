@@ -10,6 +10,7 @@ from matplotlib.image import AxesImage
 
 from bayesian_change_detection import multivariate_bcdm
 from bayesian_change_detection.multivariate import (
+    MultivariateBcdmResults,
     NigParams,
 )
 
@@ -177,15 +178,21 @@ def random_piecewise() -> None:
     plt.colorbar(im, ax=axes)
 
 
-def well_data() -> None:
-    # Format the data.
+def load_well_data() -> tuple[np.ndarray, np.ndarray]:
     y = np.loadtxt(DATA_DIR / "well-data.txt", comments="#")
     assert y.ndim == 1
-    x = np.ones_like(y)
+    return np.ones_like(y), y
 
-    prior = NigParams.from_priors(1, mean=1e5, scale=1e4)
-    hazard = 0.01
-    results = multivariate_bcdm(x, y, hazard, prior)
+
+def well_data_multivarate_bcdm(
+    x: np.ndarray, y: np.ndarray
+) -> MultivariateBcdmResults:
+    return multivariate_bcdm(x, y, hazard=0.01, mean=1e5, scale=1e4)
+
+
+def well_data() -> None:
+    x, y = load_well_data()
+    results = well_data_multivarate_bcdm(x, y)
 
     axes = plt.subplots(2, 1, figsize=FIGSIZE, sharex=True)[1]
     axes[0].plot(y)
