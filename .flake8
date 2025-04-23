@@ -1,3 +1,0 @@
-[flake8]
-extend-exclude = .venv
-extend-ignore = E203
