@@ -13,19 +13,29 @@ from bayesian_change_detection.linalg import (
 _LOG_2PI = np.log(2 * np.pi)
 
 
-def _check_array_shape(name: str, x, exp: Sequence[int]) -> np.ndarray:
+def _as_float_array(x) -> np.ndarray:
+    if isinstance(x, np.ndarray):
+        return x
+    return np.asarray(x, dtype=np.float64)
+
+
+def _check_array_shape(name: str, x: np.ndarray, exp: Sequence[int]) -> None:
     if x.dtype != np.float64:
         raise TypeError(f"{name} must be of type float64, got {x.dtype}")
 
     s = x.shape
     if s != exp:
         raise ValueError(f"invalid shape for {name}: expected {exp}, got {s}")
-    return x
+
+
+PriorMeanArg = float | Sequence[float] | np.ndarray
+PriorCovArg = float | Sequence[float] | Sequence[Sequence[float]] | np.ndarray
 
 
 class NigPriorKwargs(TypedDict, total=False):
-    mean: float | np.ndarray
-    cov: float | np.ndarray
+    # See NigPrior.from_priors for default values
+    mean: PriorMeanArg
+    cov: PriorCovArg
     shape: float
     scale: float
 
@@ -64,7 +74,8 @@ def multivariate_bcdm(
         y: (n,) response variables.
         hazard: Hazard rate.
         prior: NIG prior parameters
-        **prior_kwargs: Parameters for NIG prior if prior is None.
+        **prior_kwargs: Parameters for NIG prior if prior is None. See
+            `NigParams.from_priors` for details.
 
     Returns:
         Change detection results.
@@ -303,19 +314,41 @@ class NigParams:
         p: int,
         t: int = 1,
         *,
-        mean: float | np.ndarray = 0,
-        cov: float | np.ndarray = 1,
+        mean: PriorMeanArg = 0,
+        cov: PriorCovArg = 1,
         shape: float = 1,
         scale: float = 1,
     ):
+        """
+        Generate `t` independent `p`-dimensional NIG distributions.
+
+        Args:
+            p: Dimensionality of the NIG distributions.
+            t: Number of distributions.
+            mean: Mean of the distributions. Must be a scalar or (p,)
+                array-like.
+            cov: Covariance of the distributions. Can be either:
+                (1) A scalar, in which case the covariance is a diagonal
+                    matrix with that value on the diagonal.
+                (2) A (p,) array-like, in which case the covariance is a
+                    diagonal matrix with the diagonal being the array.
+                (3) A (p, p) array-like representing a positive-definite
+                    matrix.
+            shape: Shape parameter.
+            scale: Scale parameter.
+        """
         if np.isscalar(mean):
             mean = np.full(p, mean, dtype=np.float64)
         else:
+            mean = _as_float_array(mean)
             _check_array_shape("mean", mean, (p,))
 
         if np.isscalar(cov):
             cov = np.eye(p, dtype=np.float64) * cast(float, cov)
         else:
+            cov = _as_float_array(cov)
+            if cov.ndim == 1:
+                cov = np.diag(cov)
             _check_array_shape("cov", cov, (p, p))
 
         if shape <= 0:

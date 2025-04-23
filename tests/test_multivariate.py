@@ -268,3 +268,53 @@ def test_params_index_with_scalar_maintains_shape() -> None:
     assert param.prec.shape == (1, 5, 5)
     assert param.shape.shape == (1,)
     assert param.scale.shape == (1,)
+
+
+def assert_nig_params_equal(a: NigParams, b: NigParams):
+    __tracebackhide__ = True
+    for field in NigParams.__dataclass_fields__:
+        numpy.testing.assert_array_equal(
+            getattr(a, field),
+            getattr(b, field),
+            err_msg=f"NigParams field '{field}' not equal",
+        )
+
+
+def test_scalar_priors_equivalent_to_array() -> None:
+    array_priors = NigParams.from_priors(
+        3,
+        mean=np.full(3, 2.0),
+        cov=np.eye(3) * 3.0,
+    )
+    scalar_priors = NigParams.from_priors(3, mean=2, cov=3)
+    assert_nig_params_equal(array_priors, scalar_priors)
+
+
+def test_1d_cov_prior_equivalent_to_2d() -> None:
+    twod_array_priors = NigParams.from_priors(3, cov=np.eye(3) * 3.0)
+    oned_array_priors = NigParams.from_priors(3, cov=np.full(3, 3.0))
+    assert_nig_params_equal(twod_array_priors, oned_array_priors)
+
+
+def test_arraylike_priors_equivalent_to_array() -> None:
+    array_priors = NigParams.from_priors(
+        3,
+        mean=np.array([1.0, 2.0, 3.0]),
+        cov=np.diag([1.0, 2.0, 3.0]),
+    )
+    arraylike_priors = NigParams.from_priors(
+        3,
+        mean=[1, 2, 3],
+        cov=[
+            [1, 0, 0],
+            [0, 2, 0],
+            [0, 0, 3],
+        ],
+    )
+    assert_nig_params_equal(array_priors, arraylike_priors)
+
+
+def test_arraylike_1d_cov_prior_equivalent_to_2d() -> None:
+    array_priors = NigParams.from_priors(3, cov=np.diag([1.0, 2.0, 3.0]))
+    arraylike_priors = NigParams.from_priors(3, cov=[1, 2, 3])
+    assert_nig_params_equal(array_priors, arraylike_priors)
