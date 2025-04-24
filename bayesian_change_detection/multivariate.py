@@ -244,7 +244,7 @@ class _MultivariateBcdmWorker:
             mask = np.ones(log_joint.shape, dtype=bool)
 
         k = self.max_num_probs
-        if k and log_joint.size > k:
+        if k and mask.sum() > k:
             # Mask anything lower than the kth largest value
             mask[masked_argpartition(log_joint, mask, -k)[:-k]] = False
 
@@ -273,7 +273,7 @@ class _MultivariateBcdmWorker:
         # growth probabilities
         if t:
             log_joint[1:][mask] = (
-                log_pred[:-1][::-1]
+                log_pred[:-1][::-1][mask]
                 + self.log_1mhazard
                 + prev_log_joint_support
             )
