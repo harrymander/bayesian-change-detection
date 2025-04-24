@@ -252,33 +252,30 @@ class _MultivariateBcdmWorker:
         return mask
 
     def _update(self, t: int, x: np.ndarray, y: float) -> None:
-        log_pred = self.params[: t + 1].mvt_logpdf(
-            x.reshape(1, -1),
-            np.atleast_1d(y),
+        mask = self._prev_log_joint_mask()
+        if t:
+            mask = np.r_[mask, True]
+
+        log_pred = np.full(t + 1, -np.inf)
+        log_pred[mask] = (
+            self.params[: t + 1][mask]
+            .mvt_logpdf(
+                x.reshape(1, -1),
+                np.atleast_1d(y),
+            )
+            .ravel()
         )
-        assert log_pred.shape == (t + 1, 1)
-        log_pred = log_pred.ravel()
 
         # Compute the (t + 1) changepoint probabilities
-        mask = self._prev_log_joint_mask()
-        prev_log_joint_support = self.prev_log_joint[mask]
         log_joint = self.log_joint[t, : t + 1]
-        log_joint[0] = (  # reset probability
-            scipy.special.logsumexp(
-                log_pred[-1] + self.log_hazard + prev_log_joint_support
-            )
-            if prev_log_joint_support.size > 0
-            else -np.inf
+        log_joint[0] = scipy.special.logsumexp(
+            log_pred[-1] + self.log_hazard + self.prev_log_joint
         )
 
         # growth probabilities
-        if t:
-            log_joint[1:][mask] = (
-                log_pred[:-1][::-1][mask]
-                + self.log_1mhazard
-                + prev_log_joint_support
-            )
-            log_joint[1:][~mask] = -np.inf
+        log_joint[1:] = (
+            log_pred[:-1][::-1] + self.log_1mhazard + self.prev_log_joint
+        )
 
         self.log_pred[t, : t + 1] = log_pred[::-1]
         self.prev_log_joint = log_joint
