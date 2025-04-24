@@ -318,3 +318,8 @@ def test_arraylike_1d_cov_prior_equivalent_to_2d() -> None:
     array_priors = NigParams.from_priors(3, cov=np.diag([1.0, 2.0, 3.0]))
     arraylike_priors = NigParams.from_priors(3, cov=[1, 2, 3])
     assert_nig_params_equal(array_priors, arraylike_priors)
+
+
+def test_arraylike_prior_fails_if_not_convertible_to_float() -> None:
+    with pytest.raises(TypeError):
+        NigParams.from_priors(3, mean=[1, 2, 3j])  # type: ignore

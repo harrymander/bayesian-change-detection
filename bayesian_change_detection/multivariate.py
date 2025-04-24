@@ -15,8 +15,10 @@ _LOG_2PI = np.log(2 * np.pi)
 
 def _as_float_array(x) -> np.ndarray:
     if isinstance(x, np.ndarray):
+        # Do not coerce to float64, rather let _check_array_shape raise an
+        # error if wrong dtype. TODO: why not use astype(..., casting="safe")?
         return x
-    return np.asarray(x, dtype=np.float64)
+    return np.asarray(x).astype(np.float64, casting="safe")
 
 
 def _check_array_shape(name: str, x: np.ndarray, exp: Sequence[int]) -> None:
