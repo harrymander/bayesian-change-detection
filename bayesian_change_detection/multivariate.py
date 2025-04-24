@@ -238,11 +238,13 @@ class _MultivariateBcdmWorker:
     def _prev_log_joint_mask(self) -> np.ndarray:
         log_joint = self.prev_log_joint
         if np.isfinite(self.min_log_prob):
-            joint = log_joint - scipy.special.logsumexp(log_joint)
-            mask = joint >= self.min_log_prob
+            # Normalise the joint to get the posterior
+            log_posterior = log_joint - scipy.special.logsumexp(log_joint)
+            mask = log_posterior >= self.min_log_prob
         else:
             mask = np.ones(log_joint.shape, dtype=bool)
 
+        # Mask anything lower than the kth largest value
         k = self.max_num_probs
         if k and mask.sum() > k:
             # Mask anything lower than the kth largest value
