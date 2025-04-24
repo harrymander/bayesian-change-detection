@@ -247,7 +247,6 @@ class _MultivariateBcdmWorker:
         # Mask anything lower than the kth largest value
         k = self.max_num_probs
         if k and mask.sum() > k:
-            # Mask anything lower than the kth largest value
             mask[masked_argpartition(log_joint, mask, -k)[:-k]] = False
 
         return mask
