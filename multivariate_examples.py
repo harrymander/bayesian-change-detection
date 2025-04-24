@@ -207,14 +207,14 @@ def load_well_data() -> tuple[np.ndarray, np.ndarray]:
 
 
 def well_data_multivarate_bcdm(
-    x: np.ndarray, y: np.ndarray
+    x: np.ndarray, y: np.ndarray, **kwargs
 ) -> MultivariateBcdmResults:
-    return multivariate_bcdm(x, y, hazard=0.01, mean=1e5, scale=1e4)
+    return multivariate_bcdm(x, y, hazard=0.01, mean=1e5, scale=1e4, **kwargs)
 
 
 def well_data() -> None:
     x, y = load_well_data()
-    results = well_data_multivarate_bcdm(x, y)
+    results = well_data_multivarate_bcdm(x, y, max_num_probs=20, min_prob=1e-6)
 
     axes = plt.subplots(2, 1, figsize=FIGSIZE, sharex=True)[1]
     axes[0].plot(y)

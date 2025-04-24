@@ -5,6 +5,7 @@ from typing import Literal, TypedDict, Unpack, cast, overload
 import numpy as np
 import scipy
 
+from bayesian_change_detection.array_utils import masked_argpartition
 from bayesian_change_detection.linalg import (
     inv_positive_definite,
     matrix_transpose,
@@ -66,6 +67,8 @@ def multivariate_bcdm(
     y: np.ndarray,
     hazard: float,
     prior: "None | NigPrior" = None,
+    min_prob: float = 0,
+    max_num_probs: int | None = None,
     **prior_kwargs: Unpack[NigPriorKwargs],
 ) -> "MultivariateBcdmResults":
     """
@@ -82,6 +85,11 @@ def multivariate_bcdm(
     Returns:
         Change detection results.
     """
+    if not (0 <= min_prob < 1):
+        raise ValueError("min_prob must be in [0, 1)")
+    if max_num_probs is not None and max_num_probs <= 0:
+        raise ValueError("max_num_probs must be > 0")
+
     if x.ndim == 1:
         n = len(x)
         p = 1
@@ -105,7 +113,14 @@ def multivariate_bcdm(
     else:
         prior = NigPrior(p, **prior_kwargs)
 
-    worker = _MultivariateBcdmWorker(x, y, prior=prior, hazard=hazard)
+    worker = _MultivariateBcdmWorker(
+        x,
+        y,
+        min_prob=min_prob,
+        max_num_probs=max_num_probs,
+        prior=prior,
+        hazard=hazard,
+    )
     return worker.fit()
 
 
@@ -191,6 +206,8 @@ class _MultivariateBcdmWorker:
         *,
         prior: "NigPrior",
         hazard: float,
+        min_prob: float,
+        max_num_probs: int | None,
     ):
         # Assumes parameters have been validated
         self.n, self.p = x.shape
@@ -202,6 +219,8 @@ class _MultivariateBcdmWorker:
         self.prev_log_joint = np.array([0.0])
         self.log_joint = np.full((self.n, self.n), -np.inf)
         self.log_pred = self.log_joint.copy()
+        self.min_log_prob: float = np.log(min_prob) if min_prob else -np.inf
+        self.max_num_probs = max_num_probs or 0
 
     def fit(self) -> MultivariateBcdmResults:
         for t, (x, y) in enumerate(zip(self.x, self.y, strict=True)):
@@ -216,6 +235,21 @@ class _MultivariateBcdmWorker:
             log_predictive=self.log_pred.T,
         )
 
+    def _prev_log_joint_mask(self) -> np.ndarray:
+        log_joint = self.prev_log_joint
+        if np.isfinite(self.min_log_prob):
+            joint = log_joint - scipy.special.logsumexp(log_joint)
+            mask = joint >= self.min_log_prob
+        else:
+            mask = np.ones(log_joint.shape, dtype=bool)
+
+        k = self.max_num_probs
+        if k and log_joint.size > k:
+            # Mask anything lower than the kth largest value
+            mask[masked_argpartition(log_joint, mask, -k)[:-k]] = False
+
+        return mask
+
     def _update(self, t: int, x: np.ndarray, y: float) -> None:
         log_pred = self.params[: t + 1].mvt_logpdf(
             x.reshape(1, -1),
@@ -225,13 +259,25 @@ class _MultivariateBcdmWorker:
         log_pred = log_pred.ravel()
 
         # Compute the (t + 1) changepoint probabilities
+        mask = self._prev_log_joint_mask()
+        prev_log_joint_support = self.prev_log_joint[mask]
         log_joint = self.log_joint[t, : t + 1]
-        log_joint[0] = scipy.special.logsumexp(  # reset probability
-            log_pred[-1] + self.log_hazard + self.prev_log_joint
+        log_joint[0] = (  # reset probability
+            scipy.special.logsumexp(
+                log_pred[-1] + self.log_hazard + prev_log_joint_support
+            )
+            if prev_log_joint_support.size > 0
+            else -np.inf
         )
-        log_joint[1:] = (  # growth probabilities
-            log_pred[:-1][::-1] + self.log_1mhazard + self.prev_log_joint
-        )
+
+        # growth probabilities
+        if t:
+            log_joint[1:][mask] = (
+                log_pred[:-1][::-1]
+                + self.log_1mhazard
+                + prev_log_joint_support
+            )
+            log_joint[1:][~mask] = -np.inf
 
         self.log_pred[t, : t + 1] = log_pred[::-1]
         self.prev_log_joint = log_joint
