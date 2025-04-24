@@ -3,6 +3,7 @@ import os.path
 import shutil
 import subprocess
 import sys
+from functools import partial
 from tempfile import TemporaryDirectory
 
 import click
@@ -13,7 +14,10 @@ import scipy.special
 import scipy.stats  # noqa: F401
 from scipy.stats import multivariate_t  # noqa: F401
 
-from multivariate_examples import load_well_data, well_data_multivarate_bcdm
+from multivariate_examples import (
+    load_well_data,
+    well_data_multivarate_bcdm,
+)
 
 
 def run_snakeviz(file: str) -> int:
@@ -32,14 +36,23 @@ def run_snakeviz(file: str) -> int:
 @click.command()
 @click.option("--snakeviz", "-v", is_flag=True)
 @click.option("--output", "-o", type=click.Path(dir_okay=False, writable=True))
-def main(output: str | None, snakeviz: bool) -> None:
+@click.option("--trim-support", "--trim", is_flag=True)
+def main(output: str | None, snakeviz: bool, trim_support: bool) -> None:
     def run_profile(filename: str | None) -> None:
         x, y = load_well_data()
+
+        run_segmentation = (
+            partial(
+                well_data_multivarate_bcdm, max_num_probs=20, min_prob=1e-6
+            )
+            if trim_support
+            else well_data_multivarate_bcdm
+        )
         cProfile.runctx(
             "run_segmentation(x, y)",
             globals={},
             locals={
-                "run_segmentation": well_data_multivarate_bcdm,
+                "run_segmentation": run_segmentation,
                 "x": x,
                 "y": y,
             },
