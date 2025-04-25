@@ -6,7 +6,6 @@ import numpy as np
 import scipy
 
 from bayesian_change_detection.array_utils import (
-    logsumexp_sparse,
     masked_argpartition,
 )
 from bayesian_change_detection.linalg import (
@@ -244,17 +243,17 @@ class _MultivariateBcdmWorker:
 
     def _prev_log_joint_mask(self) -> np.ndarray:
         log_joint = self.prev_log_joint
-        if np.isfinite(self.min_log_prob):
-            # Normalise the joint to get the posterior
-            log_posterior = log_joint - logsumexp_sparse(log_joint)
-            mask = log_posterior >= self.min_log_prob
-        else:
-            mask = np.ones(log_joint.shape, dtype=bool)
+        mask = np.ones(log_joint.shape, dtype=bool)
 
         # Mask anything lower than the kth largest value
         k = self.max_num_probs
         if k and mask.sum() > k:
             mask[masked_argpartition(log_joint, mask, -k)[:-k]] = False
+
+        if np.isfinite(self.min_log_prob):
+            # Normalise the joint to get the posterior
+            log_normaliser = scipy.special.logsumexp(log_joint[mask])
+            mask[(log_joint - log_normaliser) < self.min_log_prob] = False
 
         return mask
 
