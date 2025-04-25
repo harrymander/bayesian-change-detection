@@ -49,6 +49,8 @@ def multivariate_bcdm(
     y: np.ndarray,
     hazard: float,
     prior: None = None,
+    min_prob: float = ...,
+    max_num_probs: int | None = ...,
     **prior_kwargs: Unpack[NigPriorKwargs],
 ) -> "MultivariateBcdmResults": ...
 
@@ -59,6 +61,8 @@ def multivariate_bcdm(
     y: np.ndarray,
     hazard: float,
     prior: "NigPrior" = ...,
+    min_prob: float = ...,
+    max_num_probs: int | None = ...,
 ) -> "MultivariateBcdmResults": ...
 
 
@@ -287,7 +291,9 @@ class _MultivariateBcdmWorker:
 
         self.log_pred[t, : t + 1] = log_pred[::-1]
         self.prev_log_joint = log_joint
-        self.params[: t + 1].update(x.reshape(1, -1), np.asarray((y,)))
+        self.params[: t + 1].update(
+            x.reshape(1, -1), np.asarray((y,)), mask=mask
+        )
 
 
 class NigPrior:
@@ -483,22 +489,30 @@ class NigParams:
         if xp != p:
             raise ValueError(f"expected {p}-dimensional predictors, got {xp}")
 
-    def update(self, x: np.ndarray, y: np.ndarray) -> None:
+    def update(self, x: np.ndarray, y: np.ndarray, *, mask=None) -> None:
         """
         Update sufficient statistics given n new observations (x, y).
 
         Args:
             x: (n, p) array of independent (predictor) variables.
             y: (n,) array of dependent (response) variables.
+            mask: any object that can be used to index into the parameters
+                (e.g. a boolean or index array); sufficient statistics will
+                only be updated for the selected distributions.
         """
+        if mask is None:
+            mask = ...
+
         self._validate_x_arg(x)
         n = x.shape[0]
         _check_array_shape("y", y, (n,))
-        t, p = self.mean.shape
 
-        cov0 = self.cov  # (t, p, p)
-        prec0 = self.prec  # (t, p, p)
-        mean0 = np.expand_dims(self.mean, -1)  # (t, p, 1)
+        mean = self.mean[mask]
+        t, p = mean.shape
+
+        cov0 = self.cov[mask]  # (t, p, p)
+        prec0 = self.prec[mask]  # (t, p, p)
+        mean0 = np.expand_dims(mean, -1)  # (t, p, 1)
 
         # Add dimension for broadcasting
         x = np.expand_dims(x, 0)  # (1, n, p)
@@ -568,12 +582,12 @@ class NigParams:
         ) / 2
         assert new_scale.shape == (t,)
 
-        self.mean[:] = new_mean.squeeze(-1)
-        self.cov[:] = new_cov
-        self.prec[:] = new_prec
-        self.shape += n / 2  # Eq. 32
-        self.scale += new_scale
-        assert np.all(self.scale >= 0), "got negative scale"
+        self.mean[mask] = new_mean.squeeze(-1)
+        self.cov[mask] = new_cov
+        self.prec[mask] = new_prec
+        self.shape[mask] += n / 2  # Eq. 32
+        self.scale[mask] += new_scale
+        assert np.all(self.scale[mask] >= 0), "got negative scale"
 
     def _mvt_mean(self, x: np.ndarray) -> np.ndarray:
         """
