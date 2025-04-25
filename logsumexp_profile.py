@@ -64,7 +64,11 @@ def main(
     for f in funcs[1:]:
         val = f(x)
         try:
-            assert_allclose(val, ref, strict=True)
+            assert_allclose(
+                val,
+                ref,
+                strict=True,  # type: ignore  # not supported on numpy <2
+            )
         except AssertionError as e:
             name = f.__name__
             ref_name = funcs[0].__name__
