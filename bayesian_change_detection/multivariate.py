@@ -250,7 +250,7 @@ class _MultivariateBcdmWorker:
         if k and mask.sum() > k:
             mask[masked_argpartition(log_joint, mask, -k)[:-k]] = False
 
-        # Mask anything lower them min_log_prob
+        # Mask anything lower than min_log_prob
         if np.isfinite(self.min_log_prob):
             # Normalise the joint to get the posterior
             log_normaliser = scipy.special.logsumexp(log_joint[mask])
