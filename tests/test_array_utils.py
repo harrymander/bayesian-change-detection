@@ -1,7 +1,11 @@
 import numpy as np
+import scipy.special
 from numpy.testing import assert_array_equal
 
-from bayesian_change_detection.array_utils import masked_argpartition
+from bayesian_change_detection.array_utils import (
+    logsumexp_sparse,
+    masked_argpartition,
+)
 
 
 def _masked_argsort(x: np.ndarray, mask: np.ndarray) -> np.ndarray:
@@ -54,3 +58,10 @@ def test_masked_argpartition_equivalent_to_argsort() -> None:
         np.sort(_masked_argsort(a, mask)[-20:]),
         np.sort(masked_argpartition(a, mask, -20)[-20:]),
     )
+
+
+def test_logsumexp_sparse() -> None:
+    rng = np.random.default_rng(42)
+    a = np.log(rng.random(10000))
+    a[rng.random(a.size) > 0.5] = -np.inf
+    assert scipy.special.logsumexp(a) == logsumexp_sparse(a)

@@ -5,7 +5,10 @@ from typing import Literal, TypedDict, Unpack, cast, overload
 import numpy as np
 import scipy
 
-from bayesian_change_detection.array_utils import masked_argpartition
+from bayesian_change_detection.array_utils import (
+    logsumexp_sparse,
+    masked_argpartition,
+)
 from bayesian_change_detection.linalg import (
     inv_positive_definite,
     matrix_transpose,
@@ -202,11 +205,6 @@ class MultivariateBcdmResults:
         return changepoints
 
 
-def _logsumexp_sparse(x: np.ndarray) -> np.ndarray:
-    """Log-sum-exp. More efficient for arrays where most elements are -inf."""
-    return scipy.special.logsumexp(x[np.isfinite(x)])
-
-
 class _MultivariateBcdmWorker:
     def __init__(
         self,
@@ -248,7 +246,7 @@ class _MultivariateBcdmWorker:
         log_joint = self.prev_log_joint
         if np.isfinite(self.min_log_prob):
             # Normalise the joint to get the posterior
-            log_posterior = log_joint - _logsumexp_sparse(log_joint)
+            log_posterior = log_joint - logsumexp_sparse(log_joint)
             mask = log_posterior >= self.min_log_prob
         else:
             mask = np.ones(log_joint.shape, dtype=bool)
