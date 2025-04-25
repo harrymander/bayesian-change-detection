@@ -198,6 +198,11 @@ class MultivariateBcdmResults:
         return changepoints
 
 
+def _logsumexp_sparse(x: np.ndarray) -> np.ndarray:
+    """Log-sum-exp. More efficient for arrays where most elements are -inf."""
+    return scipy.special.logsumexp(x[np.isfinite(x)])
+
+
 class _MultivariateBcdmWorker:
     def __init__(
         self,
@@ -239,7 +244,7 @@ class _MultivariateBcdmWorker:
         log_joint = self.prev_log_joint
         if np.isfinite(self.min_log_prob):
             # Normalise the joint to get the posterior
-            log_posterior = log_joint - scipy.special.logsumexp(log_joint)
+            log_posterior = log_joint - _logsumexp_sparse(log_joint)
             mask = log_posterior >= self.min_log_prob
         else:
             mask = np.ones(log_joint.shape, dtype=bool)
@@ -256,7 +261,7 @@ class _MultivariateBcdmWorker:
         if t:
             mask = np.r_[mask, True]
 
-        log_pred = np.full(t + 1, -np.inf)
+        log_pred = np.full((t + 1,), -np.inf)
         log_pred[mask] = (
             self.params[: t + 1][mask]
             .mvt_logpdf(
@@ -268,8 +273,11 @@ class _MultivariateBcdmWorker:
 
         # Compute the (t + 1) changepoint probabilities
         log_joint = self.log_joint[t, : t + 1]
+        prev_log_joint_support = (
+            self.prev_log_joint[mask[:-1]] if t else self.prev_log_joint
+        )
         log_joint[0] = scipy.special.logsumexp(
-            log_pred[-1] + self.log_hazard + self.prev_log_joint
+            log_pred[-1] + self.log_hazard + prev_log_joint_support
         )
 
         # growth probabilities
