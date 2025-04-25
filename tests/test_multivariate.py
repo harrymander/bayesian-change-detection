@@ -15,12 +15,17 @@ from tests.conftest import JsonSnapshot, NDArraySnapshot
 RandomData = tuple[np.ndarray, np.ndarray]
 
 
-def assert_allclose(a, b, **kwargs) -> None:
+def assert_allclose(a, b, *, err_msg: str = "", **kwargs) -> None:
     """Same as numpy.testing.assert_allclose, but NaNs do not compare equal by
     default."""
     __tracebackhide__ = True
     kwargs = {"equal_nan": False} | kwargs
-    numpy.testing.assert_allclose(a, b, **kwargs)
+    try:
+        numpy.testing.assert_allclose(a, b, err_msg=err_msg, **kwargs)
+    except AssertionError as e:
+        if not err_msg:
+            err_msg = "Arrays are not close"
+        raise AssertionError(f"{err_msg}{e}") from None
 
 
 def generate_random_data(
