@@ -220,6 +220,36 @@ class Test1DChangeDetection(BcdmTester):
         )
 
 
+class Test1DChangeDetectionWithSupportTrimming(BcdmTester):
+    @classmethod
+    def run_bcdm(cls) -> MultivariateBcdmResults:
+        samples = 100
+        hazard = 0.1  # Constant prior on changepoint probability.
+        mean0 = 0.0  # The prior mean on the mean parameter.
+        var0 = 2.0  # The prior variance for mean parameter.
+        varx = 1.0  # The known variance of the data.
+
+        rng = np.random.default_rng(42)
+
+        # Generate random piecewise data
+        data = []
+        meanx = mean0
+        for _ in range(samples):
+            if rng.random() < hazard:  # new changepoint
+                meanx = rng.normal(mean0, var0)
+            data.append(rng.normal(meanx, varx))
+
+        y = np.asarray(data)
+        return multivariate_bcdm(
+            np.ones_like(y),
+            y,
+            cov=var0,
+            hazard=hazard,
+            max_num_probs=10,
+            min_prob=1e-12,
+        )
+
+
 class Test2DChangeDetection(BcdmTester):
     @classmethod
     def run_bcdm(cls) -> MultivariateBcdmResults:
