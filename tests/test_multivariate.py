@@ -165,6 +165,16 @@ class BcdmTester(ABC):
         col_sums = scipy.special.logsumexp(log_posterior, axis=0)
         assert_allclose(col_sums, 0, atol=1e-12, rtol=1e-12)
 
+    def test_changepoints_snapshot(self, json_snapshot: JsonSnapshot):
+        changepoints = self.results.changepoints()
+        assert changepoints == json_snapshot(changepoints)
+
+    def test_changepoints_are_in_ascending_order(self) -> None:
+        changepoints = self.results.changepoints()
+        assert changepoints == sorted(changepoints)
+
+
+class BcdmTesterWithParameterSnapshotTest(BcdmTester):
     @pytest.mark.parametrize("attrname", ("mean", "cov", "shape", "scale"))
     def test_parameters_snapshot(
         self,
@@ -183,16 +193,8 @@ class BcdmTester(ABC):
 
         assert_allclose(parameters, snapshot)
 
-    def test_changepoints_snapshot(self, json_snapshot: JsonSnapshot):
-        changepoints = self.results.changepoints()
-        assert changepoints == json_snapshot(changepoints)
 
-    def test_changepoints_are_in_ascending_order(self) -> None:
-        changepoints = self.results.changepoints()
-        assert changepoints == sorted(changepoints)
-
-
-class Test1DChangeDetection(BcdmTester):
+class Test1DChangeDetection(BcdmTesterWithParameterSnapshotTest):
     @classmethod
     def run_bcdm(cls) -> MultivariateBcdmResults:
         samples = 100
@@ -221,6 +223,9 @@ class Test1DChangeDetection(BcdmTester):
 
 
 class Test1DChangeDetectionWithSupportTrimming(BcdmTester):
+    # Cannot test parameter snapshot as not every parameter is updated each
+    # iteration
+
     @classmethod
     def run_bcdm(cls) -> MultivariateBcdmResults:
         samples = 100
@@ -250,7 +255,7 @@ class Test1DChangeDetectionWithSupportTrimming(BcdmTester):
         )
 
 
-class Test2DChangeDetection(BcdmTester):
+class Test2DChangeDetection(BcdmTesterWithParameterSnapshotTest):
     @classmethod
     def run_bcdm(cls) -> MultivariateBcdmResults:
         rng = np.random.default_rng(42)
@@ -270,7 +275,7 @@ class Test2DChangeDetection(BcdmTester):
         )
 
 
-class Test3DChangeDetection(BcdmTester):
+class Test3DChangeDetection(BcdmTesterWithParameterSnapshotTest):
     @classmethod
     def run_bcdm(cls) -> MultivariateBcdmResults:
         rng = np.random.default_rng(42)
