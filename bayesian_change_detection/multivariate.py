@@ -292,10 +292,8 @@ class _MultivariateBcdmWorker:
         log_joint = self.log_joint[t, : t + 1]
 
         # Reset probability.
-        # TODO: logsumexp is expensive! But if we use mask[1:] to only
-        # compute logsumexp over the support, it breaks the snapshot test...
         log_joint[0] = scipy.special.logsumexp(
-            log_pred[0] + self.log_hazard + self.prev_log_joint
+            log_pred[0] + self.log_hazard + self.prev_log_joint[mask[1:]]
         )
 
         # Growth probabilities. Will be -inf where log_pred is -inf.
