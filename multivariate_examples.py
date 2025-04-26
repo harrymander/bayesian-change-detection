@@ -18,30 +18,31 @@ FIGSIZE = (20, 10)
 DATA_DIR = Path(__file__).parent / "data"
 
 
-def plot_posterior_probabilities(
+def plot_probabilities(
     ax: Axes,
-    log_posterior: np.ndarray,
+    log_probabilities: np.ndarray,
     *,
     x: np.ndarray | None = None,
     use_x_for_y: bool = True,
     trim_zero: bool = True,
-    inset_scale: bool = True,
+    add_colorbar: bool = True,
+    label: str | None = "Probability",
     **kwargs,
 ) -> tuple[np.ndarray, AxesImage]:
-    samples = len(log_posterior)
+    samples = len(log_probabilities)
     if x is None:
         x = np.arange(samples)
     elif x.shape != (samples,):
         raise ValueError(f"invalid shape for x: must be ({samples},)")
 
-    posterior = np.exp(log_posterior)
+    probs = np.exp(log_probabilities)
     if trim_zero:
-        zeros = np.where(np.isclose(posterior, 0).all(axis=1))[0]
+        zeros = np.where(np.isclose(probs, 0).all(axis=1))[0]
         if zeros.size:
             zero_row = zeros[0]
-            posterior = posterior[:zero_row]
+            probs = probs[:zero_row]
 
-    idx_y_end = len(posterior) - 1
+    idx_y_end = len(probs) - 1
     if use_x_for_y:
         y0 = x[0]
         y1 = x[idx_y_end]
@@ -57,7 +58,22 @@ def plot_posterior_probabilities(
         "norm": LogNorm(vmin=1e-4, vmax=1),
         "extent": (x[0], x[-1], y0, y1),
     } | kwargs
-    return posterior, ax.imshow(posterior, **kwargs)  # type: ignore
+
+    im = ax.imshow(probs, **kwargs)  # type: ignore
+    if add_colorbar:
+        inset = ax.inset_axes((0.025, 0.87, 0.2, 0.05))
+        plt.colorbar(im, cax=inset, orientation="horizontal")
+        if label:
+            ax.text(
+                0.5,
+                1.1,
+                label,
+                horizontalalignment="center",
+                verticalalignment="bottom",
+                transform=inset.transAxes,
+            )
+
+    return probs, im
 
 
 def triangular() -> None:
@@ -83,18 +99,20 @@ def triangular() -> None:
 
     axes = plt.subplots(3, sharex=True, figsize=FIGSIZE)[1]
     axes[0].plot(t, Y, "-o")
-    posterior, im = plot_posterior_probabilities(
+    posterior = plot_probabilities(
         axes[1],
         res.log_posterior(),
         x=t,
-    )
+        label="Posterior probability",
+    )[0]
     axes[1].plot(t, t[posterior.argmax(axis=0)], color="green")
 
-    plot_posterior_probabilities(
+    plot_probabilities(
         axes[2],
         res.log_predictive,
         x=t,
         trim_zero=False,
+        label="Predictive probability",
     )
     axes[2].plot(
         t,
@@ -114,9 +132,7 @@ def triangular() -> None:
         ax.set_ylabel("Run length")
 
     plot_segment_predictions(axes[0], prior, changepoints, X, Y, t)
-
     plt.tight_layout()
-    plt.colorbar(im, ax=axes)
 
 
 def generate_random_piecewise_data(rng, varx, mean0, var0, T, cp_prob):
@@ -160,12 +176,18 @@ def random_piecewise() -> None:
             ax.axvline(cp, color="green", linestyle="--")
 
     plot_segment_predictions(axes[0], prior, changepoints, np.ones_like(y), y)
-    posterior, im = plot_posterior_probabilities(
+    posterior = plot_probabilities(
         axes[1],
         res.log_posterior(),
         trim_zero=False,
+        label="Posterior probability",
+    )[0]
+    plot_probabilities(
+        axes[2],
+        res.log_predictive,
+        trim_zero=False,
+        label="Predictive probability",
     )
-    plot_posterior_probabilities(axes[2], res.log_predictive, trim_zero=False)
     axes[2].plot(
         res.log_predictive.argmax(axis=0),
         color="orange",
@@ -175,7 +197,6 @@ def random_piecewise() -> None:
 
     axes[1].plot(posterior.argmax(axis=0), color="green")
     plt.tight_layout()
-    plt.colorbar(im, ax=axes)
 
 
 def load_well_data() -> tuple[np.ndarray, np.ndarray]:
@@ -198,7 +219,11 @@ def well_data() -> None:
     axes[0].plot(y)
     axes[0].set_ylabel("Nuclear magnetic response")
     axes[-1].set_xlabel("Time")
-    plot_posterior_probabilities(axes[1], results.log_posterior())
+    plot_probabilities(
+        axes[1],
+        results.log_posterior(),
+        label="Posterior probability",
+    )
 
     changepoints = results.changepoints()
     for cp in changepoints:
