@@ -6,6 +6,7 @@ import numpy as np
 import scipy
 
 from bayesian_change_detection.array_utils import (
+    logsumexp_sparse,
     masked_argpartition,
 )
 from bayesian_change_detection.linalg import (
@@ -257,7 +258,7 @@ class _MultivariateBcdmWorker:
         # Mask anything lower than min_log_prob
         if np.isfinite(self.min_log_prob):
             # Normalise the joint to get the posterior
-            log_normaliser = scipy.special.logsumexp(log_joint[mask])
+            log_normaliser = logsumexp_sparse(log_joint[mask])
             mask[(log_joint - log_normaliser) < self.min_log_prob] = False
 
         self.prev_joint_support = mask
