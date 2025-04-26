@@ -311,8 +311,9 @@ class _MultivariateBcdmWorker:
         # the addition. Need to profile.
         log_joint[1:] = log_pred[1:] + self.log_1mhazard + self.prev_log_joint
 
-        # TODO: use the mask to avoid the expensive updating
-        params_view.update(x.reshape(1, -1), np.asarray((y,)))
+        # Update the model parameters (Eqs. 30-33). Avoid expensive computation
+        # outside of the support.
+        params_view.update(x.reshape(1, -1), np.asarray((y,)), mask=mask)
 
         self.log_pred[t, : t + 1] = log_pred
         self.prev_log_joint = log_joint
