@@ -263,10 +263,6 @@ class _MultivariateBcdmWorker:
         self.prev_joint_support = mask
 
     def _update(self, t: int, x: np.ndarray, y: float) -> None:
-        # TODO: currently we aren't actually getting any efficiency out of
-        # trimming the support each iteration - need to use the mask to avoid
-        # computation of the PDF and parameter update.
-
         # Note that the variable `t` is 0-indexed here whereas in the notes it
         # starts from 1. self.params is stored in the opposite order to
         # self.prev_log_joint, so it is reversed. Therefore params_view[0]
