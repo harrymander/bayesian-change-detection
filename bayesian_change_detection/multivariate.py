@@ -231,7 +231,9 @@ class _MultivariateBcdmWorker:
         self.max_num_probs = max_num_probs or 0
 
     def fit(self) -> MultivariateBcdmResults:
-        for t, (x, y) in enumerate(zip(self.x, self.y, strict=True)):
+        X = self.x[:, np.newaxis, :]
+        Y = self.y[:, np.newaxis]
+        for t, (x, y) in enumerate(zip(X, Y, strict=True)):
             self._update(t, x, y)
 
         return MultivariateBcdmResults(
@@ -260,7 +262,7 @@ class _MultivariateBcdmWorker:
 
         self.prev_joint_support = mask
 
-    def _update(self, t: int, x: np.ndarray, y: float) -> None:
+    def _update(self, t: int, x: np.ndarray, y: np.ndarray) -> None:
         if t:
             self._trim_support()
 
@@ -279,14 +281,7 @@ class _MultivariateBcdmWorker:
         # Same as above, log_pred[0] corresponds to Theta_t etc. Use the mask
         # to avoid expensive PDF computation outside of the support
         log_pred = np.full(t + 1, -np.inf)
-        log_pred[mask] = (
-            params_view[mask]
-            .mvt_logpdf(
-                x.reshape(1, -1),
-                np.atleast_1d(y),
-            )
-            .ravel()
-        )
+        log_pred[mask] = params_view[mask].mvt_logpdf(x, y).ravel()
 
         # The (t + 1) changepoint probabilities
         log_joint = self.log_joint[t, : t + 1]
@@ -312,7 +307,7 @@ class _MultivariateBcdmWorker:
 
         # Update the model parameters (Eqs. 30-33). Avoid expensive computation
         # outside of the support.
-        params_view.update(x.reshape(1, -1), np.asarray((y,)), mask=mask)
+        params_view.update(x, y, mask=mask)
 
         self.log_pred[t, : t + 1] = log_pred
         self.prev_log_joint = log_joint
