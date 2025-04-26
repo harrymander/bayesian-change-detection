@@ -223,17 +223,29 @@ class _MultivariateBcdmWorker:
         self.params = NigParams.from_prior(prior, self.n)
         self.log_hazard: float = np.log(hazard)
         self.log_1mhazard: float = np.log1p(-hazard)
-        self.prev_log_joint = np.array([0.0])
-        self.prev_joint_support = np.array([], dtype=bool)
+        self.joint_support = np.ones(self.n, dtype=bool)
         self.log_joint = np.full((self.n, self.n), -np.inf)
         self.log_pred = self.log_joint.copy()
         self.min_log_prob: float = np.log(min_prob) if min_prob else -np.inf
         self.max_num_probs = max_num_probs or 0
 
+        self.prev_log_joint: np.ndarray  # set in fit()
+
     def fit(self) -> MultivariateBcdmResults:
         X = self.x[:, np.newaxis, :]
         Y = self.y[:, np.newaxis]
-        for t, (x, y) in enumerate(zip(X, Y, strict=True)):
+
+        # Compute the initial reset probability (Eq. 28). The initial joint
+        # probability is assumed to be 1, corresponding to a new segment
+        # starting at the first time point.
+        log_pred = self.params[:1].mvt_logpdf(X[0], Y[0])[0]
+        log_joint = log_pred + self.log_hazard
+        self.prev_log_joint = log_joint
+        self.log_joint[0, 0] = log_joint[0]
+        self.log_pred[0, 0] = log_pred[0]
+        self.params[:1].update(X[0], Y[0])
+
+        for t, (x, y) in enumerate(zip(X[1:], Y[1:], strict=True), start=1):
             self._update(t, x, y)
 
         return MultivariateBcdmResults(
@@ -245,38 +257,31 @@ class _MultivariateBcdmWorker:
             log_predictive=self.log_pred.T,
         )
 
-    def _trim_support(self) -> None:
-        log_joint = self.prev_log_joint
-        mask = np.r_[True, self.prev_joint_support]
-
-        # Mask anything lower than the kth largest value
-        k = self.max_num_probs
-        if k and mask.sum() > k:
-            mask[masked_argpartition(log_joint, mask, -k)[:-k]] = False
-
-        # Mask anything lower than min_log_prob
-        if np.isfinite(self.min_log_prob):
-            # Normalise the joint to get the posterior
-            log_normaliser = logsumexp_sparse(log_joint[mask])
-            mask[(log_joint - log_normaliser) < self.min_log_prob] = False
-
-        self.prev_joint_support = mask
-
     def _update(self, t: int, x: np.ndarray, y: np.ndarray) -> None:
-        if t:
-            self._trim_support()
-
         # Note that the variable `t` is 0-indexed here whereas in the notes it
         # starts from 1. self.params is stored in the opposite order to
         # self.prev_log_joint, so it is reversed. Therefore params_view[0]
         # corresponds to Theta_t in Eq. 25, and params_view[-1] corresponds to
-        # Theta_1...
+        # Theta_1.
         params_view = self.params[: t + 1][::-1]
 
-        # ...therefore *prepend* True to the support of the previous joint,
-        # since we always need to compute the predictive probability at Theta_t
-        # to calculate the reset probability in Eq. 28
-        mask = np.r_[True, self.prev_joint_support]
+        prev_log_joint = self.prev_log_joint
+        mask = self.joint_support[-prev_log_joint.size :]
+
+        # Mask anything lower than the kth largest value
+        k = self.max_num_probs
+        if k and mask.sum() > k:
+            mask[masked_argpartition(prev_log_joint, mask, -k)[:-k]] = False
+
+        # Mask anything lower than min_log_prob
+        if np.isfinite(self.min_log_prob):
+            # Normalise the joint to get the posterior
+            log_normaliser = logsumexp_sparse(prev_log_joint[mask])
+            mask[(prev_log_joint - log_normaliser) < self.min_log_prob] = False
+
+        # mask[0] must be True since it corresponsd to params[0], which is a
+        # new 'hypothesis' that a new segment begins after this time step.
+        mask = self.joint_support[-prev_log_joint.size - 1 :]
 
         # Same as above, log_pred[0] corresponds to Theta_t etc. Use the mask
         # to avoid expensive PDF computation outside of the support
