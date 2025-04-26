@@ -132,10 +132,10 @@ class MultivariateBcdmResults:
     scale: np.ndarray
     """`(n,)` array of scale parameters."""
 
-    log_posterior: np.ndarray
+    log_joint: np.ndarray
     """
-    `(n, n)` array of log probabilities of the run-length posterior at each
-    time point.
+    `(n, n)` array of log joint probabilities of the run-length at each time
+    point.
 
     An upper-triangular matrix where each column contains the natural logarithm
     of the posterior probability of the segment running length at that time
@@ -146,6 +146,9 @@ class MultivariateBcdmResults:
     The lower triangular elements are `-inf`, corresponding to a zero
     probability (i.e. a point cannot belong to a segment longer than the number
     of points observed so far).
+
+    The log posterior probabilities are obtained by normalising the joint at
+    each time point and are returned by `log_posterior()`.
     """
 
     log_predictive: np.ndarray
@@ -162,6 +165,11 @@ class MultivariateBcdmResults:
     previous observations.
     """
 
+    def log_posterior(self) -> np.ndarray:
+        """Convert joint probabilities to a triangular matrix of posterior
+        probabilities. See docs for `log_joint` for structure."""
+        return self.log_joint - scipy.special.logsumexp(self.log_joint, axis=0)
+
     def changepoints(self) -> list[int]:
         """Compute indices of changepoints in ascending order.
 
@@ -170,11 +178,12 @@ class MultivariateBcdmResults:
             last indices, which may be changepoints.
         """
         changepoints: list[int] = []
-        run_length = self.log_posterior[:, -1].argmax()
-        i = len(self.log_posterior) - 1 - run_length
+        probs = self.log_joint
+        run_length = probs[:, -1].argmax()
+        i = len(probs) - 1 - run_length
         while i > 0:
             changepoints.append(i.item())
-            i -= 1 + self.log_posterior[: i + 1, i].argmax()
+            i -= 1 + probs[: i + 1, i].argmax()
 
         changepoints.reverse()
         return changepoints
@@ -208,14 +217,6 @@ class _MultivariateBcdmWorker:
         self.params.scale[t] = self.prior.scale[0]
         self.params.prec[t] = self.prior.prec[0]
 
-    def _log_posterior(self) -> np.ndarray:
-        """Convert joint probabilities to a triangular matrix of posterior
-        probabilities. See docstring in MultivariateBcdmResults for description
-        of the matrix."""
-        log_joint_trans = self.log_joint.T
-        col_sums = scipy.special.logsumexp(log_joint_trans, axis=0)
-        return log_joint_trans - col_sums
-
     def fit(self) -> MultivariateBcdmResults:
         for t, (x, y) in enumerate(zip(self.x, self.y, strict=True)):
             self._update(t, x, y)
@@ -225,7 +226,7 @@ class _MultivariateBcdmWorker:
             cov=self.params.cov,
             shape=self.params.shape,
             scale=self.params.scale,
-            log_posterior=self._log_posterior(),
+            log_joint=self.log_joint.T,
             log_predictive=self.log_pred.T,
         )
 

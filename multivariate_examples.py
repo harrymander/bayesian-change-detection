@@ -85,7 +85,7 @@ def triangular() -> None:
     axes[0].plot(t, Y, "-o")
     posterior, im = plot_posterior_probabilities(
         axes[1],
-        res.log_posterior,
+        res.log_posterior(),
         x=t,
     )
     axes[1].plot(t, t[posterior.argmax(axis=0)], color="green")
@@ -162,7 +162,7 @@ def random_piecewise() -> None:
     plot_segment_predictions(axes[0], prior, changepoints, np.ones_like(y), y)
     posterior, im = plot_posterior_probabilities(
         axes[1],
-        res.log_posterior,
+        res.log_posterior(),
         trim_zero=False,
     )
     plot_posterior_probabilities(axes[2], res.log_predictive, trim_zero=False)
@@ -198,7 +198,7 @@ def well_data() -> None:
     axes[0].plot(y)
     axes[0].set_ylabel("Nuclear magnetic response")
     axes[-1].set_xlabel("Time")
-    plot_posterior_probabilities(axes[1], results.log_posterior)
+    plot_posterior_probabilities(axes[1], results.log_posterior())
 
     changepoints = results.changepoints()
     for cp in changepoints:
