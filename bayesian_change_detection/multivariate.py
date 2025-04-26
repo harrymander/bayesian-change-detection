@@ -243,12 +243,9 @@ class _MultivariateBcdmWorker:
             log_predictive=self.log_pred.T,
         )
 
-    def _update_joint_support_mask(self) -> None:
-        # TODO: can we use the previous mask in self.prev_joint_support to
-        # avoid expensive computation of the mask?
-
+    def _trim_support(self) -> None:
         log_joint = self.prev_log_joint
-        mask = np.ones(log_joint.shape, dtype=bool)
+        mask = np.r_[True, self.prev_joint_support]
 
         # Mask anything lower than the kth largest value
         k = self.max_num_probs
@@ -316,7 +313,7 @@ class _MultivariateBcdmWorker:
 
         self.log_pred[t, : t + 1] = log_pred
         self.prev_log_joint = log_joint
-        self._update_joint_support_mask()
+        self._trim_support()
 
 
 class NigPrior:
