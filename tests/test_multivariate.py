@@ -9,7 +9,7 @@ from bayesian_change_detection import (
     MultivariateBcdmResults,
     multivariate_bcdm,
 )
-from bayesian_change_detection.multivariate import NigParams
+from bayesian_change_detection.multivariate import NigParams, NigPrior
 from tests.conftest import JsonSnapshot, NDArraySnapshot
 
 RandomData = tuple[np.ndarray, np.ndarray]
@@ -267,7 +267,7 @@ class Test3DChangeDetection(BcdmTester):
 
 
 def test_params_index_with_scalar_maintains_shape() -> None:
-    params = NigParams.empty(10, 5)
+    params = NigParams.from_prior(NigPrior(5), 10)
     param = params[0]
     assert param.mean.shape == (1, 5)
     assert param.cov.shape == (1, 5, 5)
@@ -276,7 +276,7 @@ def test_params_index_with_scalar_maintains_shape() -> None:
     assert param.scale.shape == (1,)
 
 
-def assert_nig_params_equal(a: NigParams, b: NigParams):
+def assert_nig_prior_equal(a: NigPrior, b: NigPrior):
     __tracebackhide__ = True
     for field in NigParams.__dataclass_fields__:
         numpy.testing.assert_array_equal(
@@ -287,28 +287,28 @@ def assert_nig_params_equal(a: NigParams, b: NigParams):
 
 
 def test_scalar_priors_equivalent_to_array() -> None:
-    array_priors = NigParams.from_priors(
+    array_priors = NigPrior(
         3,
         mean=np.full(3, 2.0),
         cov=np.eye(3) * 3.0,
     )
-    scalar_priors = NigParams.from_priors(3, mean=2, cov=3)
-    assert_nig_params_equal(array_priors, scalar_priors)
+    scalar_priors = NigPrior(3, mean=2, cov=3)
+    assert_nig_prior_equal(array_priors, scalar_priors)
 
 
 def test_1d_cov_prior_equivalent_to_2d() -> None:
-    twod_array_priors = NigParams.from_priors(3, cov=np.eye(3) * 3.0)
-    oned_array_priors = NigParams.from_priors(3, cov=np.full(3, 3.0))
-    assert_nig_params_equal(twod_array_priors, oned_array_priors)
+    twod_array_priors = NigPrior(3, cov=np.eye(3) * 3.0)
+    oned_array_priors = NigPrior(3, cov=np.full(3, 3.0))
+    assert_nig_prior_equal(twod_array_priors, oned_array_priors)
 
 
 def test_arraylike_priors_equivalent_to_array() -> None:
-    array_priors = NigParams.from_priors(
+    array_priors = NigPrior(
         3,
         mean=np.array([1.0, 2.0, 3.0]),
         cov=np.diag([1.0, 2.0, 3.0]),
     )
-    arraylike_priors = NigParams.from_priors(
+    arraylike_priors = NigPrior(
         3,
         mean=[1, 2, 3],
         cov=[
@@ -317,15 +317,15 @@ def test_arraylike_priors_equivalent_to_array() -> None:
             [0, 0, 3],
         ],
     )
-    assert_nig_params_equal(array_priors, arraylike_priors)
+    assert_nig_prior_equal(array_priors, arraylike_priors)
 
 
 def test_arraylike_1d_cov_prior_equivalent_to_2d() -> None:
-    array_priors = NigParams.from_priors(3, cov=np.diag([1.0, 2.0, 3.0]))
-    arraylike_priors = NigParams.from_priors(3, cov=[1, 2, 3])
-    assert_nig_params_equal(array_priors, arraylike_priors)
+    array_priors = NigPrior(3, cov=np.diag([1.0, 2.0, 3.0]))
+    arraylike_priors = NigPrior(3, cov=[1, 2, 3])
+    assert_nig_prior_equal(array_priors, arraylike_priors)
 
 
 def test_arraylike_prior_fails_if_not_convertible_to_float() -> None:
     with pytest.raises(TypeError):
-        NigParams.from_priors(3, mean=[1, 2, 3j])  # type: ignore
+        NigParams.from_prior(3, mean=[1, 2, 3j])  # type: ignore

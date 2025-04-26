@@ -12,6 +12,7 @@ from bayesian_change_detection import multivariate_bcdm
 from bayesian_change_detection.multivariate import (
     MultivariateBcdmResults,
     NigParams,
+    NigPrior,
 )
 
 FIGSIZE = (20, 10)
@@ -89,7 +90,7 @@ def triangular() -> None:
     true_changepoints = np.pi * np.arange(0, 6) + np.pi / 2
 
     X = np.c_[np.ones_like(t), t]  # add bias (intercept) term
-    prior = NigParams.from_priors(
+    prior = NigPrior(
         2,
         cov=1e6,
         shape=1e-3,
@@ -163,7 +164,7 @@ def random_piecewise() -> None:
         rng, varx, mean0, var0, T, hazard
     )
     y = np.asarray(data)
-    prior = NigParams.from_priors(1, cov=var0)
+    prior = NigPrior(1, cov=var0)
     res = multivariate_bcdm(np.ones_like(y), y, prior=prior, hazard=hazard)
 
     axes = plt.subplots(3, 1, sharex=True, figsize=FIGSIZE)[1]
@@ -243,11 +244,11 @@ def well_data() -> None:
 
 
 def predict_segment(
-    params: NigParams,
+    prior: NigPrior,
     x: np.ndarray,
     y: np.ndarray,
 ) -> tuple[np.ndarray, np.ndarray]:
-    model = params.fit_regression(x, y)
+    model = NigParams.from_prior(prior).fit_regression(x, y)
     var = model.mvt_variance(x, axis="t")
     var[var < 0] = np.nan
     return model.mvt_mean(x, axis="t"), var
@@ -259,7 +260,7 @@ def atleast_2d_col(x: np.ndarray) -> np.ndarray:
 
 def plot_segment_predictions(
     ax,
-    prior: NigParams,
+    prior: NigPrior,
     changepoints: list[int],
     x: np.ndarray,
     y: np.ndarray,

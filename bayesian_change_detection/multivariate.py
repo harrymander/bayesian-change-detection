@@ -57,7 +57,7 @@ def multivariate_bcdm(
     x: np.ndarray,
     y: np.ndarray,
     hazard: float,
-    prior: "NigParams" = ...,
+    prior: "NigPrior" = ...,
 ) -> "MultivariateBcdmResults": ...
 
 
@@ -65,7 +65,7 @@ def multivariate_bcdm(
     x: np.ndarray,
     y: np.ndarray,
     hazard: float,
-    prior: "None | NigParams" = None,
+    prior: "None | NigPrior" = None,
     **prior_kwargs: Unpack[NigPriorKwargs],
 ) -> "MultivariateBcdmResults":
     """
@@ -77,7 +77,7 @@ def multivariate_bcdm(
         hazard: Hazard rate.
         prior: NIG prior parameters
         **prior_kwargs: Parameters for NIG prior if prior is None. See
-            `NigParams.from_priors` for details.
+            `NigPrior` for details.
 
     Returns:
         Change detection results.
@@ -93,23 +93,17 @@ def multivariate_bcdm(
 
     _check_array_shape("y", y, (n,))
 
-    if prior is None:
-        prior = NigParams.from_priors(p, t=1, **prior_kwargs)
-    elif prior_kwargs:
-        raise ValueError(
-            "cannot pass prior keyword arguments if a prior object is passed"
-        )
-    else:
-        t = prior.mean.shape[0]
-        if t != 1:
-            raise ValueError(f"prior must have a single distribution, got {t}")
-
-        prior_p = prior.mean.shape[1]
-        if prior_p != p:
+    if prior:
+        if prior_kwargs:
+            msg = "cannot pass prior kwargs if a prior object is passed"
+            raise ValueError(msg)
+        if prior.p != p:
             raise ValueError(
-                f"dimensionality of prior ({prior_p}) does not match "
+                f"dimensionality of prior ({prior.p}) does not match "
                 f"that of the data ({p})"
             )
+    else:
+        prior = NigPrior(p, **prior_kwargs)
 
     worker = _MultivariateBcdmWorker(x, y, prior=prior, hazard=hazard)
     return worker.fit()
@@ -195,27 +189,19 @@ class _MultivariateBcdmWorker:
         x: np.ndarray,
         y: np.ndarray,
         *,
-        prior: "NigParams",
+        prior: "NigPrior",
         hazard: float,
     ):
         # Assumes parameters have been validated
         self.n, self.p = x.shape
         self.x = x
         self.y = y
-        self.prior = prior
-        self.params = NigParams.empty(self.n, self.p)
-        self.log_hazard = np.log(hazard)
-        self.log_1mhazard = np.log1p(-hazard)
+        self.params = NigParams.from_prior(prior, self.n)
+        self.log_hazard: float = np.log(hazard)
+        self.log_1mhazard: float = np.log1p(-hazard)
         self.prev_log_joint = np.array([0.0])
         self.log_joint = np.full((self.n, self.n), -np.inf)
         self.log_pred = self.log_joint.copy()
-
-    def _add_new_hypothesis(self, t: int) -> None:
-        self.params.mean[t] = self.prior.mean[0]
-        self.params.cov[t] = self.prior.cov[0]
-        self.params.shape[t] = self.prior.shape[0]
-        self.params.scale[t] = self.prior.scale[0]
-        self.params.prec[t] = self.prior.prec[0]
 
     def fit(self) -> MultivariateBcdmResults:
         for t, (x, y) in enumerate(zip(self.x, self.y, strict=True)):
@@ -231,7 +217,6 @@ class _MultivariateBcdmWorker:
         )
 
     def _update(self, t: int, x: np.ndarray, y: float) -> None:
-        self._add_new_hypothesis(t)
         log_pred = self.params[: t + 1].mvt_logpdf(
             x.reshape(1, -1),
             np.atleast_1d(y),
@@ -251,6 +236,96 @@ class _MultivariateBcdmWorker:
         self.log_pred[t, : t + 1] = log_pred[::-1]
         self.prev_log_joint = log_joint
         self.params[: t + 1].update(x.reshape(1, -1), np.asarray((y,)))
+
+
+class NigPrior:
+    """
+    Parameters of p-dimensional normal-inverse-gamma distributions.
+    """
+
+    mean: np.ndarray
+    """
+    (p) mean array.
+    """
+
+    cov: np.ndarray
+    """
+    (p, p) covariance array.
+    """
+
+    shape: float
+    """
+    Shape parameter.
+    """
+
+    scale: float
+    """
+    Scale parameters.
+    """
+
+    prec: np.ndarray
+    """
+    (p, p) precision.
+    """
+
+    @property
+    def p(self) -> int:
+        """Dimensionality of the distribution (i.e. the dimensionality of the
+        independent variable)"""
+        return self.mean.shape[0]
+
+    def __init__(
+        self,
+        p: int,
+        *,
+        mean: PriorMeanArg = 0,
+        cov: PriorCovArg = 1,
+        shape: float = 1,
+        scale: float = 1,
+    ):
+        """
+        Generate `t` independent `p`-dimensional NIG distributions.
+
+        Args:
+            p: Dimensionality of the NIG distributions.
+            t: Number of distributions.
+            mean: Mean of the distributions. Must be a scalar or (p,)
+                array-like.
+            cov: Covariance of the distributions. Can be either:
+                (1) A scalar, in which case the covariance is a diagonal
+                    matrix with that value on the diagonal.
+                (2) A (p,) array-like, in which case the covariance is a
+                    diagonal matrix with the diagonal being the array.
+                (3) A (p, p) array-like representing a positive-definite
+                    matrix.
+            shape: Shape parameter.
+            scale: Scale parameter.
+        """
+        if np.isscalar(mean):
+            mean = np.full(p, mean, dtype=np.float64)
+        else:
+            mean = _as_float_array(mean)
+            _check_array_shape("mean", mean, (p,))
+        self.mean = mean
+
+        if np.isscalar(cov):
+            cov = np.eye(p, dtype=np.float64) * cast(float, cov)
+        else:
+            cov = _as_float_array(cov)
+            if cov.ndim == 1:
+                cov = np.diag(cov)
+            _check_array_shape("cov", cov, (p, p))
+        self.cov = cov
+
+        self.shape = shape
+        if self.shape <= 0:
+            raise ValueError("shape must be > 0")
+
+        self.scale = scale
+        if self.scale <= 0:
+            raise ValueError("scale must be > 0")
+
+        self.prec = inv_positive_definite(cast(np.ndarray, cov))
 
 
 @dataclass
@@ -312,70 +387,20 @@ class NigParams:
         _validate_param("prec", 2)
 
     @classmethod
-    def from_priors(
-        cls,
-        p: int,
-        t: int = 1,
-        *,
-        mean: PriorMeanArg = 0,
-        cov: PriorCovArg = 1,
-        shape: float = 1,
-        scale: float = 1,
-    ):
+    def from_prior(cls, priors: NigPrior, t: int = 1):
         """
-        Generate `t` independent `p`-dimensional NIG distributions.
+        Generate `t` independent NIG distributions from priors.
 
         Args:
-            p: Dimensionality of the NIG distributions.
+            priors: Priors of the distributions.
             t: Number of distributions.
-            mean: Mean of the distributions. Must be a scalar or (p,)
-                array-like.
-            cov: Covariance of the distributions. Can be either:
-                (1) A scalar, in which case the covariance is a diagonal
-                    matrix with that value on the diagonal.
-                (2) A (p,) array-like, in which case the covariance is a
-                    diagonal matrix with the diagonal being the array.
-                (3) A (p, p) array-like representing a positive-definite
-                    matrix.
-            shape: Shape parameter.
-            scale: Scale parameter.
         """
-        if np.isscalar(mean):
-            mean = np.full(p, mean, dtype=np.float64)
-        else:
-            mean = _as_float_array(mean)
-            _check_array_shape("mean", mean, (p,))
-
-        if np.isscalar(cov):
-            cov = np.eye(p, dtype=np.float64) * cast(float, cov)
-        else:
-            cov = _as_float_array(cov)
-            if cov.ndim == 1:
-                cov = np.diag(cov)
-            _check_array_shape("cov", cov, (p, p))
-
-        if shape <= 0:
-            raise ValueError("shape must be > 0")
-        if scale <= 0:
-            raise ValueError("scale must be > 0")
-
-        prec = inv_positive_definite(cast(np.ndarray, cov))
         return cls(
-            mean=np.expand_dims(mean, 0).repeat(t, axis=0),
-            cov=np.expand_dims(cov, 0).repeat(t, axis=0),
-            prec=np.expand_dims(prec, 0).repeat(t, axis=0),
-            shape=np.full(t, shape, dtype=np.float64),
-            scale=np.full(t, scale, dtype=np.float64),
-        )
-
-    @classmethod
-    def empty(cls, t: int, p: int) -> "NigParams":
-        return cls(
-            mean=np.empty((t, p)),
-            cov=np.empty((t, p, p)),
-            prec=np.empty((t, p, p)),
-            shape=np.empty(t),
-            scale=np.empty(t),
+            mean=np.expand_dims(priors.mean, 0).repeat(t, axis=0),
+            cov=np.expand_dims(priors.cov, 0).repeat(t, axis=0),
+            prec=np.expand_dims(priors.prec, 0).repeat(t, axis=0),
+            shape=np.full(t, priors.shape, dtype=np.float64),
+            scale=np.full(t, priors.scale, dtype=np.float64),
         )
 
     def __getitem__(self, i) -> "NigParams":
@@ -707,14 +732,14 @@ class NigParams:
             msg = "can only fit regression model from a single prior"
             raise ValueError(msg)
 
-        params = NigParams.from_priors(
+        prior = NigPrior(
             p=p,
-            t=n,
             cov=self.cov[0],
             mean=self.mean[0],
             shape=self.shape[0],
             scale=self.scale[0],
         )
+        params = NigParams.from_prior(prior, n)
         for t, (xt, yt) in enumerate(zip(x, y, strict=True)):
             assert xt.ndim == 1, xt.shape
             assert np.isscalar(yt), yt
