@@ -223,6 +223,7 @@ class _MultivariateBcdmWorker:
         self.log_hazard: float = np.log(hazard)
         self.log_1mhazard: float = np.log1p(-hazard)
         self.prev_log_joint = np.array([0.0])
+        self.prev_joint_support = np.array([], dtype=bool)
         self.log_joint = np.full((self.n, self.n), -np.inf)
         self.log_pred = self.log_joint.copy()
         self.min_log_prob: float = np.log(min_prob) if min_prob else -np.inf
@@ -241,7 +242,10 @@ class _MultivariateBcdmWorker:
             log_predictive=self.log_pred.T,
         )
 
-    def _prev_log_joint_mask(self) -> np.ndarray:
+    def _update_joint_support_mask(self) -> None:
+        # TODO: can we use the previous mask in self.prev_joint_support to
+        # avoid expensive computation of the mask?
+
         log_joint = self.prev_log_joint
         mask = np.ones(log_joint.shape, dtype=bool)
 
@@ -256,42 +260,65 @@ class _MultivariateBcdmWorker:
             log_normaliser = scipy.special.logsumexp(log_joint[mask])
             mask[(log_joint - log_normaliser) < self.min_log_prob] = False
 
-        return mask
+        self.prev_joint_support = mask
 
     def _update(self, t: int, x: np.ndarray, y: float) -> None:
-        mask = self._prev_log_joint_mask()
-        if t:
-            mask = np.r_[mask, True]
+        # TODO: currently we aren't actually getting any efficiency out of
+        # trimming the support each iteration - need to use the mask to avoid
+        # computation of the PDF and parameter update.
 
-        log_pred = np.full((t + 1,), -np.inf)
-        log_pred[mask] = (
-            self.params[: t + 1][mask]
-            .mvt_logpdf(
-                x.reshape(1, -1),
-                np.atleast_1d(y),
-            )
-            .ravel()
+        # Note that the variable `t` is 0-indexed here whereas in the notes it
+        # starts from 1. self.params is stored in the opposite order to
+        # self.prev_log_joint, so it is reversed. Therefore params_view[0]
+        # corresponds to Theta_t in Eq. 25, and params_view[-1] corresponds to
+        # Theta_1...
+        params_view = self.params[: t + 1][::-1]
+
+        # ...therefore *prepend* True to the support of the previous joint,
+        # since we always need to compute the predictive probability at Theta_t
+        # to calculate the reset probability in Eq. 28
+        mask = np.r_[True, self.prev_joint_support]
+
+        # Same as above, log_pred[0] corresponds to Theta_t etc.
+        # TODO: use the mask to avoid computing the expensive logpdf outside of
+        # the support.
+        log_pred = np.where(
+            mask,
+            (
+                params_view.mvt_logpdf(
+                    x.reshape(1, -1),
+                    np.atleast_1d(y),
+                ).ravel()
+            ),
+            -np.inf,
         )
 
-        # Compute the (t + 1) changepoint probabilities
+        # Compute the (t + 1) changepoint probabilities.
+        # TODO: logsumexp is expensive! Use self.prev_joint_support to only
+        # compute logsumexp over the support - e.g. see below:
+        #
+        #     prev_log_joint_support = (
+        #         self.prev_log_joint[self.prev_joint_support]
+        #         if t
+        #         else self.prev_log_joint
+        #     )
         log_joint = self.log_joint[t, : t + 1]
-        prev_log_joint_support = (
-            self.prev_log_joint[mask[:-1]] if t else self.prev_log_joint
-        )
         log_joint[0] = scipy.special.logsumexp(
-            log_pred[-1] + self.log_hazard + prev_log_joint_support
+            log_pred[0] + self.log_hazard + self.prev_log_joint
         )
 
-        # growth probabilities
-        log_joint[1:] = (
-            log_pred[:-1][::-1] + self.log_1mhazard + self.prev_log_joint
-        )
+        # Growth probabilities. Will be -inf where log_pred is -inf.
+        # TODO(?): could also mask out over the -inf points, but probably
+        # faster to just perform the computation and let the -inf come out in
+        # the addition. Need to profile.
+        log_joint[1:] = log_pred[1:] + self.log_1mhazard + self.prev_log_joint
 
-        self.log_pred[t, : t + 1] = log_pred[::-1]
+        # TODO: use the mask to avoid the expensive updating
+        params_view.update(x.reshape(1, -1), np.asarray((y,)))
+
+        self.log_pred[t, : t + 1] = log_pred
         self.prev_log_joint = log_joint
-        self.params[: t + 1].update(
-            x.reshape(1, -1), np.asarray((y,)), mask=mask
-        )
+        self._update_joint_support_mask()
 
 
 class NigPrior:
