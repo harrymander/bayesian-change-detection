@@ -291,7 +291,10 @@ class _MultivariateBcdmWorker:
             .ravel()
         )
 
-        # Compute the (t + 1) changepoint probabilities.
+        # The (t + 1) changepoint probabilities
+        log_joint = self.log_joint[t, : t + 1]
+
+        # Reset probability.
         # TODO: logsumexp is expensive! Use self.prev_joint_support to only
         # compute logsumexp over the support - e.g. see below:
         #
@@ -300,7 +303,6 @@ class _MultivariateBcdmWorker:
         #         if t
         #         else self.prev_log_joint
         #     )
-        log_joint = self.log_joint[t, : t + 1]
         log_joint[0] = scipy.special.logsumexp(
             log_pred[0] + self.log_hazard + self.prev_log_joint
         )
