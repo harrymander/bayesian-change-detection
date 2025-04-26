@@ -279,18 +279,16 @@ class _MultivariateBcdmWorker:
         # to calculate the reset probability in Eq. 28
         mask = np.r_[True, self.prev_joint_support]
 
-        # Same as above, log_pred[0] corresponds to Theta_t etc.
-        # TODO: use the mask to avoid computing the expensive logpdf outside of
-        # the support.
-        log_pred = np.where(
-            mask,
-            (
-                params_view.mvt_logpdf(
-                    x.reshape(1, -1),
-                    np.atleast_1d(y),
-                ).ravel()
-            ),
-            -np.inf,
+        # Same as above, log_pred[0] corresponds to Theta_t etc. Use the mask
+        # to avoid expensive PDF computation outside of the support
+        log_pred = np.full(t + 1, -np.inf)
+        log_pred[mask] = (
+            params_view[mask]
+            .mvt_logpdf(
+                x.reshape(1, -1),
+                np.atleast_1d(y),
+            )
+            .ravel()
         )
 
         # Compute the (t + 1) changepoint probabilities.
