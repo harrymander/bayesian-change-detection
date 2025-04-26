@@ -261,6 +261,9 @@ class _MultivariateBcdmWorker:
         self.prev_joint_support = mask
 
     def _update(self, t: int, x: np.ndarray, y: float) -> None:
+        if t:
+            self._trim_support()
+
         # Note that the variable `t` is 0-indexed here whereas in the notes it
         # starts from 1. self.params is stored in the opposite order to
         # self.prev_log_joint, so it is reversed. Therefore params_view[0]
@@ -313,7 +316,6 @@ class _MultivariateBcdmWorker:
 
         self.log_pred[t, : t + 1] = log_pred
         self.prev_log_joint = log_joint
-        self._trim_support()
 
 
 class NigPrior:
