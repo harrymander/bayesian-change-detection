@@ -5,6 +5,7 @@ import json
 import subprocess
 import sys
 import tempfile
+import textwrap
 import timeit
 from collections.abc import Generator
 from contextlib import contextmanager
@@ -79,6 +80,15 @@ class TestInfo:
     number_loops: int
     options: dict[str, Any]
 
+    def pretty(self) -> str:
+        fields = dataclasses.asdict(self)
+        options = fields.pop("options")
+        lines = [f"{attr}: {val}" for attr, val in fields.items()]
+        if options:
+            lines.append("options:")
+            lines.extend(f"  {attr}: {val}" for attr, val in options.items())
+        return "\n".join(lines)
+
 
 def current_datetime_str() -> str:
     return datetime.datetime.now(datetime.UTC).strftime("%Y-%m-%d %H:%M:%S %Z")
@@ -132,17 +142,16 @@ def main(ref: str, output: Path, num_loops: int, **options):
             **options,
         )
 
-    infos.append(
-        TestInfo(
-            ref=ref_sha,
-            datetime=datetime_str,
-            execution_time=execution_time,
-            number_loops=num_loops,
-            options=options,
-        )
+    info = TestInfo(
+        ref=ref_sha,
+        datetime=datetime_str,
+        execution_time=execution_time,
+        number_loops=num_loops,
+        options=options,
     )
+    infos.append(info)
     write_test_infos(output, infos)
-    slog(f"Time for {num_loops} loops: {execution_time:g} s")
+    slog(textwrap.indent(info.pretty(), "  "))
 
 
 def profile(
