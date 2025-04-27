@@ -7,7 +7,7 @@ cp ./time_bcdm.py "$SCRIPT"
 trap 'rm -rf -- "$SCRIPT"' EXIT
 
 for trim in --trim --no-trim; do
-    for num_samples in $(seq 100 100 500) $(seq 1000 1000 10000); do
+    for num_samples in $(seq 100 100 500) $(seq 1000 1000 10000) $(seq 12500 2500 20000); do
         uv run "$SCRIPT" \
             --output=complexity.json \
             --num-samples="$num_samples" \
