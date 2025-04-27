@@ -9,6 +9,7 @@ import textwrap
 import timeit
 from collections.abc import Generator
 from contextlib import contextmanager
+from os import PathLike
 from pathlib import Path
 from typing import Any
 
@@ -94,8 +95,8 @@ def current_datetime_str() -> str:
     return datetime.datetime.now(datetime.UTC).strftime("%Y-%m-%d %H:%M:%S %Z")
 
 
-def load_test_infos(path: Path) -> list[TestInfo]:
-    with path.open() as f:
+def load_test_infos(path: PathLike | str) -> list[TestInfo]:
+    with open(path) as f:
         data = json.load(f)
     return [TestInfo(**info) for info in data]
 
