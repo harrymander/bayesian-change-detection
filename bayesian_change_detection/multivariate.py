@@ -172,13 +172,13 @@ class MultivariateBcdmResults:
     `(n, n)` array of log probabilities of the predictive distributions at each
     time point.
 
-    Has a similar structure to `log_posterior`, i.e., an upper-triangular
-    matrix where the columns corresponds to the time points. In each column,
-    the elements are the log density of the predictive distribution of the
-    model given the elements in the segment up to that timepoint. E.g., the
-    element in row `i` and column `j` is the log predictive probability of the
-    `j`th observation given the model for the segment containing the `i`
-    previous observations.
+    Has a similar structure to `log_joint`, i.e., an upper-triangular matrix
+    where the columns corresponds to the time points. In each column, the
+    elements are the log density of the predictive distribution of the model
+    given the elements in the segment up to that timepoint. E.g., the element
+    in row `i` and column `j` is the log predictive probability of the `j`th
+    observation given the model for the segment containing the `i` previous
+    observations.
     """
 
     def log_posterior(self) -> np.ndarray:
