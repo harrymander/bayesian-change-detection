@@ -8,7 +8,7 @@ import tempfile
 import textwrap
 import timeit
 from collections.abc import Generator
-from contextlib import contextmanager
+from contextlib import AbstractContextManager, contextmanager, nullcontext
 from os import PathLike
 from pathlib import Path
 from typing import Any
@@ -73,6 +73,16 @@ def get_sha_for_ref(ref: str) -> str:
     return r.stdout.decode().splitlines()[0]
 
 
+def git_worktree_is_dirty() -> bool:
+    r = subprocess.run(
+        ("git", "status", "--porcelain"),
+        cwd=THIS_DIR,
+        check=True,
+        stdout=subprocess.PIPE,
+    )
+    return bool(r.stdout.strip())
+
+
 @dataclasses.dataclass
 class TestInfo:
     ref: str
@@ -120,7 +130,7 @@ def load_module(path: Path, name: str):
 
 
 @click.command(context_settings=dict(show_default=True))
-@click.argument("ref", required=True)
+@click.argument("ref", required=False)
 @click.option("--trim/--no-trim", default=False)
 @click.option("--num-samples", "-n", default=2000, type=click.IntRange(min=1))
 @click.option("--num-loops", default=100, type=click.IntRange(min=1))
@@ -130,13 +140,26 @@ def load_module(path: Path, name: str):
     required=True,
     type=click.Path(writable=True, dir_okay=False, path_type=Path),
 )
-def main(ref: str, output: Path, num_loops: int, **options):
+def main(ref: str | None, output: Path, num_loops: int, **options):
     infos = load_test_infos(output) if output.exists() else []
-    ref_sha = get_sha_for_ref(ref)
+
+    worktree: AbstractContextManager[Path]
+    if ref:
+        ref_sha = get_sha_for_ref(ref)
+        slog(f"Profiling {ref} ({get_commit_message_summary(ref_sha)})...")
+        worktree = git_worktree(ref_sha)
+    else:
+        worktree = nullcontext(THIS_DIR)
+        ref_sha = get_sha_for_ref("HEAD")
+        dirty = git_worktree_is_dirty()
+        slog("Profiling current worktree")
+        if dirty:
+            ref_sha = f"{ref_sha}-dirty"
+            slog("Warning: worktree is dirty", fg="yellow")
+
     datetime_str = current_datetime_str()
-    slog(f"Profiling {ref} ({get_commit_message_summary(ref_sha)})...")
-    with git_worktree(ref_sha) as worktree:
-        bcd = load_module(worktree, "bayesian_change_detection")
+    with worktree as worktree_path:
+        bcd = load_module(worktree_path, "bayesian_change_detection")
         execution_time = profile(
             bcd=bcd,
             num_loops=num_loops,
