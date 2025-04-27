@@ -49,6 +49,7 @@ class FigSizeParam(click.ParamType):
     type=click.IntRange(min=0, min_open=True),
     help="Maximum x-axis value to plot.",
 )
+@click.option("--fit/--no-fit", default=True, help="Show lines of best fit.")
 def main(infos_file: str, **kwargs) -> None:
     """
     Plots times in INFOS_FILE, which defaults to complexity.json if not
@@ -84,6 +85,32 @@ def get_times(
     return num_samples, execution_times
 
 
+def poly_best_fit(
+    x: Sequence[float],
+    y: Sequence[float],
+    degree: int,
+    *,
+    bias: bool = False,
+    n: int = 100,
+) -> tuple[Sequence[float], Sequence[float]]:
+    import numpy as np
+    from sklearn.linear_model import LinearRegression
+    from sklearn.preprocessing import PolynomialFeatures
+
+    xr = np.linspace(x[0], x[-1], n).reshape(-1, 1)
+    x = np.asarray(x).reshape(-1, 1)  # type: ignore
+    y = np.asarray(y)  # type: ignore
+
+    # Set fit_intercept=False as it will be added by PolynomialFeatures
+    model = LinearRegression(fit_intercept=False)
+    poly = PolynomialFeatures(degree, include_bias=bias)
+    model.fit(poly.fit_transform(x), y)
+    return (
+        xr,  # type: ignore
+        model.predict(poly.fit_transform(xr)),
+    )
+
+
 def plot_times(
     infos: list[TestInfo],
     output: str | None,
@@ -93,6 +120,7 @@ def plot_times(
     figsize: tuple[float, float] | None,
     xmin: float | None,
     xmax: float | None,
+    fit: bool,
 ):
     import matplotlib.pyplot as plt
 
@@ -109,18 +137,35 @@ def plot_times(
             max_samples=xmax,
         )
 
-    ax.plot(
-        *_get_times(True),
+    best_fit_kw = dict(linestyle="--", linewidth=1)
+
+    trim_times = _get_times(True)
+    line = ax.plot(
+        *trim_times,
         "^",
         markerfacecolor="none",
         label="With support trimming",
-    )
-    ax.plot(
-        *_get_times(False),
+    )[0]
+    if fit:
+        ax.plot(
+            *poly_best_fit(*trim_times, 2),
+            color=line.get_color(),
+            **best_fit_kw,
+        )
+
+    non_trim_times = _get_times(False)
+    line = ax.plot(
+        *non_trim_times,
         "o",
         markerfacecolor="none",
         label="Without support trimming",
-    )
+    )[0]
+    if fit:
+        ax.plot(
+            *poly_best_fit(*non_trim_times, 2),
+            color=line.get_color(),
+            **best_fit_kw,
+        )
 
     if logy:
         ax.set_yscale("log")
