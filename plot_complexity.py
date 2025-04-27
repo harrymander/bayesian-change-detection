@@ -39,6 +39,16 @@ class FigSizeParam(click.ParamType):
     type=FigSizeParam(),
     help="Width and height of figure in inches.",
 )
+@click.option(
+    "--xmin",
+    type=click.IntRange(min=0, min_open=True),
+    help="Minimum x-axis value to plot.",
+)
+@click.option(
+    "--xmax",
+    type=click.IntRange(min=0, min_open=True),
+    help="Maximum x-axis value to plot.",
+)
 def main(infos_file: str, **kwargs) -> None:
     """
     Plots times in INFOS_FILE, which defaults to complexity.json if not
@@ -50,7 +60,14 @@ def main(infos_file: str, **kwargs) -> None:
 def get_times(
     infos: list[TestInfo],
     trim: bool,
+    min_samples: float | None,
+    max_samples: float | None,
 ) -> tuple[Sequence[int], Sequence[float]]:
+    def _num_samples_in_range(num_samples: int) -> bool:
+        if num_samples < (min_samples or 0):
+            return False
+        return max_samples is None or num_samples <= max_samples
+
     times = sorted(
         (
             (
@@ -59,6 +76,7 @@ def get_times(
             )
             for info in infos
             if info.options["trim"] == trim
+            and _num_samples_in_range(info.options["num_samples"])
         ),
         key=lambda t: t[0],
     )
@@ -73,6 +91,8 @@ def plot_times(
     logy: bool,
     grid: bool,
     figsize: tuple[float, float] | None,
+    xmin: float | None,
+    xmax: float | None,
 ):
     import matplotlib.pyplot as plt
 
@@ -81,14 +101,22 @@ def plot_times(
         subplots_kw["figsize"] = figsize
     fig, ax = plt.subplots(**subplots_kw)
 
+    def _get_times(trim: bool) -> tuple[Sequence[int], Sequence[float]]:
+        return get_times(
+            infos,
+            trim=trim,
+            min_samples=xmin,
+            max_samples=xmax,
+        )
+
     ax.plot(
-        *get_times(infos, trim=True),
+        *_get_times(True),
         "^",
         markerfacecolor="none",
         label="With support trimming",
     )
     ax.plot(
-        *get_times(infos, trim=False),
+        *_get_times(False),
         "o",
         markerfacecolor="none",
         label="Without support trimming",
