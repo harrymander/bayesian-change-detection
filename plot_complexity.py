@@ -1,8 +1,21 @@
 from collections.abc import Sequence
+from typing import Any
 
 import click
 
 from time_bcdm import TestInfo, load_test_infos
+
+
+class FigSizeParam(click.ParamType):
+    name = "width,height"
+
+    def convert(self, value, param, ctx):
+        size_strs = [s for s in value.split(",") if s.strip()]
+        if len(size_strs) != 2:
+            self.fail("Must be two comma-separated numbers", param, ctx)
+
+        float_arg = click.FloatRange(min=0, min_open=True)
+        return [float_arg.convert(s, param, ctx) for s in size_strs]
 
 
 @click.command(context_settings=dict(show_default=True))
@@ -20,6 +33,12 @@ from time_bcdm import TestInfo, load_test_infos
 @click.option("--logx", is_flag=True, help="Use logarithmic scale for x axis.")
 @click.option("--logy", is_flag=True, help="Use logarithmic scale for y axis.")
 @click.option("--grid/--no-grid", default=True, help="Show grid in plot.")
+@click.option(
+    "--size",
+    "figsize",
+    type=FigSizeParam(),
+    help="Width and height of figure in inches.",
+)
 def main(infos_file: str, **kwargs) -> None:
     """
     Plots times in INFOS_FILE, which defaults to complexity.json if not
@@ -53,10 +72,15 @@ def plot_times(
     logx: bool,
     logy: bool,
     grid: bool,
+    figsize: tuple[float, float] | None,
 ):
     import matplotlib.pyplot as plt
 
-    fig, ax = plt.subplots()
+    subplots_kw: dict[str, Any] = {}
+    if figsize:
+        subplots_kw["figsize"] = figsize
+    fig, ax = plt.subplots(**subplots_kw)
+
     ax.plot(
         *get_times(infos, trim=True),
         "^",
