@@ -7,7 +7,7 @@ import sys
 import tempfile
 import textwrap
 import timeit
-from collections.abc import Generator
+from collections.abc import Generator, Iterable
 from contextlib import AbstractContextManager, contextmanager, nullcontext
 from os import PathLike
 from pathlib import Path
@@ -24,17 +24,24 @@ def slog(*args, **kwargs):
     click.secho(*args, **kwargs)
 
 
+def run_git(
+    args: Iterable[PathLike | str], **kwargs
+) -> subprocess.CompletedProcess:
+    kwargs.setdefault("cwd", THIS_DIR)
+    return subprocess.run(["git", *args], **kwargs)
+
+
 @contextmanager
 def git_worktree(ref: str) -> Generator[Path, None, None]:
-    def _run(*args) -> None:
-        r = subprocess.run(
+    def _run_git(*args) -> None:
+        r = run_git(
             args,
-            cwd=THIS_DIR,
             stderr=subprocess.STDOUT,
             stdout=subprocess.PIPE,
         )
         if r.returncode:
             click.echo(r.stdout.decode(), err=True)
+            args = ("git", *args)
             msg = f"Command '{args}' returned exit status {r.returncode}"
             raise RuntimeError(msg)
 
@@ -42,17 +49,16 @@ def git_worktree(ref: str) -> Generator[Path, None, None]:
     with tempfile.TemporaryDirectory(prefix=tmp_prefix) as tmpdir:
         try:
             path = Path(tmpdir) / "worktree"
-            _run("git", "worktree", "add", str(path), ref)
+            _run_git("worktree", "add", str(path), ref)
             yield path
         finally:
-            _run("git", "worktree", "remove", "--force", path)
+            _run_git("worktree", "remove", "--force", path)
 
 
 def get_commit_message_summary(ref: str) -> str:
     return (
-        subprocess.run(
-            ("git", "log", "-n", "1", "--format=%s", ref),
-            cwd=THIS_DIR,
+        run_git(
+            ("log", "-n", "1", "--format=%s", ref),
             check=True,
             stdout=subprocess.PIPE,
         )
@@ -62,9 +68,8 @@ def get_commit_message_summary(ref: str) -> str:
 
 
 def get_sha_for_ref(ref: str) -> str:
-    r = subprocess.run(
-        ("git", "rev-parse", ref, "--"),
-        cwd=THIS_DIR,
+    r = run_git(
+        ("rev-parse", ref, "--"),
         check=True,
         stdout=subprocess.PIPE,
     )
@@ -72,9 +77,8 @@ def get_sha_for_ref(ref: str) -> str:
 
 
 def git_worktree_is_dirty() -> bool:
-    r = subprocess.run(
-        ("git", "status", "--porcelain"),
-        cwd=THIS_DIR,
+    r = run_git(
+        ("status", "--porcelain"),
         check=True,
         stdout=subprocess.PIPE,
     )
