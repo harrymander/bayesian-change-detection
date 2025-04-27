@@ -97,27 +97,19 @@ def write_test_infos(path: Path, infos: list[TestInfo]) -> None:
         f.write("\n")
 
 
-@contextmanager
 def load_module(path: Path, name: str):
-    path_str = str(path)
-    module = None
-    sys.path.insert(0, path_str)
-    try:
-        module = importlib.import_module(name)
-        import_path = str(path / name)
-        if module.__path__[0] != import_path:
-            raise AssertionError(
-                f"Got invalid path: {module.__path__}, expected {import_path}"
-            )
-        yield module
-    finally:
-        if module:
-            sys.modules.pop(name)
-        sys.path.pop(sys.path.index(path_str))
+    sys.path.insert(0, str(path))
+    module = importlib.import_module(name)
+    import_path = str(path / name)
+    if module.__path__[0] != import_path:
+        raise AssertionError(
+            f"Got invalid path: {module.__path__}, expected {import_path}"
+        )
+    return module
 
 
 @click.command(context_settings=dict(show_default=True))
-@click.argument("refs", nargs=-1, required=True)
+@click.argument("ref", required=True)
 @click.option("--trim/--no-trim", default=False)
 @click.option("--num-samples", "-n", default=2000, type=click.IntRange(min=1))
 @click.option("--num-loops", default=100, type=click.IntRange(min=1))
@@ -127,33 +119,30 @@ def load_module(path: Path, name: str):
     required=True,
     type=click.Path(writable=True, dir_okay=False, path_type=Path),
 )
-def main(refs: list[str], output: Path, num_loops: int, **options):
+def main(ref: str, output: Path, num_loops: int, **options):
     infos = load_test_infos(output) if output.exists() else []
-    for ref in refs:
-        ref_sha = get_sha_for_ref(ref)
-        datetime_str = current_datetime_str()
-        slog(f"Profiling {ref} ({get_commit_message_summary(ref_sha)})...")
-        with (
-            git_worktree(ref_sha) as worktree,
-            load_module(worktree, "bayesian_change_detection") as bcd,
-        ):
-            execution_time = profile(
-                bcd=bcd,
-                num_loops=num_loops,
-                **options,
-            )
-
-        infos.append(
-            TestInfo(
-                ref=ref_sha,
-                datetime=datetime_str,
-                execution_time=execution_time,
-                number_loops=num_loops,
-                options=options,
-            )
+    ref_sha = get_sha_for_ref(ref)
+    datetime_str = current_datetime_str()
+    slog(f"Profiling {ref} ({get_commit_message_summary(ref_sha)})...")
+    with git_worktree(ref_sha) as worktree:
+        bcd = load_module(worktree, "bayesian_change_detection")
+        execution_time = profile(
+            bcd=bcd,
+            num_loops=num_loops,
+            **options,
         )
-        write_test_infos(output, infos)
-        slog(f"Time for {num_loops} loops: {execution_time:g} s")
+
+    infos.append(
+        TestInfo(
+            ref=ref_sha,
+            datetime=datetime_str,
+            execution_time=execution_time,
+            number_loops=num_loops,
+            options=options,
+        )
+    )
+    write_test_infos(output, infos)
+    slog(f"Time for {num_loops} loops: {execution_time:g} s")
 
 
 def profile(
