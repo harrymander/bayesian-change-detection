@@ -259,10 +259,11 @@ class _MultivariateBcdmWorker:
 
     def _update(self, t: int, x: np.ndarray, y: np.ndarray) -> None:
         # Note that the variable `t` is 0-indexed here whereas in the notes it
-        # starts from 1. self.params is stored in the opposite order to
-        # self.prev_log_joint, so it is reversed. Therefore params_view[0]
-        # corresponds to Theta_t in Eq. 25, and params_view[-1] corresponds to
-        # Theta_1.
+        # starts from 1.
+
+        # self.params is stored in the opposite order to self.prev_log_joint,
+        # so it is reversed. Therefore params_view[0] corresponds to Theta_t in
+        # Eq. 25, and params_view[-1] corresponds to Theta_1.
         params_view = self.params[: t + 1][::-1]
 
         prev_log_joint = self.prev_log_joint
