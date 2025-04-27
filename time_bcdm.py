@@ -24,30 +24,28 @@ def slog(*args, **kwargs):
     click.secho(*args, **kwargs)
 
 
-def subprocess_run(*args) -> None:
-    r = subprocess.run(
-        args,
-        cwd=THIS_DIR,
-        stderr=subprocess.STDOUT,
-        stdout=subprocess.PIPE,
-    )
-    if r.returncode:
-        click.echo(r.stdout.decode(), err=True)
-        raise RuntimeError(
-            f"Command '{args}' returned non-zero exit status {r.returncode}"
-        )
-
-
 @contextmanager
 def git_worktree(ref: str) -> Generator[Path, None, None]:
+    def _run(*args) -> None:
+        r = subprocess.run(
+            args,
+            cwd=THIS_DIR,
+            stderr=subprocess.STDOUT,
+            stdout=subprocess.PIPE,
+        )
+        if r.returncode:
+            click.echo(r.stdout.decode(), err=True)
+            msg = f"Command '{args}' returned exit status {r.returncode}"
+            raise RuntimeError(msg)
+
     tmp_prefix = f"{Path(__file__).stem}."
     with tempfile.TemporaryDirectory(prefix=tmp_prefix) as tmpdir:
         try:
             path = Path(tmpdir) / "worktree"
-            subprocess_run("git", "worktree", "add", str(path), ref)
+            _run("git", "worktree", "add", str(path), ref)
             yield path
         finally:
-            subprocess_run("git", "worktree", "remove", "--force", path)
+            _run("git", "worktree", "remove", "--force", path)
 
 
 def get_commit_message_summary(ref: str) -> str:
