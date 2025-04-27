@@ -1,5 +1,6 @@
 *.prof
 .*_cache/
 .dmypy.json
+.time_bcdm.*.py
 .venv/
 __pycache__/
