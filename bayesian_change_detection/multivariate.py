@@ -5,10 +5,7 @@ from typing import Literal, TypedDict, Unpack, cast, overload
 import numpy as np
 import scipy
 
-from bayesian_change_detection.array_utils import (
-    logsumexp_sparse,
-    masked_argpartition,
-)
+from bayesian_change_detection.array_utils import masked_argmin
 from bayesian_change_detection.linalg import (
     inv_positive_definite,
     matrix_transpose,
@@ -226,7 +223,9 @@ class _MultivariateBcdmWorker:
         self.joint_support = np.ones(self.n, dtype=bool)
         self.log_joint = np.full((self.n, self.n), -np.inf)
         self.log_pred = self.log_joint.copy()
-        self.min_log_prob: float = np.log(min_prob) if min_prob else -np.inf
+        self.min_log_prob: float | None = (
+            np.log(min_prob) if min_prob else None
+        )
         self.max_num_probs = max_num_probs or 0
 
         self.prev_log_joint: np.ndarray  # set in fit()
@@ -270,19 +269,19 @@ class _MultivariateBcdmWorker:
         mask = self.joint_support[-prev_log_joint.size :]
 
         # Mask anything lower than the kth largest value
-        k = self.max_num_probs
-        if k and mask.sum() > k:
-            mask[masked_argpartition(prev_log_joint, mask, -k)[:-k]] = False
+        max_probs = self.max_num_probs
+        if max_probs and t > max_probs:
+            mask[masked_argmin(prev_log_joint, mask)] = False
 
         # Mask anything lower than min_log_prob
-        if np.isfinite(self.min_log_prob):
+        if self.min_log_prob:
             # Normalise the joint to get the posterior
-            log_normaliser = logsumexp_sparse(prev_log_joint[mask])
+            log_normaliser = scipy.special.logsumexp(prev_log_joint[mask])
             mask[(prev_log_joint - log_normaliser) < self.min_log_prob] = False
 
         # mask[0] must be True since it corresponsd to params[0], which is a
         # new 'hypothesis' that a new segment begins after this time step.
-        mask = self.joint_support[-prev_log_joint.size - 1 :]
+        mask = self.joint_support[-t - 1 :]
 
         # Same as above, log_pred[0] corresponds to Theta_t etc. Use the mask
         # to avoid expensive PDF computation outside of the support
@@ -294,14 +293,14 @@ class _MultivariateBcdmWorker:
 
         # Reset probability.
         log_joint[0] = scipy.special.logsumexp(
-            log_pred[0] + self.log_hazard + self.prev_log_joint[mask[1:]]
+            log_pred[0] + self.log_hazard + prev_log_joint[mask[1:]]
         )
 
         # Growth probabilities. Will be -inf where log_pred is -inf.
         # TODO(?): could also mask out over the -inf points, but probably
         # faster to just perform the computation and let the -inf come out in
         # the addition. Need to profile.
-        log_joint[1:] = log_pred[1:] + self.log_1mhazard + self.prev_log_joint
+        log_joint[1:] = log_pred[1:] + self.log_1mhazard + prev_log_joint
 
         # Update the model parameters (Eqs. 30-33). Avoid expensive computation
         # outside of the support.
