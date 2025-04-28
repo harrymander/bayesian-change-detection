@@ -6,8 +6,9 @@ import sys
 import tempfile
 import textwrap
 import timeit
-from collections.abc import Generator, Iterable
+from collections.abc import Callable, Generator, Iterable
 from contextlib import AbstractContextManager, contextmanager, nullcontext
+from functools import partial
 from os import PathLike
 from pathlib import Path
 from typing import Annotated, Any, cast
@@ -24,6 +25,8 @@ from pydantic import (
     ValidationError,
 )
 from pydantic_core import from_json
+
+from multivariate_examples import generate_random_piecewise_data
 
 THIS_DIR = Path(__file__).parent
 
@@ -152,31 +155,11 @@ def load_module(path: Path, name: str):
     return module
 
 
-def load_options(options_json_or_path: str) -> Options:
-    arg_is_path = options_json_or_path.lstrip()[0] != "{"
-    if arg_is_path:
-        with click.open_file(options_json_or_path) as f:
-            options_json_or_path = f.read()
-
-    try:
-        json_data = from_json(options_json_or_path)
-    except ValueError as e:
-        msg = f"Failed to parse JSON: {e}"
-        if not arg_is_path:
-            msg += (
-                "\nIf you meant to pass a path to a file, "
-                f"prepend './' to the path, e.g. './{options_json_or_path}'"
-            )
-        raise click.ClickException(msg) from None
-
-    try:
-        return Options.model_validate(json_data)
-    except ValidationError as e:
-        raise click.ClickException(f"Invalid options: {e}") from None
-
-
-class JsonOrPath(click.ParamType):
+class OptionsJsonOrPath(click.ParamType):
     name = "json|path"
+
+    def __init__(self, *, allow_dash: bool = True):
+        self.allow_dash = allow_dash
 
     def convert(self, value: str, param, ctx) -> Any:
         arg_is_path = value.lstrip()[0] != "{"
@@ -185,7 +168,7 @@ class JsonOrPath(click.ParamType):
                 readable=True,
                 dir_okay=False,
                 exists=True,
-                allow_dash=True,
+                allow_dash=self.allow_dash,
                 path_type=str,
             ).convert(value, param, ctx)
 
@@ -194,7 +177,7 @@ class JsonOrPath(click.ParamType):
                 value = f.read()
 
         try:
-            return from_json(value)
+            json_data = from_json(value)
         except ValueError as e:
             msg = f"Failed to parse JSON: {e}"
             if not arg_is_path:
@@ -204,14 +187,18 @@ class JsonOrPath(click.ParamType):
                 )
             self.fail(msg, param, ctx)
 
+        try:
+            return Options.model_validate(json_data)
+        except ValidationError as e:
+            self.fail(f"Invalid options JSON: {e}", param, ctx)
+
 
 @click.command(context_settings=dict(show_default=True))
 @click.argument("ref", required=False)
 @click.option(
     "--options",
-    "options_json",
     help="""Options JSON or path to JSON file (or - to read from stdin).""",
-    type=JsonOrPath(),
+    type=OptionsJsonOrPath(),
 )
 @click.option(
     "--num-samples",
@@ -231,15 +218,10 @@ def main(
     output: Path | None,
     num_loops: int,
     num_samples: int,
-    options_json: object | None,
+    options: Options | None,
 ):
-    if options_json is None:
+    if options is None:
         options = Options()
-    else:
-        try:
-            options = Options.model_validate(options_json)
-        except ValidationError as e:
-            raise click.ClickException(f"Invalid options JSON: {e}") from None
 
     infos = load_test_infos(output) if output and output.exists() else []
     worktree: AbstractContextManager[Path]
@@ -258,12 +240,15 @@ def main(
 
     profile_datetime = current_datetime()
     with worktree as worktree_path:
-        bcd = load_module(worktree_path, "bayesian_change_detection")
-        execution_time = profile(
-            bcd=bcd,
-            num_loops=num_loops,
-            num_samples=num_samples,
-            options=options,
+        function = get_profiling_function(
+            generate_profiling_data(num_samples),
+            options,
+            load_module(worktree_path, "bayesian_change_detection"),
+        )
+        execution_time = timeit.timeit(
+            "function()",
+            globals=dict(function=function),
+            number=num_loops,
         )
 
     info = TestInfo(
@@ -280,36 +265,34 @@ def main(
     slog(textwrap.indent(info.model_dump_json(indent=2), "  "))
 
 
-def profile(
-    *,
-    bcd,
-    num_samples: int,
-    num_loops: int,
-    options: Options,
-) -> float:
-    rng = np.random.default_rng(42)
-    hazard = 1 / 100
-    meanx = 0.0
-    data = np.empty(num_samples)
-    for i in range(num_samples):
-        if rng.random() < hazard:
-            meanx = rng.normal(scale=2)
-        data[i] = rng.normal(meanx)
+ProfilingData = tuple[np.ndarray, np.ndarray]
 
-    kwargs: dict = dict(hazard=hazard)
+
+def generate_profiling_data(num_samples: int) -> ProfilingData:
+    y = generate_random_piecewise_data(
+        rng=np.random.default_rng(42),
+        num_samples=num_samples,
+        mean_mean=0,
+        mean_var=2,
+        var=1,
+        hazard=0.1,
+    )[0]
+    return np.ones_like(y), y
+
+
+def get_profiling_function(
+    data: ProfilingData, options: Options, bcd_module=None
+) -> Callable[[], Any]:
+    if bcd_module:
+        multivariate_bcdm = bcd_module.multivariate_bcdm
+    else:
+        from bayesian_change_detection import multivariate_bcdm
+
+    kwargs: dict = dict(cov=2, hazard=0.1)
     if options.trim:
         kwargs.update(**options.trim.model_dump())
 
-    return timeit.timeit(
-        "f(x, y, **kwargs)",
-        globals=dict(
-            f=bcd.multivariate_bcdm,
-            x=data,
-            y=np.ones_like(data),
-            kwargs=kwargs,
-        ),
-        number=num_loops,
-    )
+    return partial(multivariate_bcdm, *data, **kwargs)
 
 
 if __name__ == "__main__":
