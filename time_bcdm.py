@@ -1,7 +1,5 @@
-import dataclasses
 import datetime
 import importlib
-import json
 import subprocess
 import sys
 import tempfile
@@ -11,10 +9,18 @@ from collections.abc import Generator, Iterable
 from contextlib import AbstractContextManager, contextmanager, nullcontext
 from os import PathLike
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import click
 import numpy as np
+from pydantic import (
+    AwareDatetime,
+    BaseModel,
+    ConfigDict,
+    TypeAdapter,
+    ValidationError,
+)
+from pydantic_core import from_json
 
 THIS_DIR = Path(__file__).parent
 
@@ -85,39 +91,45 @@ def git_worktree_is_dirty() -> bool:
     return bool(r.stdout.strip())
 
 
-@dataclasses.dataclass
-class TestInfo:
+class TrimOptions(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    max_num_probs: int
+    min_prob: float
+
+
+class Options(BaseModel):
+    trim: TrimOptions | None = None
+
+
+class TestInfo(BaseModel):
     ref: str
-    datetime: str
+    datetime: AwareDatetime
+    num_samples: int
     execution_time: float
     number_loops: int
-    options: dict[str, Any]
+    options: Options
 
-    def pretty(self) -> str:
-        fields = dataclasses.asdict(self)
-        options = fields.pop("options")
-        lines = [f"{attr}: {val}" for attr, val in fields.items()]
-        if options:
-            lines.append("options:")
-            lines.extend(f"  {attr}: {val}" for attr, val in options.items())
-        return "\n".join(lines)
+    @property
+    def avg_execution_time(self) -> float:
+        return self.execution_time / self.number_loops
 
 
-def current_datetime_str() -> str:
-    return datetime.datetime.now(datetime.UTC).strftime("%Y-%m-%d %H:%M:%S %Z")
+def current_datetime() -> AwareDatetime:
+    return datetime.datetime.now(datetime.UTC)
 
 
 def load_test_infos(path: PathLike | str) -> list[TestInfo]:
-    with open(path) as f:
-        data = json.load(f)
-    return [TestInfo(**info) for info in data]
+    with open(path, "rb") as f:
+        data = f.read()
+    return TypeAdapter(list[TestInfo]).validate_json(data)
 
 
 def write_test_infos(path: Path, infos: list[TestInfo]) -> None:
-    data = [dataclasses.asdict(info) for info in infos]
-    with path.open("w") as f:
-        json.dump(data, f, indent=2)
-        f.write("\n")
+    data = TypeAdapter(list[TestInfo]).dump_json(infos, indent=2)
+    with path.open("wb") as f:
+        f.write(data)
+        f.write(b"\n")
 
 
 def load_module(path: Path, name: str):
@@ -131,20 +143,96 @@ def load_module(path: Path, name: str):
     return module
 
 
+def load_options(options_json_or_path: str) -> Options:
+    arg_is_path = options_json_or_path.lstrip()[0] != "{"
+    if arg_is_path:
+        with click.open_file(options_json_or_path) as f:
+            options_json_or_path = f.read()
+
+    try:
+        json_data = from_json(options_json_or_path)
+    except ValueError as e:
+        msg = f"Failed to parse JSON: {e}"
+        if not arg_is_path:
+            msg += (
+                "\nIf you meant to pass a path to a file, "
+                f"prepend './' to the path, e.g. './{options_json_or_path}'"
+            )
+        raise click.ClickException(msg) from None
+
+    try:
+        return Options.model_validate(json_data)
+    except ValidationError as e:
+        raise click.ClickException(f"Invalid options: {e}") from None
+
+
+class JsonOrPath(click.ParamType):
+    name = "json|path"
+
+    def convert(self, value: str, param, ctx) -> Any:
+        arg_is_path = value.lstrip()[0] != "{"
+        if arg_is_path:
+            path = click.Path(
+                readable=True,
+                dir_okay=False,
+                exists=True,
+                allow_dash=True,
+                path_type=str,
+            ).convert(value, param, ctx)
+
+            # Safe to cast as path_type=str above guarantees path will be a str
+            with click.open_file(cast(str, path)) as f:
+                value = f.read()
+
+        try:
+            return from_json(value)
+        except ValueError as e:
+            msg = f"Failed to parse JSON: {e}"
+            if not arg_is_path:
+                msg += (
+                    "\nIf you meant to pass a path to a file, "
+                    f"prepend './' to the path, e.g. './{value}'"
+                )
+            self.fail(msg, param, ctx)
+
+
 @click.command(context_settings=dict(show_default=True))
 @click.argument("ref", required=False)
-@click.option("--trim/--no-trim", default=False)
-@click.option("--num-samples", "-n", default=2000, type=click.IntRange(min=1))
+@click.option(
+    "--options",
+    "options_json",
+    help="""Options JSON or path to JSON file (or - to read from stdin).""",
+    type=JsonOrPath(),
+)
+@click.option(
+    "--num-samples",
+    "-n",
+    type=click.IntRange(min=1),
+    required=True,
+    help="Size of test data to perform change detection on.",
+)
 @click.option("--num-loops", default=100, type=click.IntRange(min=1))
 @click.option(
     "--output",
     "-o",
-    required=True,
     type=click.Path(writable=True, dir_okay=False, path_type=Path),
 )
-def main(ref: str | None, output: Path, num_loops: int, **options):
-    infos = load_test_infos(output) if output.exists() else []
+def main(
+    ref: str | None,
+    output: Path | None,
+    num_loops: int,
+    num_samples: int,
+    options_json: object | None,
+):
+    if options_json is None:
+        options = Options()
+    else:
+        try:
+            options = Options.model_validate(options_json)
+        except ValidationError as e:
+            raise click.ClickException(f"Invalid options JSON: {e}") from None
 
+    infos = load_test_infos(output) if output and output.exists() else []
     worktree: AbstractContextManager[Path]
     if ref:
         ref_sha = get_sha_for_ref(ref)
@@ -159,33 +247,36 @@ def main(ref: str | None, output: Path, num_loops: int, **options):
             ref_sha = f"{ref_sha}-dirty"
             slog("Warning: worktree is dirty", fg="yellow")
 
-    datetime_str = current_datetime_str()
+    profile_datetime = current_datetime()
     with worktree as worktree_path:
         bcd = load_module(worktree_path, "bayesian_change_detection")
         execution_time = profile(
             bcd=bcd,
             num_loops=num_loops,
-            **options,
+            num_samples=num_samples,
+            options=options,
         )
 
     info = TestInfo(
         ref=ref_sha,
-        datetime=datetime_str,
+        datetime=profile_datetime,
         execution_time=execution_time,
         number_loops=num_loops,
+        num_samples=num_samples,
         options=options,
     )
     infos.append(info)
-    write_test_infos(output, infos)
-    slog(textwrap.indent(info.pretty(), "  "))
+    if output:
+        write_test_infos(output, infos)
+    slog(textwrap.indent(info.model_dump_json(indent=2), "  "))
 
 
 def profile(
     *,
     bcd,
-    num_loops: int,
-    trim: bool,
     num_samples: int,
+    num_loops: int,
+    options: Options,
 ) -> float:
     rng = np.random.default_rng(42)
     hazard = 1 / 100
@@ -197,11 +288,8 @@ def profile(
         data[i] = rng.normal(meanx)
 
     kwargs: dict = dict(hazard=hazard)
-    if trim:
-        kwargs |= dict(
-            max_num_probs=50,
-            min_prob=1e-6,
-        )
+    if options.trim:
+        kwargs.update(**options.trim.model_dump())
 
     return timeit.timeit(
         "f(x, y, **kwargs)",

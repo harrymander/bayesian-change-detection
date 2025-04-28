@@ -3,7 +3,7 @@ from typing import Any
 
 import click
 
-from time_bcdm import TestInfo, load_test_infos
+from time_bcdm import TestInfo, TrimOptions, load_test_infos
 
 
 class FigSizeParam(click.ParamType):
@@ -58,31 +58,30 @@ def main(infos_file: str, **kwargs) -> None:
     plot_times(load_test_infos(infos_file), **kwargs)
 
 
-def get_times(
+def group_times_by_trim_options(
     infos: list[TestInfo],
-    trim: bool,
     min_samples: float | None,
     max_samples: float | None,
-) -> tuple[Sequence[int], Sequence[float]]:
-    def _num_samples_in_range(num_samples: int) -> bool:
+) -> dict[TrimOptions | None, tuple[Sequence[int], Sequence[float]]]:
+    def _num_samples_in_range(info: TestInfo) -> bool:
+        num_samples = info.num_samples
         if num_samples < (min_samples or 0):
             return False
         return max_samples is None or num_samples <= max_samples
 
-    times = sorted(
-        (
-            (
-                info.options["num_samples"],
-                info.execution_time / info.number_loops,
-            )
-            for info in infos
-            if info.options["trim"] == trim
-            and _num_samples_in_range(info.options["num_samples"])
-        ),
-        key=lambda t: t[0],
-    )
-    num_samples, execution_times = zip(*times, strict=True)
-    return num_samples, execution_times
+    grouped_times: dict[TrimOptions | None, list[tuple[int, float]]] = {}
+    for info in filter(_num_samples_in_range, infos):
+        grouped_times.setdefault(info.options.trim, []).append(
+            (info.num_samples, info.avg_execution_time)
+        )
+
+    for times in grouped_times.values():
+        times.sort(key=lambda t: t[0])
+
+    return {
+        trim: tuple(zip(*times, strict=True))  # type: ignore
+        for trim, times in grouped_times.items()
+    }
 
 
 def poly_best_fit(
@@ -129,43 +128,22 @@ def plot_times(
         subplots_kw["figsize"] = figsize
     fig, ax = plt.subplots(**subplots_kw)
 
-    def _get_times(trim: bool) -> tuple[Sequence[int], Sequence[float]]:
-        return get_times(
-            infos,
-            trim=trim,
-            min_samples=xmin,
-            max_samples=xmax,
-        )
-
     best_fit_kw = dict(linestyle="--", linewidth=1)
 
-    trim_times = _get_times(True)
-    line = ax.plot(
-        *trim_times,
-        "^",
-        markerfacecolor="none",
-        label="With support trimming",
-    )[0]
-    if fit:
-        ax.plot(
-            *poly_best_fit(*trim_times, 2),
-            color=line.get_color(),
-            **best_fit_kw,
+    grouped_times = group_times_by_trim_options(infos, xmin, xmax)
+    for trim, data in grouped_times.items():
+        line = ax.plot(
+            *data,
+            "o",
+            markerfacecolor="none",
+            label=f"Trim({trim})" if trim else "No support trimming",
         )
-
-    non_trim_times = _get_times(False)
-    line = ax.plot(
-        *non_trim_times,
-        "o",
-        markerfacecolor="none",
-        label="Without support trimming",
-    )[0]
-    if fit:
-        ax.plot(
-            *poly_best_fit(*non_trim_times, 2),
-            color=line.get_color(),
-            **best_fit_kw,
-        )
+        if fit:
+            ax.plot(
+                *poly_best_fit(*data, 2),
+                color=line[0].get_color(),
+                **best_fit_kw,
+            )
 
     if logy:
         ax.set_yscale("log")
