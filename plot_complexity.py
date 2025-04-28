@@ -21,6 +21,39 @@ class FigSizeParam(click.ParamType):
         return [float_arg.convert(s, param, ctx) for s in size_strs]
 
 
+def _get_valid_scale_names() -> set[str]:
+    from matplotlib.scale import get_scale_names
+
+    scales = set(get_scale_names())
+    scales.discard("function")
+    scales.discard("functionlog")
+    return scales
+
+
+class PlotScale(click.ParamType):
+    name = "linear|log[N]|..."
+    _valid_scales = _get_valid_scale_names()
+
+    def convert(self, value, param, ctx) -> dict:
+        if value in self._valid_scales:
+            return {"value": value}
+        elif value.startswith("log"):
+            base_str = value.removeprefix("log")
+            try:
+                return {"value": "log", "base": float(base_str)}
+            except ValueError:
+                pass
+
+        allowed = ", ".join(
+            f"'{val}'" for val in sorted(self._valid_scales | set(["log[N]"]))
+        )
+        super().fail(
+            f"Invalid axis scale '{value}'. Allowed values: {allowed}.",
+            param,
+            ctx,
+        )
+
+
 @click.command(context_settings=dict(show_default=True))
 @click.argument(
     "infos_file",
@@ -33,8 +66,18 @@ class FigSizeParam(click.ParamType):
     type=click.Path(writable=True, dir_okay=False),
     help="Write plot to file rather than opening in GUI.",
 )
-@click.option("--logx", is_flag=True, help="Use logarithmic scale for x axis.")
-@click.option("--logy", is_flag=True, help="Use logarithmic scale for y axis.")
+@click.option(
+    "--xscale",
+    type=PlotScale(),
+    default="linear",
+    help="Scale for x axis; 'linear', 'log', 'log2' etc.",
+)
+@click.option(
+    "--yscale",
+    type=PlotScale(),
+    default="linear",
+    help="Scale for y axis; 'linear', 'log', 'log2' etc.",
+)
 @click.option("--grid/--no-grid", default=True, help="Show grid in plot.")
 @click.option(
     "--size",
@@ -113,8 +156,8 @@ def poly_best_fit(
 def plot_times(
     infos: list[TestInfo],
     output: str | None,
-    logx: bool,
-    logy: bool,
+    xscale: dict,
+    yscale: dict,
     grid: bool,
     figsize: tuple[float, float] | None,
     xmin: float | None,
@@ -145,10 +188,8 @@ def plot_times(
                 **best_fit_kw,
             )
 
-    if logy:
-        ax.set_yscale("log")
-    if logx:
-        ax.set_xscale("log")
+    ax.set_yscale(**yscale)
+    ax.set_xscale(**xscale)
     ax.set_xlabel("Number of samples")
     ax.set_ylabel("Avg. execution time (s)")
     ax.grid(grid)
