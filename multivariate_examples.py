@@ -16,6 +16,7 @@ from bayesian_change_detection.multivariate import (
     NigParams,
     NigPrior,
 )
+from examples import generate_random_piecewise_data
 
 FIGSIZE = (20, 10)
 DATA_DIR = Path(__file__).parent / "data"
@@ -162,40 +163,6 @@ def triangular() -> None:
     plot_segment_predictions(axes[0], prior, changepoints, X, Y, t)
     axes[0].legend()
     plt.tight_layout()
-
-
-def generate_random_piecewise_data(
-    *,
-    rng: np.random.Generator | None,
-    var: float,
-    mean_mean: float,
-    mean_var: float,
-    hazard: float,
-    num_samples: int,
-) -> tuple[np.ndarray, list[int]]:
-    """
-    Generate random piecewise data of length `num_samples`.
-
-    Changepoints are randomly generated at a rate defined by `hazard`. Within
-    each segment, data are drawn from a normal distribution with variance `var`
-    and a mean drawn from a normal distribution with `mean_mean` mean and
-    `mean_var` variance.
-
-    Returns:
-        data: The generated data.
-        changepoints: List of changepoint indices.
-    """
-    rng = rng or np.random.default_rng()
-    data = np.empty(num_samples)
-    changepoints = []
-    mean = rng.normal(mean_mean, mean_var)
-    for t in range(num_samples):
-        if rng.random() < hazard:
-            mean = rng.normal(mean_mean, mean_var)
-            changepoints.append(t)
-        data[t] = rng.normal(mean, var)
-
-    return data, changepoints
 
 
 def random_piecewise() -> None:

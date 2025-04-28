@@ -26,8 +26,6 @@ from pydantic import (
 )
 from pydantic_core import from_json
 
-from multivariate_examples import generate_random_piecewise_data
-
 THIS_DIR = Path(__file__).parent
 
 
@@ -269,6 +267,8 @@ ProfilingData = tuple[np.ndarray, np.ndarray]
 
 
 def generate_profiling_data(num_samples: int) -> ProfilingData:
+    from examples import generate_random_piecewise_data
+
     y = generate_random_piecewise_data(
         rng=np.random.default_rng(42),
         num_samples=num_samples,
