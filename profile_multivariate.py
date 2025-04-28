@@ -7,6 +7,7 @@ from functools import partial
 from tempfile import TemporaryDirectory
 
 import click
+import numpy as np
 
 # Import these to avoid additional overhead from imports in profiling
 import scipy.linalg.lapack
@@ -14,10 +15,8 @@ import scipy.special
 import scipy.stats  # noqa: F401
 from scipy.stats import multivariate_t  # noqa: F401
 
-from multivariate_examples import (
-    load_well_data,
-    well_data_multivarate_bcdm,
-)
+from bayesian_change_detection.multivariate import multivariate_bcdm
+from multivariate_examples import generate_random_piecewise_data
 
 
 def run_snakeviz(file: str) -> int:
@@ -34,26 +33,58 @@ def run_snakeviz(file: str) -> int:
 
 
 @click.command()
-@click.option("--snakeviz", "-v", is_flag=True)
-@click.option("--output", "-o", type=click.Path(dir_okay=False, writable=True))
-@click.option("--trim-support", "--trim", is_flag=True)
-def main(output: str | None, snakeviz: bool, trim_support: bool) -> None:
+@click.option(
+    "--snakeviz",
+    "-v",
+    is_flag=True,
+    help="Run snakeviz to visualize the profile in a browser.",
+)
+@click.option(
+    "--output",
+    "-o",
+    type=click.Path(dir_okay=False, writable=True),
+    help="Path to write profile to.",
+)
+@click.option(
+    "--trim/--no-trim",
+    "trim_support",
+    show_default=True,
+    help="Whether to trim support.",
+)
+@click.option(
+    "--num-samples",
+    "-n",
+    default=10_000,
+    type=click.IntRange(min=1),
+    show_default=True,
+    help="Number of samples in the test data to perform change detection on.",
+)
+def main(
+    output: str | None,
+    snakeviz: bool,
+    trim_support: bool,
+    num_samples: int,
+) -> None:
     def run_profile(filename: str | None) -> None:
-        x, y = load_well_data()
+        y = generate_random_piecewise_data(
+            rng=np.random.default_rng(42),
+            num_samples=num_samples,
+            mean_mean=0,
+            mean_var=2,
+            var=1,
+            hazard=0.1,
+        )[0]
 
-        run_segmentation = (
-            partial(
-                well_data_multivarate_bcdm, max_num_probs=20, min_prob=1e-6
-            )
-            if trim_support
-            else well_data_multivarate_bcdm
-        )
+        kwargs: dict = dict(cov=2, hazard=0.1)
+        if trim_support:
+            kwargs.update(max_num_probs=20, min_prob=1e-6)
+
         cProfile.runctx(
             "run_segmentation(x, y)",
             globals={},
             locals={
-                "run_segmentation": run_segmentation,
-                "x": x,
+                "run_segmentation": partial(multivariate_bcdm, **kwargs),
+                "x": np.ones_like(y),
                 "y": y,
             },
             filename=filename,
