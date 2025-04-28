@@ -97,7 +97,7 @@ def git_worktree_is_dirty() -> bool:
 class TrimOptions(BaseModel):
     model_config = ConfigDict(frozen=True)
 
-    max_num_probs: int = Field(..., ge=1)
+    max_num_probs: int | None = Field(..., ge=1)
     min_prob: float = Field(..., ge=0)
 
 
