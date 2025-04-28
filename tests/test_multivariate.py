@@ -276,6 +276,7 @@ class BcdmWithSupportTrimmingTester(BcdmTester):
     def test_full_support_mask_max_size(self) -> None:
         mask = self.results.full_support_mask()
         max_sizes = np.full(mask.shape[0], self.max_num_probs)
+        max_sizes[: self.max_num_probs] = np.arange(self.max_num_probs) + 1
         assert_array_less_strict(mask.sum(axis=0), max_sizes + 1)
 
 
