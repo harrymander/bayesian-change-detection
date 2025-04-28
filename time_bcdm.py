@@ -1,5 +1,6 @@
 import datetime
 import importlib
+import re
 import subprocess
 import sys
 import tempfile
@@ -9,14 +10,16 @@ from collections.abc import Generator, Iterable
 from contextlib import AbstractContextManager, contextmanager, nullcontext
 from os import PathLike
 from pathlib import Path
-from typing import Any, cast
+from typing import Annotated, Any, cast
 
 import click
 import numpy as np
 from pydantic import (
+    AfterValidator,
     AwareDatetime,
     BaseModel,
     ConfigDict,
+    Field,
     TypeAdapter,
     ValidationError,
 )
@@ -94,20 +97,26 @@ def git_worktree_is_dirty() -> bool:
 class TrimOptions(BaseModel):
     model_config = ConfigDict(frozen=True)
 
-    max_num_probs: int
-    min_prob: float
+    max_num_probs: int = Field(..., ge=1)
+    min_prob: float = Field(..., ge=0)
 
 
 class Options(BaseModel):
     trim: TrimOptions | None = None
 
 
+def _validate_git_sha(value: str) -> str:
+    if re.match(r"^[0-9a-f]{40}(?:-dirty)?$", value):
+        return value
+    raise ValueError("Invalid Git SHA-1 hash")
+
+
 class TestInfo(BaseModel):
-    ref: str
+    ref: Annotated[str, AfterValidator(_validate_git_sha)]
     datetime: AwareDatetime
-    num_samples: int
-    execution_time: float
-    number_loops: int
+    num_samples: int = Field(..., ge=1)
+    execution_time: float = Field(..., gt=0)
+    number_loops: int = Field(..., ge=1)
     options: Options
 
     @property
