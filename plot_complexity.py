@@ -1,9 +1,12 @@
 from collections.abc import Sequence
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import click
 
 from time_bcdm import TestInfo, TrimOptions, load_test_infos
+
+if TYPE_CHECKING:
+    import numpy as np
 
 
 class FigSizeParam(click.ParamType):
@@ -85,29 +88,26 @@ def group_times_by_trim_options(
 
 
 def poly_best_fit(
-    x: Sequence[float],
-    y: Sequence[float],
+    x: "Sequence[float] | np.ndarray",
+    y: "Sequence[float] | np.ndarray",
     degree: int,
     *,
     bias: bool = False,
     n: int = 100,
-) -> tuple[Sequence[float], Sequence[float]]:
+) -> tuple["np.ndarray", "np.ndarray"]:
     import numpy as np
     from sklearn.linear_model import LinearRegression
     from sklearn.preprocessing import PolynomialFeatures
 
     xr = np.linspace(x[0], x[-1], n).reshape(-1, 1)
-    x = np.asarray(x).reshape(-1, 1)  # type: ignore
-    y = np.asarray(y)  # type: ignore
+    x = np.asarray(x).reshape(-1, 1)
+    y = np.asarray(y)
 
     # Set fit_intercept=False as it will be added by PolynomialFeatures
     model = LinearRegression(fit_intercept=False)
     poly = PolynomialFeatures(degree, include_bias=bias)
     model.fit(poly.fit_transform(x), y)
-    return (
-        xr,  # type: ignore
-        model.predict(poly.fit_transform(xr)),
-    )
+    return xr, model.predict(poly.fit_transform(xr))
 
 
 def plot_times(
