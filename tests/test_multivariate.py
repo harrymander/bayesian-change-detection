@@ -267,17 +267,15 @@ class BcdmWithoutSupportTrimmingTester(BcdmTester):
 
 
 class BcdmWithSupportTrimmingTester(BcdmTester):
-    # Support size can be one more than max_num_probs since we do not trim
-    # support after last datapoint.
     max_num_probs: int
 
     def test_final_support_max_size(self) -> None:
         support_size = self.results.final_support_mask().sum()
-        assert support_size <= self.max_num_probs + 1
+        assert support_size <= self.max_num_probs
 
     def test_full_support_mask_max_size(self) -> None:
         mask = self.results.full_support_mask()
-        max_sizes = np.full(mask.shape[0], self.max_num_probs + 1)
+        max_sizes = np.full(mask.shape[0], self.max_num_probs)
         assert_array_less_strict(mask.sum(axis=0), max_sizes + 1)
 
 

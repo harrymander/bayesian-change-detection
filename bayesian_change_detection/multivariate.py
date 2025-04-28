@@ -297,7 +297,7 @@ class _MultivariateBcdmWorker:
 
         # Mask anything lower than the kth largest value
         max_probs = self.max_num_probs
-        if max_probs and t > max_probs:
+        if max_probs and t >= max_probs:
             mask[masked_argmin(prev_log_joint, mask)] = False
 
         # Mask anything lower than min_log_prob
