@@ -17,7 +17,7 @@ profile_all_sample_sizes() {
     done
 }
 
-profile_all_sample_sizes '{"trim": {}}'
+profile_all_sample_sizes '{}'
 profile_all_sample_sizes '{"trim": {"max_num_probs": 50, "min_prob": 1e-6}}'
 profile_all_sample_sizes '{"trim": {"max_num_probs": 10, "min_prob": 1e-6}}'
 profile_all_sample_sizes '{"trim": {"max_num_probs": 10, "min_prob": 0}}'
