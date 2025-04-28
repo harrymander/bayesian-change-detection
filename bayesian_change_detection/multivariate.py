@@ -279,7 +279,7 @@ class _MultivariateBcdmWorker:
             log_normaliser = scipy.special.logsumexp(prev_log_joint[mask])
             mask[(prev_log_joint - log_normaliser) < self.min_log_prob] = False
 
-        # mask[0] must be True since it corresponsd to params[0], which is a
+        # mask[0] must be True since it corresponds to params[0], which is a
         # new 'hypothesis' that a new segment begins after this time step.
         mask = self.joint_support[-t - 1 :]
 
