@@ -1,3 +1,4 @@
+from collections.abc import Sequence
 from itertools import batched, chain, pairwise
 from pathlib import Path
 
@@ -7,6 +8,7 @@ import numpy as np
 from matplotlib.axes import Axes
 from matplotlib.colors import LogNorm
 from matplotlib.image import AxesImage
+from matplotlib.lines import Line2D
 
 from bayesian_change_detection import multivariate_bcdm
 from bayesian_change_detection.multivariate import (
@@ -77,6 +79,20 @@ def plot_probabilities(
     return probs, im
 
 
+def axvlines(
+    ax: Axes,
+    xvals: np.ndarray | Sequence[float],
+    *args,
+    **kwargs,
+) -> list[Line2D]:
+    """Adds multiple vertical lines with the same color and label such that
+    only a single legend entry is generated for the lines."""
+    first_line = ax.axvline(xvals[0], *args, **kwargs)
+    kwargs.pop("label", None)
+    kwargs["color"] = first_line.get_color()
+    return [first_line, *(ax.axvline(x, *args, **kwargs) for x in xvals[1:])]
+
+
 def triangular() -> None:
     """Simple example with triangular wave data."""
     rng = np.random.default_rng(42)
@@ -125,14 +141,26 @@ def triangular() -> None:
 
     changepoints = res.changepoints()
     for ax in axes:
-        for cp in true_changepoints:
-            ax.axvline(cp, color="red", linestyle="--")
-        for idx in changepoints:
-            ax.axvline(t[idx], color="green", linestyle="--")
+        axvlines(
+            ax,
+            true_changepoints,
+            color="red",
+            linestyle="--",
+            label="Actual changepoints",
+        )
+        axvlines(
+            ax,
+            t[changepoints],
+            color="green",
+            linestyle="--",
+            label="Predicted changepoints",
+        )
+
     for ax in axes[1:]:
         ax.set_ylabel("Run length")
 
     plot_segment_predictions(axes[0], prior, changepoints, X, Y, t)
+    axes[0].legend()
     plt.tight_layout()
 
 
@@ -186,16 +214,33 @@ def random_piecewise() -> None:
     )
     y = np.asarray(data)
     prior = NigPrior(1, cov=var0)
-    res = multivariate_bcdm(np.ones_like(y), y, prior=prior, hazard=hazard)
+    res = multivariate_bcdm(
+        np.ones_like(y),
+        y,
+        prior=prior,
+        hazard=hazard,
+    )
 
     axes = plt.subplots(3, 1, sharex=True, figsize=FIGSIZE)[1]
     axes[0].plot(data, "-o")
     changepoints = res.changepoints()
     for ax in axes:
-        for cp in true_changepoints:
-            ax.axvline(cp, color="red", linestyle="--")
-        for cp in changepoints:
-            ax.axvline(cp, color="green", linestyle="--")
+        axvlines(
+            ax,
+            true_changepoints,
+            color="red",
+            linestyle="--",
+            label="Actual changepoints",
+        )
+        axvlines(
+            ax,
+            changepoints,
+            color="green",
+            linestyle="--",
+            label="Predicted changepoints",
+        )
+
+    axes[0].legend()
 
     plot_segment_predictions(axes[0], prior, changepoints, np.ones_like(y), y)
     posterior = plot_probabilities(
@@ -248,9 +293,14 @@ def well_data() -> None:
     )
 
     changepoints = results.changepoints()
-    for cp in changepoints:
-        for ax in axes:
-            ax.axvline(cp, color="black", linewidth=0.5, linestyle="--")
+    for ax in axes:
+        axvlines(
+            ax,
+            changepoints,
+            color="black",
+            linewidth=0.5,
+            linestyle="--",
+        )
 
     for segment in batched(chain((0,), changepoints, (len(x) - 1,)), 2):
         if len(segment) < 2:
