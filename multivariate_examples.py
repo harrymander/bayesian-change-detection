@@ -136,32 +136,53 @@ def triangular() -> None:
     plt.tight_layout()
 
 
-def generate_random_piecewise_data(rng, varx, mean0, var0, T, cp_prob):
-    """Generate partitioned data of T observations according to constant
-    changepoint probability `cp_prob` with hyperpriors `mean0` and `prec0`.
+def generate_random_piecewise_data(
+    *,
+    rng: np.random.Generator | None,
+    var: float,
+    mean_mean: float,
+    mean_var: float,
+    hazard: float,
+    num_samples: int,
+) -> tuple[np.ndarray, list[int]]:
     """
-    data = []
-    cps = []
-    meanx = mean0
-    for t in range(0, T):
-        if rng.random() < cp_prob:
-            meanx = rng.normal(mean0, var0)
-            cps.append(t)
-        data.append(rng.normal(meanx, varx))
-    return data, cps
+    Generate random piecewise data of length `num_samples`.
+
+    Changepoints are randomly generated at a rate defined by `hazard`. Within
+    each segment, data are drawn from a normal distribution with variance `var`
+    and a mean drawn from a normal distribution with `mean_mean` mean and
+    `mean_var` variance.
+
+    Returns:
+        data: The generated data.
+        changepoints: List of changepoint indices.
+    """
+    rng = rng or np.random.default_rng()
+    data = np.empty(num_samples)
+    changepoints = []
+    mean = rng.normal(mean_mean, mean_var)
+    for t in range(num_samples):
+        if rng.random() < hazard:
+            mean = rng.normal(mean_mean, mean_var)
+            changepoints.append(t)
+        data[t] = rng.normal(mean, var)
+
+    return data, changepoints
 
 
 def random_piecewise() -> None:
     rng = np.random.default_rng(42)
 
-    T = 500  # Number of observations.
+    num_samples = 500
     hazard = 1 / 100  # Constant prior on changepoint probability.
-    mean0 = 0  # The prior mean on the mean parameter.
     var0 = 2  # The prior variance for mean parameter.
-    varx = 1  # The known variance of the data.
-
     data, true_changepoints = generate_random_piecewise_data(
-        rng, varx, mean0, var0, T, hazard
+        rng=rng,
+        num_samples=num_samples,
+        var=1,
+        mean_var=var0,
+        mean_mean=0,
+        hazard=hazard,
     )
     y = np.asarray(data)
     prior = NigPrior(1, cov=var0)
