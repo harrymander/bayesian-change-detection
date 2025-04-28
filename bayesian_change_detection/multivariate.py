@@ -134,16 +134,16 @@ class MultivariateBcdmResults:
     `n` datapoints with `p`-dimensional predictor (independent) variables."""
 
     mean: np.ndarray
-    """`(n, p)` array of means."""
+    """`(n, p)` array of means. Is `np.nan` outside of the support."""
 
     cov: np.ndarray
-    """`(n, p, p)` array of covariances."""
+    """`(n, p, p)` array of covariances. Is `np.nan` outside of the support."""
 
     shape: np.ndarray
-    """`(n,)` array of shape parameters."""
+    """`(n,)` array of shape parameters. Is `np.nan` outside of the support."""
 
     scale: np.ndarray
-    """`(n,)` array of scale parameters."""
+    """`(n,)` array of scale parameters. Is `np.nan` outside of the support."""
 
     log_joint: np.ndarray
     """
@@ -177,6 +177,27 @@ class MultivariateBcdmResults:
     observation given the model for the segment containing the `i` previous
     observations.
     """
+
+    def final_support_mask(self) -> np.ndarray:
+        """
+        Return a (n,) boolean array over the support at the final time step.
+
+        This corresponds to the support of the joint probabilities at the final
+        time step. If changepoint detection was run without support trimming
+        (i.e. no `max_num_probs` and `min_prob`), then will be all `True`.
+        """
+        return ~np.isnan(self.scale)
+
+    def full_support_mask(self) -> np.ndarray:
+        """
+        Return a (n, n) boolean array over the support with the same structure
+        as `log_joint`.
+        """
+        full_mask = np.zeros(self.log_joint.shape, dtype=bool)
+        mask = self.final_support_mask()
+        for i in range(len(mask)):
+            full_mask[i, : i + 1] = mask[: i + 1]
+        return full_mask.T
 
     def log_posterior(self) -> np.ndarray:
         """Convert joint probabilities to a triangular matrix of posterior
@@ -247,11 +268,17 @@ class _MultivariateBcdmWorker:
         for t, (x, y) in enumerate(zip(X[1:], Y[1:], strict=True), start=1):
             self._update(t, x, y)
 
+        mask = ~self.joint_support
+
+        def _mask_to_nan(a: np.ndarray) -> np.ndarray:
+            a[mask] = np.nan
+            return a
+
         return MultivariateBcdmResults(
-            mean=self.params.mean,
-            cov=self.params.cov,
-            shape=self.params.shape,
-            scale=self.params.scale,
+            mean=_mask_to_nan(self.params.mean),
+            cov=_mask_to_nan(self.params.cov),
+            shape=_mask_to_nan(self.params.shape),
+            scale=_mask_to_nan(self.params.scale),
             log_joint=self.log_joint.T,
             log_predictive=self.log_pred.T,
         )
