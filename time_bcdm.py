@@ -1,17 +1,17 @@
 import datetime
 import importlib
+import os.path
 import re
 import subprocess
 import sys
 import tempfile
-import textwrap
 import timeit
 from collections.abc import Callable, Generator, Iterable
 from contextlib import AbstractContextManager, contextmanager, nullcontext
 from functools import partial
 from os import PathLike
 from pathlib import Path
-from typing import Annotated, Any, cast
+from typing import IO, Annotated, Any, cast
 
 import click
 import numpy as np
@@ -131,11 +131,9 @@ def load_test_infos(path: PathLike | str) -> list[TestInfo]:
     return TypeAdapter(list[TestInfo]).validate_json(data)
 
 
-def write_test_infos(path: Path, infos: list[TestInfo]) -> None:
-    data = TypeAdapter(list[TestInfo]).dump_json(infos, indent=2)
-    with path.open("wb") as f:
-        f.write(data)
-        f.write(b"\n")
+def write_test_infos(file: IO[bytes], infos: list[TestInfo]) -> None:
+    file.write(TypeAdapter(list[TestInfo]).dump_json(infos, indent=2))
+    file.write(b"\n")
 
 
 def load_module(path: Path, name: str):
@@ -217,13 +215,20 @@ class OptionsJsonOrPath(click.ParamType):
 @click.option(
     "--output",
     "-o",
-    type=click.Path(writable=True, dir_okay=False, path_type=Path),
+    default="-",
+    type=click.Path(
+        writable=True,
+        dir_okay=False,
+        path_type=Path,
+        allow_dash=True,
+    ),
     help="""File to write tests results to. If already exists, will append the
-    results to the file. If not provided, prints the results to stdout.""",
+    results to the file (must be a valid JSON list). If '-' (the default),
+    prints the results to stdout.""",
 )
 def main(
     ref: str | None,
-    output: Path | None,
+    output: str,
     num_loops: int,
     single_loop: bool,
     num_samples: int,
@@ -235,7 +240,11 @@ def main(
     if options is None:
         options = Options()
 
-    infos = load_test_infos(output) if output and output.exists() else []
+    infos = (
+        load_test_infos(output)
+        if output != "-" and os.path.exists(output)
+        else []
+    )
     worktree: AbstractContextManager[Path]
     if ref:
         ref_sha = get_sha_for_ref(ref)
@@ -272,9 +281,8 @@ def main(
         options=options,
     )
     infos.append(info)
-    if output:
-        write_test_infos(output, infos)
-    slog(textwrap.indent(info.model_dump_json(indent=2), "  "))
+    with click.open_file(output, "wb") as f:
+        write_test_infos(f, infos)
 
 
 ProfilingData = tuple[np.ndarray, np.ndarray]
