@@ -450,11 +450,10 @@ class NigPrior:
         scale: float = 1,
     ):
         """
-        Generate `t` independent `p`-dimensional NIG distributions.
+        A `p`-dimensional NIG distribution.
 
         Args:
             p: Dimensionality of the NIG distributions.
-            t: Number of distributions.
             mean: Mean of the distributions. Must be a scalar or (p,)
                 array-like.
             cov: Covariance of the distributions. Can be either:
