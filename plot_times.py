@@ -209,14 +209,13 @@ def plot_times(
     fig, ax = plt.subplots(**subplots_kw)
 
     best_fit_kw = dict(linestyle="--", linewidth=1)
-
     grouped_times = group_times_by_options(infos, xmin, xmax, ungroup)
     for options, data in grouped_times.items():
         line = ax.plot(
             *data,
             "o",
             markerfacecolor="none",
-            label=str(options),
+            label=f"{options} [n={len(data[0])}]",
         )
         if fit:
             ax.plot(
