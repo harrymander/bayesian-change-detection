@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
-from collections.abc import Callable
-from typing import Any, Protocol
+from collections.abc import Callable, Sequence
+from typing import Any, Protocol, cast
 
 import numpy as np
 import numpy.testing
@@ -454,5 +454,5 @@ def test_arraylike_1d_cov_prior_equivalent_to_2d() -> None:
 
 
 def test_arraylike_prior_fails_if_not_convertible_to_float() -> None:
-    with pytest.raises(TypeError):
-        NigParams.from_prior(3, mean=[1, 2, 3j])  # type: ignore
+    with pytest.raises(TypeError, match=r"^Cannot cast array data from dtype"):
+        NigPrior(3, mean=cast(Sequence[float], [1, 2, 3j]))
