@@ -5,12 +5,13 @@ from pathlib import Path
 import click
 import matplotlib.pyplot as plt
 import numpy as np
+import tqdm
 from matplotlib.axes import Axes
 from matplotlib.colors import LogNorm
 from matplotlib.image import AxesImage
 from matplotlib.lines import Line2D
 
-from bayesian_change_detection import multivariate_bcdm
+from bayesian_change_detection import multivariate_bcdm as _multivariate_bcdm
 from bayesian_change_detection.multivariate import (
     MultivariateBcdmResults,
     NigParams,
@@ -20,6 +21,17 @@ from examples import generate_random_piecewise_data
 
 FIGSIZE = (20, 10)
 DATA_DIR = Path(__file__).parent / "data"
+
+
+def multivariate_bcdm(x, y, **kwargs) -> MultivariateBcdmResults:
+    """Wrap multivariate_bcdm with progress bar."""
+    with tqdm.tqdm(total=len(x)) as pbar:
+        return _multivariate_bcdm(
+            x,
+            y,
+            update_hook=lambda *_: pbar.update(),
+            **kwargs,
+        )
 
 
 def plot_probabilities(
