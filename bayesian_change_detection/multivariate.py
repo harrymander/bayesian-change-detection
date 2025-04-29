@@ -4,6 +4,7 @@ from typing import Literal, TypedDict, Unpack, cast, overload
 
 import numpy as np
 import scipy
+from numpy.typing import NDArray
 
 from bayesian_change_detection.array_utils import masked_argmin
 from bayesian_change_detection.linalg import (
@@ -43,10 +44,13 @@ class NigPriorKwargs(TypedDict, total=False):
     scale: float
 
 
+FloatArray = NDArray[np.float64]
+
+
 @overload
 def multivariate_bcdm(
-    x: np.ndarray,
-    y: np.ndarray,
+    x: FloatArray,
+    y: FloatArray,
     hazard: float,
     prior: None = None,
     *,
@@ -59,8 +63,8 @@ def multivariate_bcdm(
 
 @overload
 def multivariate_bcdm(
-    x: np.ndarray,
-    y: np.ndarray,
+    x: FloatArray,
+    y: FloatArray,
     hazard: float,
     prior: "NigPrior" = ...,
     *,
@@ -71,8 +75,8 @@ def multivariate_bcdm(
 
 
 def multivariate_bcdm(
-    x: np.ndarray,
-    y: np.ndarray,
+    x: FloatArray,
+    y: FloatArray,
     hazard: float,
     prior: "None | NigPrior" = None,
     *,

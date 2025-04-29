@@ -386,7 +386,7 @@ class Test3DChangeDetection(BcdmWithoutSupportTrimmingTester):
         samples = 100
         w = rng.random(3)
         hazard = 0.1
-        x = np.linspace(0, 5, samples)
+        x: np.ndarray = np.linspace(0, 5, samples)
         x = np.stack((np.ones_like(x), x, x * 2), axis=1)
         data = []
         for xt in x:
