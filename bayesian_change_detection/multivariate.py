@@ -106,6 +106,11 @@ def multivariate_bcdm(
 
     Returns:
         Change detection results.
+
+    Raises:
+        ValueError: If any arguments have the wrong dimension, shape, or are
+            otherwise invalid.
+        TypeError: If dtype of `x` or `y` are not `np.float64`.
     """
     if not (0 < hazard < 1):
         raise ValueError("hazard must be in (0, 1)")
