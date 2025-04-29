@@ -49,6 +49,7 @@ def multivariate_bcdm(
     y: np.ndarray,
     hazard: float,
     prior: None = None,
+    *,
     min_prob: float = ...,
     max_num_probs: int | None = ...,
     **prior_kwargs: Unpack[NigPriorKwargs],
@@ -61,6 +62,7 @@ def multivariate_bcdm(
     y: np.ndarray,
     hazard: float,
     prior: "NigPrior" = ...,
+    *,
     min_prob: float = ...,
     max_num_probs: int | None = ...,
 ) -> "MultivariateBcdmResults": ...
@@ -71,6 +73,7 @@ def multivariate_bcdm(
     y: np.ndarray,
     hazard: float,
     prior: "None | NigPrior" = None,
+    *,
     min_prob: float = 0,
     max_num_probs: int | None = None,
     **prior_kwargs: Unpack[NigPriorKwargs],
@@ -82,9 +85,19 @@ def multivariate_bcdm(
         x: (n, p) or (n,) predictor variables.
         y: (n,) response variables.
         hazard: Hazard rate.
-        prior: NIG prior parameters
+        prior: NIG prior parameters. Cannot be passed if any `prior_kwargs` are
+            already passed.
+        min_prob: Minimum changepoint posterior probability. If greater than
+            zero, posterior probabilities less than this value will be
+            zeroed-out after each time step. This can significantly reduce the
+            processing time for large data.
+        max_num_probs: Maximum number of changepoint probabilities to keep
+            after each time step. If provided, will zero out all but the top
+            `max_num_probs` posterior probabilities after each time step. This
+            can significantly reduce the processing time for large data.
         **prior_kwargs: Parameters for NIG prior if prior is None. See
-            `NigPrior` for details.
+            `NigPrior` for details. Cannot be passed if `prior` is already
+            passed.
 
     Returns:
         Change detection results.
@@ -250,7 +263,7 @@ class _MultivariateBcdmWorker:
         min_prob: float,
         max_num_probs: int | None,
     ):
-        # Assumes parameters have been validated
+        # Assumes parameters have been validated - see multivariate_bcdm
         self.n, self.p = x.shape
         self.x = x
         self.y = y
