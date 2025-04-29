@@ -105,6 +105,8 @@ def multivariate_bcdm(
     Returns:
         Change detection results.
     """
+    if not (0 < hazard < 1):
+        raise ValueError("hazard must be in (0, 1)")
     if not (0 <= init_prob <= 1):
         raise ValueError("init_prob must be in [0, 1]")
     if not (0 <= min_prob < 1):
