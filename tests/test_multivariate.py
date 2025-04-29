@@ -15,6 +15,15 @@ from bayesian_change_detection.multivariate import NigParams, NigPrior
 from tests.conftest import JsonSnapshot, NDArraySnapshot
 
 
+@pytest.fixture(autouse=True)
+def _set_numpy_err():
+    old_settings = np.seterr(all="raise")
+    try:
+        yield
+    finally:
+        np.seterr(**old_settings)
+
+
 class _NumpyAssertFunction(Protocol):
     def __call__(
         self,
