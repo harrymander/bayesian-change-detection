@@ -57,9 +57,10 @@ class PlotScale(click.ParamType):
 
 @click.command(context_settings=dict(show_default=True))
 @click.argument(
-    "infos_file",
-    type=click.Path(exists=True, dir_okay=False),
-    default="complexity.json",
+    "infos_files",
+    type=click.Path(exists=True, dir_okay=False, readable=True),
+    nargs=-1,
+    required=True,
 )
 @click.option(
     "--output",
@@ -104,12 +105,14 @@ class PlotScale(click.ParamType):
     help="Do not group times by this parameter in the plot. Can be repeated.",
     type=click.Choice(list(Options.model_fields)),
 )
-def main(infos_file: str, ungroup: list[str], **kwargs) -> None:
+def main(infos_files: list[str], ungroup: list[str], **kwargs) -> None:
     """
-    Plots times in INFOS_FILE, which defaults to complexity.json if not
-    provided.
+    Plots times in INFOS_FILES.
     """
-    plot_times(load_test_infos(infos_file), ungroup=set(ungroup), **kwargs)
+    infos: list[TestInfo] = []
+    for file in infos_files:
+        infos.extend(load_test_infos(file))
+    plot_times(infos, ungroup=set(ungroup), **kwargs)
 
 
 @dataclass(frozen=True)
