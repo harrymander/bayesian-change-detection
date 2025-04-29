@@ -50,6 +50,7 @@ def multivariate_bcdm(
     hazard: float,
     prior: None = None,
     *,
+    init_prob: float = ...,
     min_prob: float = ...,
     max_num_probs: int | None = ...,
     **prior_kwargs: Unpack[NigPriorKwargs],
@@ -63,6 +64,7 @@ def multivariate_bcdm(
     hazard: float,
     prior: "NigPrior" = ...,
     *,
+    init_prob: float = ...,
     min_prob: float = ...,
     max_num_probs: int | None = ...,
 ) -> "MultivariateBcdmResults": ...
@@ -74,6 +76,7 @@ def multivariate_bcdm(
     hazard: float,
     prior: "None | NigPrior" = None,
     *,
+    init_prob: float = 1,
     min_prob: float = 0,
     max_num_probs: int | None = None,
     **prior_kwargs: Unpack[NigPriorKwargs],
@@ -87,6 +90,8 @@ def multivariate_bcdm(
         hazard: Hazard rate.
         prior: NIG prior parameters. Cannot be passed if any `prior_kwargs` are
             already passed.
+        init_prob: The initial reset probability, i.e., the probability of a
+            new segment beginning at the first datapoint.
         min_prob: Minimum changepoint posterior probability. If greater than
             zero, posterior probabilities less than this value will be
             zeroed-out after each time step. This can significantly reduce the
@@ -104,6 +109,8 @@ def multivariate_bcdm(
     """
     if not (0 < hazard < 1):
         raise ValueError("hazard must be in (0, 1)")
+    if not (0 <= init_prob <= 1):
+        raise ValueError("init_prob must be in [0, 1]")
     if not (0 <= min_prob < 1):
         raise ValueError("min_prob must be in [0, 1)")
     if max_num_probs is not None and max_num_probs <= 0:
@@ -135,6 +142,7 @@ def multivariate_bcdm(
     worker = _MultivariateBcdmWorker(
         x,
         y,
+        init_prob=init_prob,
         min_prob=min_prob,
         max_num_probs=max_num_probs,
         prior=prior,
@@ -240,6 +248,7 @@ class MultivariateBcdmResults:
 
 class _MultivariateBcdmWorker:
     __slots__ = [
+        "init_log_joint",
         "joint_support",
         "log_1mhazard",
         "log_hazard",
@@ -262,6 +271,7 @@ class _MultivariateBcdmWorker:
         *,
         prior: "NigPrior",
         hazard: float,
+        init_prob: float,
         min_prob: float,
         max_num_probs: int | None,
     ):
@@ -273,6 +283,7 @@ class _MultivariateBcdmWorker:
         self.log_hazard: float = np.log(hazard)
         self.log_1mhazard: float = np.log1p(-hazard)
         self.joint_support = np.ones(self.n, dtype=bool)
+        self.init_log_joint = np.log(init_prob) if init_prob else -np.inf
         self.log_joint = np.full((self.n, self.n), -np.inf)
         self.log_pred = self.log_joint.copy()
         self.min_log_prob: float | None = (
@@ -286,11 +297,9 @@ class _MultivariateBcdmWorker:
         X = self.x[:, np.newaxis, :]
         Y = self.y[:, np.newaxis]
 
-        # Compute the initial reset probability (Eq. 28). The initial joint
-        # probability is assumed to be 1, corresponding to a new segment
-        # starting at the first time point.
+        # Compute the initial reset probability (Eq. 28).
         log_pred = self.params[:1].mvt_logpdf(X[0], Y[0])[0]
-        log_joint = log_pred + self.log_hazard
+        log_joint = log_pred + self.log_hazard + self.init_log_joint
         self.prev_log_joint = log_joint
         self.log_joint[0, 0] = log_joint[0]
         self.log_pred[0, 0] = log_pred[0]
