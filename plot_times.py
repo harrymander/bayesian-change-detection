@@ -97,7 +97,19 @@ class PlotScale(click.ParamType):
     type=click.IntRange(min=0, min_open=True),
     help="Maximum x-axis value to plot.",
 )
-@click.option("--fit/--no-fit", default=True, help="Show lines of best fit.")
+@click.option(
+    "--fit",
+    default=2,
+    type=click.IntRange(min=0),
+    help="Degree of polynomial line of best fit. Pass 0 to disable.",
+)
+@click.option(
+    "--fit-bias",
+    "--fit-intercept",
+    is_flag=True,
+    default=False,
+    help="Whether to compute intercept term in line of best fit.",
+)
 @click.option(
     "--ungroup",
     "-u",
@@ -198,7 +210,8 @@ def plot_times(
     figsize: tuple[float, float] | None,
     xmin: float | None,
     xmax: float | None,
-    fit: bool,
+    fit: int,
+    fit_bias: bool,
     ungroup: set[str],
 ):
     import matplotlib.pyplot as plt
@@ -219,7 +232,7 @@ def plot_times(
         )
         if fit:
             ax.plot(
-                *poly_best_fit(*data, 2),
+                *poly_best_fit(*data, degree=fit, bias=fit_bias),
                 color=line[0].get_color(),
                 **best_fit_kw,
             )
