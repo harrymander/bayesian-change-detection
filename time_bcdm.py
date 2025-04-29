@@ -207,6 +207,13 @@ class OptionsJsonOrPath(click.ParamType):
 )
 @click.option("--num-loops", default=100, type=click.IntRange(min=1))
 @click.option(
+    "--single",
+    "-1",
+    "single_loop",
+    is_flag=True,
+    help="Shorthand for --num-loops=1",
+)
+@click.option(
     "--output",
     "-o",
     type=click.Path(writable=True, dir_okay=False, path_type=Path),
@@ -215,9 +222,13 @@ def main(
     ref: str | None,
     output: Path | None,
     num_loops: int,
+    single_loop: bool,
     num_samples: int,
     options: Options | None,
 ):
+    if single_loop:
+        num_loops = 1
+
     if options is None:
         options = Options()
 
