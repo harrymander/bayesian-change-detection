@@ -581,23 +581,12 @@ class NigParams:
         )
 
     def __getitem__(self, i) -> "NigParams":
-        def _keepdim(arr: np.ndarray, i) -> np.ndarray:
-            original_ndim = arr.ndim
-            arr = arr[i]
-            if arr.ndim == original_ndim:
-                return arr
-            if arr.ndim != original_ndim - 1:
-                raise ValueError(
-                    "only indexing across the first dimension is supported"
-                )
-            return np.expand_dims(arr, 0)
-
         return NigParams(
-            mean=_keepdim(self.mean, i),
-            cov=_keepdim(self.cov, i),
-            prec=_keepdim(self.prec, i),
-            shape=np.atleast_1d(self.shape[i]),
-            scale=np.atleast_1d(self.scale[i]),
+            mean=self.mean[i],
+            cov=self.cov[i],
+            prec=self.prec[i],
+            shape=self.shape[i],
+            scale=self.scale[i],
         )
 
     def _validate_x_arg(self, x: np.ndarray) -> None:

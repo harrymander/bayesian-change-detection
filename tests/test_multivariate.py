@@ -403,16 +403,6 @@ class Test3DChangeDetection(BcdmWithoutSupportTrimmingTester):
         )
 
 
-def test_params_index_with_scalar_maintains_shape() -> None:
-    params = NigParams.from_prior(NigPrior(5), 10)
-    param = params[0]
-    assert param.mean.shape == (1, 5)
-    assert param.cov.shape == (1, 5, 5)
-    assert param.prec.shape == (1, 5, 5)
-    assert param.shape.shape == (1,)
-    assert param.scale.shape == (1,)
-
-
 def assert_nig_prior_equal(a: NigPrior, b: NigPrior):
     __tracebackhide__ = True
     for field in NigParams.__dataclass_fields__:
