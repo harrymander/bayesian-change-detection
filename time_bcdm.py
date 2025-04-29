@@ -19,8 +19,10 @@ from pydantic import (
     AfterValidator,
     AwareDatetime,
     BaseModel,
+    BeforeValidator,
     ConfigDict,
     Field,
+    PlainSerializer,
     TypeAdapter,
     ValidationError,
 )
@@ -95,11 +97,27 @@ def git_worktree_is_dirty() -> bool:
     return bool(r.stdout.strip())
 
 
+def _dtype_validator(val: Any) -> np.dtype:
+    try:
+        return np.dtype(val)
+    except TypeError as e:
+        raise ValueError("Cannot interpret as a dtype") from e
+
+
 class Options(BaseModel):
-    model_config = ConfigDict(frozen=True, extra="allow")
+    model_config = ConfigDict(
+        frozen=True,
+        extra="allow",
+        arbitrary_types_allowed=True,
+    )
 
     max_num_probs: int | None = Field(None, ge=1)
     min_prob: float = Field(0, ge=0)
+    dtype: Annotated[
+        np.dtype,
+        BeforeValidator(_dtype_validator),
+        PlainSerializer(lambda dtype: dtype.name, return_type=str),
+    ] = np.dtype("float64")
 
 
 def _validate_git_sha(value: str) -> str:
@@ -262,7 +280,7 @@ def main(
     profile_datetime = current_datetime()
     with worktree as worktree_path:
         function = get_profiling_function(
-            generate_profiling_data(num_samples),
+            generate_profiling_data(num_samples, options),
             options,
             load_module(worktree_path, "bayesian_change_detection"),
         )
@@ -288,7 +306,9 @@ def main(
 ProfilingData = tuple[np.ndarray, np.ndarray]
 
 
-def generate_profiling_data(num_samples: int) -> ProfilingData:
+def generate_profiling_data(
+    num_samples: int, options: Options
+) -> ProfilingData:
     from examples import generate_random_piecewise_data
 
     y = generate_random_piecewise_data(
@@ -298,7 +318,9 @@ def generate_profiling_data(num_samples: int) -> ProfilingData:
         mean_var=2,
         var=1,
         hazard=0.1,
+        dtype=options.dtype,
     )[0]
+    assert y.dtype == options.dtype
     return np.ones_like(y), y
 
 

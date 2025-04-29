@@ -9,6 +9,7 @@ def generate_random_piecewise_data(
     mean_var: float,
     hazard: float,
     num_samples: int,
+    dtype=np.float64,
 ) -> tuple[np.ndarray, list[int]]:
     """
     Generate random piecewise data of length `num_samples`.
@@ -23,7 +24,7 @@ def generate_random_piecewise_data(
         changepoints: List of changepoint indices.
     """
     rng = rng or np.random.default_rng()
-    data = np.empty(num_samples)
+    data = np.empty(num_samples, dtype=dtype)
     changepoints = []
     mean = rng.normal(mean_mean, mean_var)
     for t in range(num_samples):
@@ -32,4 +33,5 @@ def generate_random_piecewise_data(
             changepoints.append(t)
         data[t] = rng.normal(mean, var)
 
+    assert data.dtype == dtype
     return data, changepoints

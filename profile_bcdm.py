@@ -66,7 +66,7 @@ def main(
         options = Options()
 
     def run_profile(filename: str | None) -> None:
-        data = generate_profiling_data(num_samples)
+        data = generate_profiling_data(num_samples, options)
         cProfile.runctx(
             "f()",
             globals={},
