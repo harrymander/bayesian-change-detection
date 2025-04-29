@@ -564,7 +564,7 @@ class NigParams:
         _validate_param("prec", 2)
 
     @classmethod
-    def from_prior(cls, priors: NigPrior, t: int = 1):
+    def from_prior(cls, priors: NigPrior, t: int = 1) -> "NigParams":
         """
         Generate `t` independent NIG distributions from priors.
 
@@ -572,7 +572,7 @@ class NigParams:
             priors: Priors of the distributions.
             t: Number of distributions.
         """
-        return cls(
+        return NigParams(
             mean=np.expand_dims(priors.mean, 0).repeat(t, axis=0),
             cov=np.expand_dims(priors.cov, 0).repeat(t, axis=0),
             prec=np.expand_dims(priors.prec, 0).repeat(t, axis=0),
