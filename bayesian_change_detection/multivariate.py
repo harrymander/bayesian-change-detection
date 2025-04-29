@@ -15,18 +15,31 @@ from bayesian_change_detection.linalg import (
 _LOG_2PI = np.log(2 * np.pi)
 
 
+_float_type = np.float64
+FloatArray = NDArray[_float_type]
+
+
 def _as_float_array(x) -> np.ndarray:
     if isinstance(x, np.ndarray):
         # Do not coerce to float64, rather let _check_array_shape raise an
         # error if wrong dtype. TODO: why not use astype(..., casting="safe")?
         return x
-    return np.asarray(x).astype(np.float64, casting="safe")
+    return np.asarray(x).astype(_float_type, casting="safe")
 
 
-def _check_array_shape(name: str, x: np.ndarray, exp: Sequence[int]) -> None:
-    if x.dtype != np.float64:
-        raise TypeError(f"{name} must be of type float64, got {x.dtype}")
+def _check_array_dtype(name: str, arr: np.ndarray, dtype=_float_type):
+    if arr.dtype != dtype:
+        msg = f"{name} must be of type {dtype.__name__}, got {arr.dtype}"
+        raise TypeError(msg)
 
+
+def _check_array_shape_and_dtype(
+    name: str,
+    x: np.ndarray,
+    exp: Sequence[int],
+    dtype=_float_type,
+) -> None:
+    _check_array_dtype(name, x, dtype)
     s = x.shape
     if s != exp:
         raise ValueError(f"invalid shape for {name}: expected {exp}, got {s}")
@@ -42,9 +55,6 @@ class NigPriorKwargs(TypedDict, total=False):
     cov: PriorCovArg
     shape: float
     scale: float
-
-
-FloatArray = NDArray[np.float64]
 
 
 @overload
@@ -134,7 +144,7 @@ def multivariate_bcdm(
     else:
         n, p = x.shape
 
-    _check_array_shape("y", y, (n,))
+    _check_array_shape_and_dtype("y", y, (n,))
 
     if prior:
         if prior_kwargs:
@@ -458,19 +468,19 @@ class NigPrior:
             scale: Scale parameter.
         """
         if np.isscalar(mean):
-            mean = np.full(p, mean, dtype=np.float64)
+            mean = np.full(p, mean, dtype=_float_type)
         else:
             mean = _as_float_array(mean)
-            _check_array_shape("mean", mean, (p,))
+            _check_array_shape_and_dtype("mean", mean, (p,))
         self.mean = mean
 
         if np.isscalar(cov):
-            cov = np.eye(p, dtype=np.float64) * cast(float, cov)
+            cov = np.eye(p, dtype=_float_type) * cast(float, cov)
         else:
             cov = _as_float_array(cov)
             if cov.ndim == 1:
                 cov = np.diag(cov)
-            _check_array_shape("cov", cov, (p, p))
+            _check_array_shape_and_dtype("cov", cov, (p, p))
         self.cov = cov
 
         self.shape = shape
@@ -502,27 +512,27 @@ class NigParams:
         "shape",
     ]
 
-    mean: np.ndarray
+    mean: FloatArray
     """
     (t, p) array of means.
     """
 
-    cov: np.ndarray
+    cov: FloatArray
     """
     (t, p, p) array of covariances.
     """
 
-    shape: np.ndarray
+    shape: FloatArray
     """
     (t,) array of shape parameters.
     """
 
-    scale: np.ndarray
+    scale: FloatArray
     """
     (t,) array of scale parameters.
     """
 
-    prec: np.ndarray
+    prec: FloatArray
     """
     (t, p, p) array of precisions.
     """
@@ -531,10 +541,13 @@ class NigParams:
         if self.mean.ndim != 2:
             raise ValueError("mean must be a 2D array")
 
+        for attr in self.__dataclass_fields__:
+            _check_array_dtype(attr, getattr(self, attr))
+
         t, p = self.mean.shape
 
         def _validate_param(name: str, ndims: int) -> None:
-            param = getattr(self, name)
+            param: FloatArray = getattr(self, name)
             if param.ndim != ndims + 1:
                 raise ValueError(f"{name} must be a {ndims + 1}D array")
 
@@ -563,8 +576,8 @@ class NigParams:
             mean=np.expand_dims(priors.mean, 0).repeat(t, axis=0),
             cov=np.expand_dims(priors.cov, 0).repeat(t, axis=0),
             prec=np.expand_dims(priors.prec, 0).repeat(t, axis=0),
-            shape=np.full(t, priors.shape, dtype=np.float64),
-            scale=np.full(t, priors.scale, dtype=np.float64),
+            shape=np.full(t, priors.shape, dtype=_float_type),
+            scale=np.full(t, priors.scale, dtype=_float_type),
         )
 
     def __getitem__(self, i) -> "NigParams":
@@ -611,7 +624,7 @@ class NigParams:
 
         self._validate_x_arg(x)
         n = x.shape[0]
-        _check_array_shape("y", y, (n,))
+        _check_array_shape_and_dtype("y", y, (n,))
 
         mean = self.mean[mask]
         t, p = mean.shape
@@ -736,7 +749,7 @@ class NigParams:
         """
         self._validate_x_arg(x)
         n = x.shape[0]
-        _check_array_shape("y", y, (n,))
+        _check_array_shape_and_dtype("y", y, (n,))
         t = self.mean.shape[0]
 
         # Σ from Eq. 27
@@ -898,7 +911,7 @@ class NigParams:
         """
         self._validate_x_arg(x)
         n, p = x.shape
-        _check_array_shape("y", y, (n,))
+        _check_array_shape_and_dtype("y", y, (n,))
 
         if self.mean.shape[0] != 1:
             msg = "can only fit regression model from a single prior"

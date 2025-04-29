@@ -108,11 +108,11 @@ def new_params(t: int, p: int) -> NigParams:
     cov = np.stack([np.eye(p) * i for i in np.linspace(1, 4, t)])
     assert cov.shape == (t, p, p)
     return NigParams(
-        mean=np.linspace(0, 5, t).repeat(p).reshape(-1, p),
+        mean=np.linspace(0, 5, t, dtype=np.float64).repeat(p).reshape(-1, p),
         cov=cov,
         prec=np.linalg.inv(cov),
-        shape=np.linspace(2, 5, t),
-        scale=np.linspace(2, 5, t),
+        shape=np.linspace(2, 5, t, dtype=np.float64),
+        scale=np.linspace(2, 5, t, dtype=np.float64),
     )
 
 
