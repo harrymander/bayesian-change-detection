@@ -247,7 +247,12 @@ def well_data_multivarate_bcdm(
 
 def well_data() -> None:
     x, y = load_well_data()
-    results = well_data_multivarate_bcdm(x, y, max_num_probs=20, min_prob=1e-6)
+    results = well_data_multivarate_bcdm(
+        x,
+        y,
+        max_num_probs=20,
+        min_prob=1e-12,
+    )
 
     axes = plt.subplots(2, 1, figsize=FIGSIZE, sharex=True)[1]
     axes[0].plot(y)
