@@ -251,7 +251,7 @@ class BcdmWithSupportTrimmingTester(BcdmTester):
         assert_array_less_strict(mask.sum(axis=1), max_sizes + 1)
 
 
-def _generate_1d_data(*, dtype=np.float64) -> np.ndarray:
+def _generate_1d_data(*, dtype) -> np.ndarray:
     samples = 100
     hazard = 0.1  # Constant prior on changepoint probability.
     mean0 = 0.0  # The prior mean on the mean parameter.
@@ -271,15 +271,17 @@ def _generate_1d_data(*, dtype=np.float64) -> np.ndarray:
     return np.asarray(data, dtype=dtype)
 
 
-def _1d_multivariate_bcdm(data: np.ndarray, **kwargs):
+def _1d_multivariate_bcdm(*, dtype=np.float64, **kwargs):
     kwargs = dict(cov=2, hazard=0.1) | kwargs
+    data = _generate_1d_data(dtype=dtype)
+    assert data.dtype == dtype
     return multivariate_bcdm(np.ones_like(data), data, **kwargs)
 
 
 class Test1DChangeDetection(BcdmWithoutSupportTrimmingTester):
     @classmethod
     def run_bcdm(cls) -> MultivariateBcdmResults:
-        return _1d_multivariate_bcdm(_generate_1d_data())
+        return _1d_multivariate_bcdm()
 
 
 class Test1DChangeDetectionWithSupportTrimming(BcdmWithSupportTrimmingTester):
@@ -288,30 +290,35 @@ class Test1DChangeDetectionWithSupportTrimming(BcdmWithSupportTrimmingTester):
     @classmethod
     def run_bcdm(cls) -> MultivariateBcdmResults:
         return _1d_multivariate_bcdm(
-            _generate_1d_data(),
             max_num_probs=cls.max_num_probs,
             min_prob=1e-12,
         )
 
 
+def _2d_multivariate_bcdm(*, dtype=np.float64) -> MultivariateBcdmResults:
+    rng = np.random.default_rng(42)
+
+    # Create input and outputs.
+    samples = 100
+    x = np.linspace(0, 3 * 2 * np.pi, samples, dtype=dtype)
+    assert x.dtype == dtype
+    noise = 0.1 * rng.standard_normal(samples, dtype=dtype)
+    y = -np.arcsin(np.sin(x)) * 2 / np.pi + noise
+    assert y.dtype == dtype
+    return multivariate_bcdm(
+        np.c_[np.ones_like(x), x],
+        y,
+        hazard=0.02,
+        cov=1e6,
+        shape=1e-3,
+        scale=1e-6,
+    )
+
+
 class Test2DChangeDetection(BcdmWithoutSupportTrimmingTester):
     @classmethod
     def run_bcdm(cls) -> MultivariateBcdmResults:
-        rng = np.random.default_rng(42)
-
-        # Create input and outputs.
-        samples = 100
-        x = np.linspace(0, 3 * 2 * np.pi, samples)
-        noise = 0.1 * rng.standard_normal(samples)
-        y = -np.arcsin(np.sin(x)) * 2 / np.pi + noise
-        return multivariate_bcdm(
-            np.c_[np.ones_like(x), x],
-            y,
-            hazard=0.02,
-            cov=1e6,
-            shape=1e-3,
-            scale=1e-6,
-        )
+        return _2d_multivariate_bcdm()
 
 
 class Test3DChangeDetection(BcdmWithoutSupportTrimmingTester):
@@ -340,33 +347,44 @@ class Test3DChangeDetection(BcdmWithoutSupportTrimmingTester):
         )
 
 
-@pytest.fixture(scope="module")
-def bcdm_1d_results_float32() -> MultivariateBcdmResults:
-    data = _generate_1d_data(dtype=np.float32)
-    assert data.dtype == np.float32
-    return _1d_multivariate_bcdm(data)
+def _xfail_param(*args, reason: str = ""):
+    return pytest.param(*args, marks=pytest.mark.xfail(reason=reason))
+
+
+def parametrize_results_generators(name: str):
+    generators = [
+        ("1d", _1d_multivariate_bcdm),
+        ("2d", _xfail_param(_2d_multivariate_bcdm, reason="Unstable")),
+    ]
+    return pytest.mark.parametrize(
+        name,
+        [g[1] for g in generators],
+        ids=[g[0] for g in generators],
+    )
 
 
 float32_fields = list(MultivariateBcdmResults.__dataclass_fields__)
 float32_fields.pop(float32_fields.index("joint_support"))
 
+
+@parametrize_results_generators("generator")
 @pytest.mark.parametrize("attr", float32_fields)
-def test_bcdm_with_float32_has_float32_result(
-    bcdm_1d_results_float32: MultivariateBcdmResults, attr: str
-) -> None:
-    field = getattr(bcdm_1d_results_float32, attr)
+def test_bcdm_with_float32_has_float32_result(generator, attr: str) -> None:
+    results = generator(dtype=np.float32)
+    field = getattr(results, attr)
     if isinstance(field, np.ndarray):
         dtype = field.dtype
     else:
         # Is a _TrilArray
         dtype = field.data.dtype
+
     assert dtype == np.float32
 
 
-def test_bcdm_with_float32_has_float32_log_posterior(
-    bcdm_1d_results_float32: MultivariateBcdmResults,
-) -> None:
-    dtype = bcdm_1d_results_float32.log_posterior().dtype
+@parametrize_results_generators("generator")
+def test_bcdm_with_float32_has_float32_log_posterior(generator) -> None:
+    results = generator(dtype=np.float32)
+    dtype = results.log_posterior().dtype
     assert dtype == np.float32
 
 
