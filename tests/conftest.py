@@ -24,7 +24,7 @@ def pytest_configure(config: pytest.Config):
     )
 
 
-def pytest_collection_modifyitems(session, config, items: list[pytest.Item]):
+def pytest_collection_modifyitems(items: list[pytest.Item]):
     for item in items:
         if isinstance(item, pytest.Function):
             if any(name.endswith("_snapshot") for name in item.fixturenames):
