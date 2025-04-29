@@ -1,4 +1,6 @@
 from abc import ABC, abstractmethod
+from collections.abc import Callable
+from typing import Any, Protocol
 
 import numpy as np
 import numpy.testing
@@ -15,17 +17,65 @@ from tests.conftest import JsonSnapshot, NDArraySnapshot
 RandomData = tuple[np.ndarray, np.ndarray]
 
 
-def assert_allclose(a, b, *, err_msg: str = "", **kwargs) -> None:
-    """Same as numpy.testing.assert_allclose, but NaNs do not compare equal by
-    default."""
-    __tracebackhide__ = True
-    kwargs = {"equal_nan": False} | kwargs
-    try:
-        numpy.testing.assert_allclose(a, b, err_msg=err_msg, **kwargs)
-    except AssertionError as e:
+class _NumpyAssertFunction(Protocol):
+    def __call__(
+        self,
+        actual,
+        desired,
+        *args: Any,
+        err_msg: str | None = ...,
+        **kwargs: Any,
+    ) -> None: ...
+
+
+def _make_numpy_assert_function(
+    assert_func: Callable,
+    default_err_msg: str,
+    **default_kwargs,
+) -> _NumpyAssertFunction:
+    def _assert(
+        actual, desired, *args, err_msg: str | None = None, **kwargs
+    ) -> None:
+        __tracebackhide__ = True
+        kwargs = default_kwargs | kwargs
         if not err_msg:
-            err_msg = "Arrays are not close"
-        raise AssertionError(f"{err_msg}{e}") from None
+            err_msg = default_err_msg
+        try:
+            assert_func(actual, desired, *args, err_msg=err_msg, **kwargs)
+        except AssertionError as e:
+            raise AssertionError(f"{err_msg}{e}") from None
+
+    return _assert
+
+
+assert_allclose = _make_numpy_assert_function(
+    numpy.testing.assert_allclose, "Arrays are not close"
+)
+assert_array_equal_strict = _make_numpy_assert_function(
+    numpy.testing.assert_array_equal, "Arrays are not equal", strict=True
+)
+
+
+def assert_array_less_strict(actual, desired, *args, **kwargs) -> None:
+    __tracebackhide__ = True
+
+    # strict only supported on numpy v2
+    if int(np.__version__.split(".", maxsplit=1)[0]) >= 2:
+        default_kwargs = {"strict": True}
+    else:
+        default_kwargs = {}
+        assert actual.shape == desired.shape, (
+            f"Shapes are not equal: {actual.shape} != {desired.shape}"
+        )
+        assert actual.dtype is desired.dtype, (
+            f"Dtypes are not equivalent: {actual.dtype} is not {desired.dtype}"
+        )
+
+    _make_numpy_assert_function(
+        numpy.testing.assert_array_less,
+        "Arrays are not strictly ordered `x < y`",
+        **default_kwargs,
+    )(actual, desired, *args, **kwargs)
 
 
 def generate_random_data(
@@ -143,6 +193,10 @@ class TestNigParams:
         assert_allclose(batch_logpdf, iterative_logpdf)
 
 
+def parametrize_attrs(name: str):
+    return pytest.mark.parametrize(name, ("mean", "cov", "shape", "scale"))
+
+
 class BcdmTester(ABC):
     results: MultivariateBcdmResults
 
@@ -165,7 +219,15 @@ class BcdmTester(ABC):
         col_sums = scipy.special.logsumexp(log_posterior, axis=0)
         assert_allclose(col_sums, 0, atol=1e-12, rtol=1e-12)
 
-    @pytest.mark.parametrize("attrname", ("mean", "cov", "shape", "scale"))
+    def test_changepoints_snapshot(self, json_snapshot: JsonSnapshot):
+        changepoints = self.results.changepoints()
+        assert changepoints == json_snapshot(changepoints)
+
+    def test_changepoints_are_in_ascending_order(self) -> None:
+        changepoints = self.results.changepoints()
+        assert changepoints == sorted(changepoints)
+
+    @parametrize_attrs("attrname")
     def test_parameters_snapshot(
         self,
         attrname: str,
@@ -183,16 +245,59 @@ class BcdmTester(ABC):
 
         assert_allclose(parameters, snapshot)
 
-    def test_changepoints_snapshot(self, json_snapshot: JsonSnapshot):
-        changepoints = self.results.changepoints()
-        assert changepoints == json_snapshot(changepoints)
+    @parametrize_attrs("attrname")
+    def test_parameters_all_nan_outside_support(self, attrname: str):
+        parameters = getattr(self.results, attrname)
+        nans = np.isnan(parameters).reshape((parameters.shape[0], -1))
+        assert_array_equal_strict(
+            nans.all(axis=1),
+            nans.any(axis=1),
+            err_msg=f"{attrname} has mixture of NaNs and normal numbers",
+        )
+        assert_array_equal_strict(
+            self.results.final_support_mask(),
+            ~nans.all(axis=1),
+            err_msg="Support mask does not match position of NaNs",
+        )
 
-    def test_changepoints_are_in_ascending_order(self) -> None:
-        changepoints = self.results.changepoints()
-        assert changepoints == sorted(changepoints)
+    def test_final_predictive_is_zero_outside_support(self) -> None:
+        zeros = np.isneginf(self.results.log_predictive[:, -1])
+        assert_array_equal_strict(zeros, ~self.results.final_support_mask())
+
+    def test_final_joint_is_zero_outside_support(self) -> None:
+        zeros = np.isneginf(self.results.log_joint[:, -1])
+        assert_array_equal_strict(zeros, ~self.results.final_support_mask())
 
 
-class Test1DChangeDetection(BcdmTester):
+class BcdmWithoutSupportTrimmingTester(BcdmTester):
+    def test_final_support_mask_is_all_true(self) -> None:
+        support = self.results.final_support_mask()
+        assert_array_equal_strict(
+            support,
+            np.ones_like(support),
+            err_msg="Support not all True",
+        )
+
+    def test_full_support_mask_is_upper_triangular_bool_matrix(self) -> None:
+        expected = np.triu(np.ones(self.results.log_joint.shape, dtype=bool))
+        assert_array_equal_strict(self.results.full_support_mask(), expected)
+
+
+class BcdmWithSupportTrimmingTester(BcdmTester):
+    max_num_probs: int
+
+    def test_final_support_max_size(self) -> None:
+        support_size = self.results.final_support_mask().sum()
+        assert support_size <= self.max_num_probs
+
+    def test_full_support_mask_max_size(self) -> None:
+        mask = self.results.full_support_mask()
+        max_sizes = np.full(mask.shape[0], self.max_num_probs)
+        max_sizes[: self.max_num_probs] = np.arange(self.max_num_probs) + 1
+        assert_array_less_strict(mask.sum(axis=0), max_sizes + 1)
+
+
+class Test1DChangeDetection(BcdmWithoutSupportTrimmingTester):
     @classmethod
     def run_bcdm(cls) -> MultivariateBcdmResults:
         samples = 100
@@ -220,7 +325,39 @@ class Test1DChangeDetection(BcdmTester):
         )
 
 
-class Test2DChangeDetection(BcdmTester):
+class Test1DChangeDetectionWithSupportTrimming(BcdmWithSupportTrimmingTester):
+    max_num_probs = 10
+
+    @classmethod
+    def run_bcdm(cls) -> MultivariateBcdmResults:
+        samples = 100
+        hazard = 0.1  # Constant prior on changepoint probability.
+        mean0 = 0.0  # The prior mean on the mean parameter.
+        var0 = 2.0  # The prior variance for mean parameter.
+        varx = 1.0  # The known variance of the data.
+
+        rng = np.random.default_rng(42)
+
+        # Generate random piecewise data
+        data = []
+        meanx = mean0
+        for _ in range(samples):
+            if rng.random() < hazard:  # new changepoint
+                meanx = rng.normal(mean0, var0)
+            data.append(rng.normal(meanx, varx))
+
+        y = np.asarray(data)
+        return multivariate_bcdm(
+            np.ones_like(y),
+            y,
+            cov=var0,
+            hazard=hazard,
+            max_num_probs=cls.max_num_probs,
+            min_prob=1e-12,
+        )
+
+
+class Test2DChangeDetection(BcdmWithoutSupportTrimmingTester):
     @classmethod
     def run_bcdm(cls) -> MultivariateBcdmResults:
         rng = np.random.default_rng(42)
@@ -240,7 +377,7 @@ class Test2DChangeDetection(BcdmTester):
         )
 
 
-class Test3DChangeDetection(BcdmTester):
+class Test3DChangeDetection(BcdmWithoutSupportTrimmingTester):
     @classmethod
     def run_bcdm(cls) -> MultivariateBcdmResults:
         rng = np.random.default_rng(42)

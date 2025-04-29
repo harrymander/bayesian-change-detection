@@ -5,6 +5,7 @@ from typing import Literal, TypedDict, Unpack, cast, overload
 import numpy as np
 import scipy
 
+from bayesian_change_detection.array_utils import masked_argmin
 from bayesian_change_detection.linalg import (
     inv_positive_definite,
     matrix_transpose,
@@ -48,6 +49,9 @@ def multivariate_bcdm(
     y: np.ndarray,
     hazard: float,
     prior: None = None,
+    *,
+    min_prob: float = ...,
+    max_num_probs: int | None = ...,
     **prior_kwargs: Unpack[NigPriorKwargs],
 ) -> "MultivariateBcdmResults": ...
 
@@ -58,6 +62,9 @@ def multivariate_bcdm(
     y: np.ndarray,
     hazard: float,
     prior: "NigPrior" = ...,
+    *,
+    min_prob: float = ...,
+    max_num_probs: int | None = ...,
 ) -> "MultivariateBcdmResults": ...
 
 
@@ -66,6 +73,9 @@ def multivariate_bcdm(
     y: np.ndarray,
     hazard: float,
     prior: "None | NigPrior" = None,
+    *,
+    min_prob: float = 0,
+    max_num_probs: int | None = None,
     **prior_kwargs: Unpack[NigPriorKwargs],
 ) -> "MultivariateBcdmResults":
     """
@@ -76,12 +86,25 @@ def multivariate_bcdm(
         y: (n,) response variables.
         hazard: Hazard rate.
         prior: NIG prior parameters
+        min_prob: Minimum changepoint posterior probability. If greater than
+            zero, posterior probabilities less than this value will be
+            zeroed-out after each time step. This can significantly reduce the
+            processing time for large data.
+        max_num_probs: Maximum number of changepoint probabilities to keep
+            after each time step. If provided, will zero out all but the top
+            `max_num_probs` posterior probabilities after each time step. This
+            can significantly reduce the processing time for large data.
         **prior_kwargs: Parameters for NIG prior if prior is None. See
             `NigPrior` for details.
 
     Returns:
         Change detection results.
     """
+    if not (0 <= min_prob < 1):
+        raise ValueError("min_prob must be in [0, 1)")
+    if max_num_probs is not None and max_num_probs <= 0:
+        raise ValueError("max_num_probs must be > 0")
+
     if x.ndim == 1:
         n = len(x)
         p = 1
@@ -105,7 +128,14 @@ def multivariate_bcdm(
     else:
         prior = NigPrior(p, **prior_kwargs)
 
-    worker = _MultivariateBcdmWorker(x, y, prior=prior, hazard=hazard)
+    worker = _MultivariateBcdmWorker(
+        x,
+        y,
+        min_prob=min_prob,
+        max_num_probs=max_num_probs,
+        prior=prior,
+        hazard=hazard,
+    )
     return worker.fit()
 
 
@@ -115,16 +145,16 @@ class MultivariateBcdmResults:
     `n` datapoints with `p`-dimensional predictor (independent) variables."""
 
     mean: np.ndarray
-    """`(n, p)` array of means."""
+    """`(n, p)` array of means. Is `np.nan` outside of the support."""
 
     cov: np.ndarray
-    """`(n, p, p)` array of covariances."""
+    """`(n, p, p)` array of covariances. Is `np.nan` outside of the support."""
 
     shape: np.ndarray
-    """`(n,)` array of shape parameters."""
+    """`(n,)` array of shape parameters. Is `np.nan` outside of the support."""
 
     scale: np.ndarray
-    """`(n,)` array of scale parameters."""
+    """`(n,)` array of scale parameters. Is `np.nan` outside of the support."""
 
     log_joint: np.ndarray
     """
@@ -150,14 +180,35 @@ class MultivariateBcdmResults:
     `(n, n)` array of log probabilities of the predictive distributions at each
     time point.
 
-    Has a similar structure to `log_posterior`, i.e., an upper-triangular
-    matrix where the columns corresponds to the time points. In each column,
-    the elements are the log density of the predictive distribution of the
-    model given the elements in the segment up to that timepoint. E.g., the
-    element in row `i` and column `j` is the log predictive probability of the
-    `j`th observation given the model for the segment containing the `i`
-    previous observations.
+    Has a similar structure to `log_joint`, i.e., an upper-triangular matrix
+    where the columns corresponds to the time points. In each column, the
+    elements are the log density of the predictive distribution of the model
+    given the elements in the segment up to that timepoint. E.g., the element
+    in row `i` and column `j` is the log predictive probability of the `j`th
+    observation given the model for the segment containing the `i` previous
+    observations.
     """
+
+    def final_support_mask(self) -> np.ndarray:
+        """
+        Return a (n,) boolean array over the support at the final time step.
+
+        This corresponds to the support of the joint probabilities at the final
+        time step. If changepoint detection was run without support trimming
+        (i.e. no `max_num_probs` and `min_prob`), then will be all `True`.
+        """
+        return ~np.isnan(self.scale)
+
+    def full_support_mask(self) -> np.ndarray:
+        """
+        Return a (n, n) boolean array over the support with the same structure
+        as `log_joint`.
+        """
+        full_mask = np.zeros(self.log_joint.shape, dtype=bool)
+        mask = self.final_support_mask()
+        for i in range(len(mask)):
+            full_mask[i, : i + 1] = mask[: i + 1]
+        return full_mask.T
 
     def log_posterior(self) -> np.ndarray:
         """Convert joint probabilities to a triangular matrix of posterior
@@ -191,6 +242,8 @@ class _MultivariateBcdmWorker:
         *,
         prior: "NigPrior",
         hazard: float,
+        min_prob: float,
+        max_num_probs: int | None,
     ):
         # Assumes parameters have been validated
         self.n, self.p = x.shape
@@ -199,43 +252,98 @@ class _MultivariateBcdmWorker:
         self.params = NigParams.from_prior(prior, self.n)
         self.log_hazard: float = np.log(hazard)
         self.log_1mhazard: float = np.log1p(-hazard)
-        self.prev_log_joint = np.array([0.0])
+        self.joint_support = np.ones(self.n, dtype=bool)
         self.log_joint = np.full((self.n, self.n), -np.inf)
         self.log_pred = self.log_joint.copy()
+        self.min_log_prob: float | None = (
+            np.log(min_prob) if min_prob else None
+        )
+        self.max_num_probs = max_num_probs or 0
+
+        self.prev_log_joint: np.ndarray  # set in fit()
 
     def fit(self) -> MultivariateBcdmResults:
-        for t, (x, y) in enumerate(zip(self.x, self.y, strict=True)):
+        X = self.x[:, np.newaxis, :]
+        Y = self.y[:, np.newaxis]
+
+        # Compute the initial reset probability (Eq. 28).
+        log_pred = self.params[:1].mvt_logpdf(X[0], Y[0])[0]
+        log_joint = log_pred + self.log_hazard
+        self.prev_log_joint = log_joint
+        self.log_joint[0, 0] = log_joint[0]
+        self.log_pred[0, 0] = log_pred[0]
+        self.params[:1].update(X[0], Y[0])
+
+        for t, (x, y) in enumerate(zip(X[1:], Y[1:], strict=True), start=1):
             self._update(t, x, y)
 
+        mask = ~self.joint_support
+
+        def _mask_to_nan(a: np.ndarray) -> np.ndarray:
+            a[mask] = np.nan
+            return a
+
         return MultivariateBcdmResults(
-            mean=self.params.mean,
-            cov=self.params.cov,
-            shape=self.params.shape,
-            scale=self.params.scale,
+            mean=_mask_to_nan(self.params.mean),
+            cov=_mask_to_nan(self.params.cov),
+            shape=_mask_to_nan(self.params.shape),
+            scale=_mask_to_nan(self.params.scale),
             log_joint=self.log_joint.T,
             log_predictive=self.log_pred.T,
         )
 
-    def _update(self, t: int, x: np.ndarray, y: float) -> None:
-        log_pred = self.params[: t + 1].mvt_logpdf(
-            x.reshape(1, -1),
-            np.atleast_1d(y),
-        )
-        assert log_pred.shape == (t + 1, 1)
-        log_pred = log_pred.ravel()
+    def _update(self, t: int, x: np.ndarray, y: np.ndarray) -> None:
+        # Note that the variable `t` is 0-indexed here whereas in the notes it
+        # starts from 1.
 
-        # Compute the (t + 1) changepoint probabilities
+        # self.params is stored in the opposite order to self.prev_log_joint,
+        # so it is reversed. Therefore params_view[0] corresponds to Theta_t in
+        # Eq. 25, and params_view[-1] corresponds to Theta_1.
+        params_view = self.params[: t + 1][::-1]
+
+        prev_log_joint = self.prev_log_joint
+        mask = self.joint_support[-prev_log_joint.size :]
+
+        # Mask anything lower than the kth largest value
+        max_probs = self.max_num_probs
+        if max_probs and t >= max_probs:
+            mask[masked_argmin(prev_log_joint, mask)] = False
+
+        # Mask anything lower than min_log_prob
+        if self.min_log_prob:
+            # Normalise the joint to get the posterior
+            log_normaliser = scipy.special.logsumexp(prev_log_joint[mask])
+            mask[(prev_log_joint - log_normaliser) < self.min_log_prob] = False
+
+        # mask[0] must be True since it corresponds to params[0], which is a
+        # new 'hypothesis' that a new segment begins after this time step.
+        mask = self.joint_support[-t - 1 :]
+
+        # Same as above, log_pred[0] corresponds to Theta_t etc. Use the mask
+        # to avoid expensive PDF computation outside of the support
+        log_pred = np.full(t + 1, -np.inf)
+        log_pred[mask] = params_view[mask].mvt_logpdf(x, y).ravel()
+
+        # The (t + 1) changepoint probabilities
         log_joint = self.log_joint[t, : t + 1]
-        log_joint[0] = scipy.special.logsumexp(  # reset probability
-            log_pred[-1] + self.log_hazard + self.prev_log_joint
-        )
-        log_joint[1:] = (  # growth probabilities
-            log_pred[:-1][::-1] + self.log_1mhazard + self.prev_log_joint
+
+        # Reset probability.
+        log_joint[0] = scipy.special.logsumexp(
+            log_pred[0] + self.log_hazard + prev_log_joint[mask[1:]]
         )
 
-        self.log_pred[t, : t + 1] = log_pred[::-1]
+        # Growth probabilities. Will be -inf where log_pred is -inf.
+        # TODO(?): could also mask out over the -inf points, but probably
+        # faster to just perform the computation and let the -inf come out in
+        # the addition. Need to profile.
+        log_joint[1:] = log_pred[1:] + self.log_1mhazard + prev_log_joint
+
+        # Update the model parameters (Eqs. 30-33). Avoid expensive computation
+        # outside of the support.
+        params_view.update(x, y, mask=mask)
+
+        self.log_pred[t, : t + 1] = log_pred
         self.prev_log_joint = log_joint
-        self.params[: t + 1].update(x.reshape(1, -1), np.asarray((y,)))
 
 
 class NigPrior:
@@ -431,22 +539,30 @@ class NigParams:
         if xp != p:
             raise ValueError(f"expected {p}-dimensional predictors, got {xp}")
 
-    def update(self, x: np.ndarray, y: np.ndarray) -> None:
+    def update(self, x: np.ndarray, y: np.ndarray, *, mask=None) -> None:
         """
         Update sufficient statistics given n new observations (x, y).
 
         Args:
             x: (n, p) array of independent (predictor) variables.
             y: (n,) array of dependent (response) variables.
+            mask: any object that can be used to index into the parameters
+                (e.g. a boolean or index array); sufficient statistics will
+                only be updated for the selected distributions.
         """
+        if mask is None:
+            mask = ...
+
         self._validate_x_arg(x)
         n = x.shape[0]
         _check_array_shape("y", y, (n,))
-        t, p = self.mean.shape
 
-        cov0 = self.cov  # (t, p, p)
-        prec0 = self.prec  # (t, p, p)
-        mean0 = np.expand_dims(self.mean, -1)  # (t, p, 1)
+        mean = self.mean[mask]
+        t, p = mean.shape
+
+        cov0 = self.cov[mask]  # (t, p, p)
+        prec0 = self.prec[mask]  # (t, p, p)
+        mean0 = np.expand_dims(mean, -1)  # (t, p, 1)
 
         # Add dimension for broadcasting
         x = np.expand_dims(x, 0)  # (1, n, p)
@@ -516,12 +632,12 @@ class NigParams:
         ) / 2
         assert new_scale.shape == (t,)
 
-        self.mean[:] = new_mean.squeeze(-1)
-        self.cov[:] = new_cov
-        self.prec[:] = new_prec
-        self.shape += n / 2  # Eq. 32
-        self.scale += new_scale
-        assert np.all(self.scale >= 0), "got negative scale"
+        self.mean[mask] = new_mean.squeeze(-1)
+        self.cov[mask] = new_cov
+        self.prec[mask] = new_prec
+        self.shape[mask] += n / 2  # Eq. 32
+        self.scale[mask] += new_scale
+        assert np.all(self.scale[mask] >= 0), "got negative scale"
 
     def _mvt_mean(self, x: np.ndarray) -> np.ndarray:
         """
