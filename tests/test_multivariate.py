@@ -14,8 +14,6 @@ from bayesian_change_detection import (
 from bayesian_change_detection.multivariate import NigParams, NigPrior
 from tests.conftest import JsonSnapshot, NDArraySnapshot
 
-RandomData = tuple[np.ndarray, np.ndarray]
-
 
 class _NumpyAssertFunction(Protocol):
     def __call__(
@@ -76,29 +74,6 @@ def assert_array_less_strict(actual, desired, *args, **kwargs) -> None:
         "Arrays are not strictly ordered `x < y`",
         **default_kwargs,
     )(actual, desired, *args, **kwargs)
-
-
-def generate_random_data(
-    seed: int,
-    n: int,
-    w0: float,
-    w1: float,
-) -> RandomData:
-    """
-    Using random seed, generate n paired observations according to the linear
-    model: y = w0 + x*w1.
-    """
-    rng = np.random.default_rng(seed)
-    x: np.ndarray = np.linspace(0, 10, n)
-    y = w0 + x * w1 + rng.normal(0, 2, size=n)
-    x = np.c_[np.ones_like(x), x]
-    assert x.shape == (n, 2)
-    return x, y
-
-
-@pytest.fixture
-def random_data() -> tuple[np.ndarray, np.ndarray]:
-    return generate_random_data(42, 500, 2, 1.5)
 
 
 def new_params(t: int, p: int) -> NigParams:
