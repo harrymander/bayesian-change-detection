@@ -1,6 +1,15 @@
 from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Any, Literal, Protocol, TypedDict, Unpack, cast, overload
+from typing import (
+    Any,
+    Literal,
+    Protocol,
+    TypedDict,
+    TypeVar,
+    Unpack,
+    cast,
+    overload,
+)
 
 import numpy as np
 import scipy
@@ -14,33 +23,21 @@ from bayesian_change_detection.linalg import (
 )
 
 _LOG_2PI = np.log(2 * np.pi)
+_Floating_T = TypeVar("_Floating_T", bound=np.floating)
+FloatArray = NDArray[_Floating_T]
 
 
-_float_type = np.float64
-FloatArray = NDArray[_float_type]
+class _HasDtype(Protocol):
+    @property
+    def dtype(self) -> np.dtype: ...
 
 
-def _as_float_array(x) -> np.ndarray:
-    if isinstance(x, np.ndarray):
-        # Do not coerce to float64, rather let _check_array_shape raise an
-        # error if wrong dtype. TODO: why not use astype(..., casting="safe")?
-        return x
-    return np.asarray(x).astype(_float_type, casting="safe")
-
-
-def _check_array_dtype(name: str, arr: np.ndarray, dtype=_float_type):
+def _check_dtype(name: str, arr: _HasDtype, dtype):
     if arr.dtype != dtype:
-        msg = f"{name} must be of type {dtype.__name__}, got {arr.dtype}"
-        raise TypeError(msg)
+        raise TypeError(f"{name} must be of type {dtype}, got {arr.dtype}")
 
 
-def _check_array_shape_and_dtype(
-    name: str,
-    x: np.ndarray,
-    exp: Sequence[int],
-    dtype=_float_type,
-) -> None:
-    _check_array_dtype(name, x, dtype)
+def _check_array_shape(name: str, x: np.ndarray, exp: Sequence[int]) -> None:
     s = x.shape
     if s != exp:
         raise ValueError(f"invalid shape for {name}: expected {exp}, got {s}")
@@ -163,7 +160,8 @@ def multivariate_bcdm(
     Raises:
         ValueError: If any arguments have the wrong dimension, shape, or are
             otherwise invalid.
-        TypeError: If dtype of `x` or `y` are not `np.float64`.
+        TypeError: If dtypes of `x` and `y` are not floating point or they are
+            not of the same type.
     """
     if not (0 < hazard < 1):
         raise ValueError("hazard must be in (0, 1)")
@@ -174,6 +172,9 @@ def multivariate_bcdm(
     if max_num_probs is not None and max_num_probs <= 0:
         raise ValueError("max_num_probs must be > 0")
 
+    if not np.issubdtype(x.dtype, np.floating):
+        raise TypeError(f"x must have a floating dtype, got {x.dtype}")
+
     if x.ndim == 1:
         n = len(x)
         p = 1
@@ -183,7 +184,9 @@ def multivariate_bcdm(
     else:
         n, p = x.shape
 
-    _check_array_shape_and_dtype("y", y, (n,))
+    dtype = x.dtype
+    _check_dtype("y", y, dtype)
+    _check_array_shape("y", y, (n,))
 
     if prior:
         if prior_kwargs:
@@ -194,8 +197,9 @@ def multivariate_bcdm(
                 f"dimensionality of prior ({prior.p}) does not match "
                 f"that of the data ({p})"
             )
+        _check_dtype("prior", prior, dtype)
     else:
-        prior = NigPrior(p, **prior_kwargs)
+        prior = NigPrior(p, **prior_kwargs, dtype=dtype)
 
     worker = _MultivariateBcdmWorker(
         x,
@@ -428,6 +432,13 @@ class _MultivariateBcdmWorker:
         params_view.update(x, y, mask=mask)
 
 
+def _as_array(name: str, x, dtype) -> np.ndarray:
+    if isinstance(x, np.ndarray):
+        _check_dtype(name, x, dtype)
+        return x
+    return np.asarray(x).astype(dtype, casting="safe")
+
+
 class NigPrior:
     """
     Parameters of p-dimensional normal-inverse-gamma distributions.
@@ -472,6 +483,10 @@ class NigPrior:
         independent variable)"""
         return self.mean.shape[0]
 
+    @property
+    def dtype(self) -> np.dtype:
+        return self.mean.dtype
+
     def __init__(
         self,
         p: int,
@@ -480,6 +495,7 @@ class NigPrior:
         cov: PriorCovArg = 1,
         shape: float = 1,
         scale: float = 1,
+        dtype=None,
     ):
         """
         A `p`-dimensional NIG distribution.
@@ -495,23 +511,38 @@ class NigPrior:
                     diagonal matrix with the diagonal being the array.
                 (3) A (p, p) array-like representing a positive-definite
                     matrix.
+            dtype: numpy dtype of the parameters. If provided, ndarray
+                arguments must match this dtype, otherwise will try to convert
+                values to this type. If `mean` is an `np.ndarray`, defaults to
+                its dtype, otherwise defaults to `np.float64`.
             shape: Shape parameter.
             scale: Scale parameter.
         """
+        if isinstance(mean, np.ndarray):
+            if dtype is None:
+                dtype = mean.dtype
+                if not np.issubdtype(dtype, np.floating):
+                    msg = f"mean must have floating type, got {dtype}"
+                    raise TypeError(msg)
+            else:
+                _check_dtype("mean", mean, dtype)
+        elif dtype is None:
+            dtype = np.float64
+
         if np.isscalar(mean):
-            mean = np.full(p, mean, dtype=_float_type)
+            mean = np.full(p, mean, dtype=dtype)
         else:
-            mean = _as_float_array(mean)
-            _check_array_shape_and_dtype("mean", mean, (p,))
+            mean = _as_array("mean", mean, dtype)
+            _check_array_shape("mean", mean, (p,))
         self.mean = mean
 
         if np.isscalar(cov):
-            cov = np.eye(p, dtype=_float_type) * cast(float, cov)
+            cov = np.eye(p, dtype=dtype) * cov
         else:
-            cov = _as_float_array(cov)
+            cov = _as_array("cov", cov, dtype)
             if cov.ndim == 1:
                 cov = np.diag(cov)
-            _check_array_shape_and_dtype("cov", cov, (p, p))
+            _check_array_shape("cov", cov, (p, p))
         self.cov = cov
 
         self.shape = shape
@@ -531,8 +562,7 @@ class NigParams:
     Parameters of t independent p-dimensional normal-inverse-gamma
     distributions.
 
-    Recommended to use `from_priors` to initialise, rather than constructing
-    directly.
+    Use `from_priors` to initialise, rather than constructing directly.
     """
 
     __slots__ = [
@@ -568,31 +598,9 @@ class NigParams:
     (t, p, p) array of precisions.
     """
 
-    def __post_init__(self) -> None:
-        if self.mean.ndim != 2:
-            raise ValueError("mean must be a 2D array")
-
-        for attr in self.__dataclass_fields__:
-            _check_array_dtype(attr, getattr(self, attr))
-
-        t, p = self.mean.shape
-
-        def _validate_param(name: str, ndims: int) -> None:
-            param: FloatArray = getattr(self, name)
-            if param.ndim != ndims + 1:
-                raise ValueError(f"{name} must be a {ndims + 1}D array")
-
-            expected_shape = (t, *(p for _ in range(ndims)))
-            if param.shape != expected_shape:
-                raise ValueError(
-                    f"expected {name} to be array of shape {expected_shape}, "
-                    f"got {param.shape}"
-                )
-
-        _validate_param("cov", 2)
-        _validate_param("shape", 0)
-        _validate_param("scale", 0)
-        _validate_param("prec", 2)
+    @property
+    def dtype(self) -> np.dtype:
+        return self.mean.dtype
 
     @classmethod
     def from_prior(cls, priors: NigPrior, t: int) -> "NigParams":
@@ -603,12 +611,15 @@ class NigParams:
             priors: Priors of the distributions.
             t: Number of distributions.
         """
+        if t < 1:
+            raise ValueError("t must be > 0")
+
         return NigParams(
             mean=np.expand_dims(priors.mean, 0).repeat(t, axis=0),
             cov=np.expand_dims(priors.cov, 0).repeat(t, axis=0),
             prec=np.expand_dims(priors.prec, 0).repeat(t, axis=0),
-            shape=np.full(t, priors.shape, dtype=_float_type),
-            scale=np.full(t, priors.scale, dtype=_float_type),
+            shape=np.full(t, priors.shape, dtype=priors.dtype),
+            scale=np.full(t, priors.scale, dtype=priors.dtype),
         )
 
     def __getitem__(self, i) -> "NigParams":
@@ -621,6 +632,7 @@ class NigParams:
         )
 
     def _validate_x_arg(self, x: np.ndarray) -> None:
+        _check_dtype("x", x, self.dtype)
         if x.ndim != 2:
             raise ValueError("x must be 2-D")
         xp = x.shape[1]
@@ -644,7 +656,8 @@ class NigParams:
 
         self._validate_x_arg(x)
         n = x.shape[0]
-        _check_array_shape_and_dtype("y", y, (n,))
+        _check_array_shape("y", y, (n,))
+        _check_dtype("y", y, self.dtype)
 
         mean = self.mean[mask]
         t, p = mean.shape
@@ -769,7 +782,8 @@ class NigParams:
         """
         self._validate_x_arg(x)
         n = x.shape[0]
-        _check_array_shape_and_dtype("y", y, (n,))
+        _check_array_shape("y", y, (n,))
+        _check_dtype("y", y, self.dtype)
         t = self.mean.shape[0]
 
         # Σ from Eq. 27
@@ -931,7 +945,8 @@ class NigParams:
         """
         self._validate_x_arg(x)
         n, p = x.shape
-        _check_array_shape_and_dtype("y", y, (n,))
+        _check_array_shape("y", y, (n,))
+        _check_dtype("y", y, self.dtype)
 
         if self.mean.shape[0] != 1:
             msg = "can only fit regression model from a single prior"
