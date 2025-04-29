@@ -76,6 +76,21 @@ def _inv_2x2_positive_definite(a: np.ndarray) -> np.ndarray:
 
 
 def _inv_cholesky(a: np.ndarray) -> np.ndarray:
+    dtype = a.dtype
+    if dtype == np.float32:
+        return _inv_cholesky_generic(
+            a, potrf=lapack.spotrf, potri=lapack.spotri
+        )
+
+    if dtype == np.float64:
+        return _inv_cholesky_generic(
+            a, potrf=lapack.dpotrf, potri=lapack.dpotri
+        )
+
+    raise TypeError(f"unsupported dtype {dtype}")
+
+
+def _inv_cholesky_generic(a: np.ndarray, *, potrf, potri) -> np.ndarray:
     """Invert a positive-definite matrix using the Cholesky decomposition.
     Assumes a is a 3D array of square matrices across the first axis."""
     if not np.allclose(a, matrix_transpose(a)):
@@ -85,12 +100,12 @@ def _inv_cholesky(a: np.ndarray) -> np.ndarray:
     for i in range(len(a)):
         # u is the upper triangular matrix of the Cholesky decomposition
         # a[i] = u.T @ u
-        u, info = lapack.dpotrf(a[i])
+        u, info = potrf(a[i])
         if info != 0:
             raise PositiveDefiniteError()
 
         # dpotri only returns the upper triangular part of the inverse
-        uinv[i], info = lapack.dpotri(u)
+        uinv[i], info = potri(u)
         if info != 0:
             raise PositiveDefiniteError()
 
