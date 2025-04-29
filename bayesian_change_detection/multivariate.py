@@ -22,7 +22,7 @@ from bayesian_change_detection.linalg import (
     matrix_transpose,
 )
 
-_LOG_2PI = np.log(2 * np.pi)
+_LOG_2PI: float = np.log(2 * np.pi).item()
 _Floating_T = TypeVar("_Floating_T", bound=np.floating)
 FloatArray = NDArray[_Floating_T]
 
@@ -323,15 +323,18 @@ class _MultivariateBcdmWorker:
         update_hook: UpdateHook | None,
     ):
         # Assumes parameters have been validated - see multivariate_bcdm
+        dtype = prior.dtype
         self.n, self.p = x.shape
         self.x = x
         self.y = y
         self.params = NigParams.from_prior(prior, self.n)
-        self.log_hazard: float = np.log(hazard)
-        self.log_1mhazard: float = np.log1p(-hazard)
-        self.init_log_joint = np.log(init_prob) if init_prob else -np.inf
+        self.log_hazard: float = np.log(hazard, dtype=dtype)
+        self.log_1mhazard: float = np.log1p(-hazard, dtype=dtype)
+        self.init_log_joint = (
+            np.log(init_prob, dtype=dtype) if init_prob else -np.inf
+        )
         self.min_log_prob: float | None = (
-            np.log(min_prob) if min_prob else None
+            np.log(min_prob, dtype=dtype) if min_prob else None
         )
         self.max_num_probs = max_num_probs or 0
         self.update_hook = update_hook
@@ -339,8 +342,12 @@ class _MultivariateBcdmWorker:
         # To reduce memory usage, store only the lower triangular part of these
         # matrices
         self.joint_support = tril_full(self.n, True, dtype=bool)
-        self.log_joint = tril_full(self.n, -np.inf, upper_val=-np.inf)
-        self.log_pred = tril_full(self.n, -np.inf, upper_val=-np.inf)
+        self.log_joint = tril_full(
+            self.n, -np.inf, upper_val=-np.inf, dtype=dtype
+        )
+        self.log_pred = tril_full(
+            self.n, -np.inf, upper_val=-np.inf, dtype=dtype
+        )
 
     def fit(self) -> MultivariateBcdmResults:
         X = self.x[:, np.newaxis, :]

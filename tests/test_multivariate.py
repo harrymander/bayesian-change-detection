@@ -21,19 +21,24 @@ from tests.utils import (
 )
 
 
-def new_params(t: int, p: int) -> NigParams:
+def new_params(t: int, p: int, *, dtype=np.float64) -> NigParams:
     """
     Generate new params for t NIG distributions of dimension p.
     """
-    cov = np.stack([np.eye(p) * i for i in np.linspace(1, 4, t)])
+    cov = np.stack([np.eye(p) * i for i in np.linspace(1, 4, t)]).astype(dtype)
     assert cov.shape == (t, p, p)
-    return NigParams(
-        mean=np.linspace(0, 5, t, dtype=np.float64).repeat(p).reshape(-1, p),
+    params = NigParams(
+        mean=np.linspace(0, 5, t, dtype=dtype).repeat(p).reshape(-1, p),
         cov=cov,
         prec=np.linalg.inv(cov),
-        shape=np.linspace(2, 5, t, dtype=np.float64),
-        scale=np.linspace(2, 5, t, dtype=np.float64),
+        shape=np.linspace(2, 5, t, dtype=dtype),
+        scale=np.linspace(2, 5, t, dtype=dtype),
     )
+    for attr in params.__dataclass_fields__:
+        attr_dtype = getattr(params, attr).dtype
+        msg = f"invalid dtype for {attr}: {attr_dtype} != {dtype}"
+        assert attr_dtype == dtype, msg
+    return params
 
 
 class TestNigParams:
@@ -111,6 +116,18 @@ class TestNigParams:
         )
         batch_logpdf = self.iteratively_updated_params.mvt_logpdf(x, y)
         assert_allclose(batch_logpdf, iterative_logpdf)
+
+
+def test_mvt_logpdf_with_float32_args() -> None:
+    p = 3
+    exp_dtype = np.float32
+    params = new_params(5, p, dtype=exp_dtype)
+    n = 500
+    rng = np.random.default_rng(5431)
+    x = rng.normal(size=(n, p)).astype(exp_dtype)
+    y = rng.normal(size=(n,)).astype(exp_dtype)
+    logpdf = params.mvt_logpdf(x, y)
+    assert logpdf.dtype == exp_dtype
 
 
 def parametrize_attrs(name: str):
@@ -330,11 +347,19 @@ def bcdm_1d_results_float32() -> MultivariateBcdmResults:
     return _1d_multivariate_bcdm(data)
 
 
-@pytest.mark.parametrize("attr", MultivariateBcdmResults.__dataclass_fields__)
+float32_fields = list(MultivariateBcdmResults.__dataclass_fields__)
+float32_fields.pop(float32_fields.index("joint_support"))
+
+@pytest.mark.parametrize("attr", float32_fields)
 def test_bcdm_with_float32_has_float32_result(
     bcdm_1d_results_float32: MultivariateBcdmResults, attr: str
 ) -> None:
-    dtype = getattr(bcdm_1d_results_float32, attr).dtype
+    field = getattr(bcdm_1d_results_float32, attr)
+    if isinstance(field, np.ndarray):
+        dtype = field.dtype
+    else:
+        # Is a _TrilArray
+        dtype = field.data.dtype
     assert dtype == np.float32
 
 
