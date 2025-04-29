@@ -440,3 +440,37 @@ def test_arraylike_1d_cov_prior_equivalent_to_2d() -> None:
 def test_arraylike_prior_fails_if_not_convertible_to_float() -> None:
     with pytest.raises(TypeError, match=r"^Cannot cast array data from dtype"):
         NigPrior(3, mean=cast(Sequence[float], [1, 2, 3j]))
+
+
+def test_hook_function_called_with_consecutive_indices() -> None:
+    indices = []
+
+    def hook(index: int, *_):
+        indices.append(index)
+
+    rng = np.random.default_rng(42)
+    n = 5
+    multivariate_bcdm(
+        rng.normal(size=(n, 3)),
+        rng.normal(size=n),
+        hazard=0.5,
+        update_hook=hook,
+    )
+    assert indices == list(range(n))
+
+
+def test_hook_function_called_with_correct_data_shape() -> None:
+    p = 3
+
+    def hook(t: int, x: np.ndarray, y: np.ndarray, _):
+        assert x.shape == (1, p), f"x has wrong shape in hook at t={t}"
+        assert y.shape == (1,), f"y has wrong shape in hook at t={t}"
+
+    rng = np.random.default_rng(42)
+    n = 5
+    multivariate_bcdm(
+        rng.normal(size=(n, p)),
+        y=rng.normal(size=n),
+        hazard=0.5,
+        update_hook=hook,
+    )

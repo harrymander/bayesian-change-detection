@@ -1,6 +1,6 @@
 from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Literal, TypedDict, Unpack, cast, overload
+from typing import Any, Literal, Protocol, TypedDict, Unpack, cast, overload
 
 import numpy as np
 import scipy
@@ -57,6 +57,32 @@ class NigPriorKwargs(TypedDict, total=False):
     scale: float
 
 
+class HookData(Protocol):
+    @property
+    def joint_support(self) -> np.ndarray: ...
+
+    @property
+    def log_joint(self) -> np.ndarray: ...
+
+    @property
+    def log_pred(self) -> np.ndarray: ...
+
+    @property
+    def params(self) -> "NigParams": ...
+
+
+class UpdateHook(Protocol):
+    def __call__(
+        self,
+        t: int,
+        x: np.ndarray,
+        y: np.ndarray,
+        data: HookData,
+        /,
+    ) -> Any:
+        pass
+
+
 @overload
 def multivariate_bcdm(
     x: FloatArray,
@@ -67,6 +93,7 @@ def multivariate_bcdm(
     init_prob: float = ...,
     min_prob: float = ...,
     max_num_probs: int | None = ...,
+    update_hook: UpdateHook | None = None,
     **prior_kwargs: Unpack[NigPriorKwargs],
 ) -> "MultivariateBcdmResults": ...
 
@@ -81,6 +108,7 @@ def multivariate_bcdm(
     init_prob: float = ...,
     min_prob: float = ...,
     max_num_probs: int | None = ...,
+    update_hook: UpdateHook | None = None,
 ) -> "MultivariateBcdmResults": ...
 
 
@@ -93,6 +121,7 @@ def multivariate_bcdm(
     init_prob: float = 1,
     min_prob: float = 0,
     max_num_probs: int | None = None,
+    update_hook: UpdateHook | None = None,
     **prior_kwargs: Unpack[NigPriorKwargs],
 ) -> "MultivariateBcdmResults":
     """
@@ -114,6 +143,15 @@ def multivariate_bcdm(
             after each time step. If provided, will zero out all but the top
             `max_num_probs` posterior probabilities after each time step. This
             can significantly reduce the processing time for large data.
+        update_hook: Optional function to call after each datapoint is
+            processed. If provided, will be called with the following
+            arguments after processing each datapoint in (x, y):
+              - `t`: The index of the current datapoint (0 to `n - 1`).
+              - `x`: Predictor variable that was just processed.
+              - `y`: Response variable that was just processed.
+              - `data`: Current state of the model. See `HookData`.
+            This can be used, for example, for progress indication (see
+                multivariate_examples.py for an example of such usage).
         **prior_kwargs: Parameters for NIG prior if prior is None. See
             `NigPrior` for details. Cannot be passed if `prior` is already
             passed.
@@ -166,6 +204,7 @@ def multivariate_bcdm(
         max_num_probs=max_num_probs,
         prior=prior,
         hazard=hazard,
+        update_hook=update_hook,
     )
     return worker.fit()
 
@@ -279,6 +318,7 @@ class _MultivariateBcdmWorker:
         "p",
         "params",
         "prev_log_joint",
+        "update_hook",
         "x",
         "y",
     ]
@@ -293,6 +333,7 @@ class _MultivariateBcdmWorker:
         init_prob: float,
         min_prob: float,
         max_num_probs: int | None,
+        update_hook: UpdateHook | None,
     ):
         # Assumes parameters have been validated - see multivariate_bcdm
         self.n, self.p = x.shape
@@ -309,6 +350,7 @@ class _MultivariateBcdmWorker:
             np.log(min_prob) if min_prob else None
         )
         self.max_num_probs = max_num_probs or 0
+        self.update_hook = update_hook
 
         self.prev_log_joint: np.ndarray  # set in fit()
 
@@ -323,9 +365,13 @@ class _MultivariateBcdmWorker:
         self.log_joint[0, 0] = log_joint[0]
         self.log_pred[0, 0] = log_pred[0]
         self.params[:1].update(X[0], Y[0])
+        if self.update_hook:
+            self.update_hook(0, X[0], Y[0], self)
 
         for t, (x, y) in enumerate(zip(X[1:], Y[1:], strict=True), start=1):
             self._update(t, x, y)
+            if self.update_hook:
+                self.update_hook(t, x, y, self)
 
         mask = ~self.joint_support
 
