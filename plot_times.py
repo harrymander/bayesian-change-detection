@@ -1,9 +1,10 @@
 from collections.abc import Sequence
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 import click
 
-from time_bcdm import TestInfo, TrimOptions, load_test_infos
+from time_bcdm import Options, TestInfo, load_test_infos
 
 if TYPE_CHECKING:
     import numpy as np
@@ -96,28 +97,60 @@ class PlotScale(click.ParamType):
     help="Maximum x-axis value to plot.",
 )
 @click.option("--fit/--no-fit", default=True, help="Show lines of best fit.")
-def main(infos_file: str, **kwargs) -> None:
+@click.option(
+    "--ungroup",
+    "-u",
+    multiple=True,
+    help="Do not group times by this parameter in the plot. Can be repeated.",
+    type=click.Choice(list(Options.model_fields)),
+)
+def main(infos_file: str, ungroup: list[str], **kwargs) -> None:
     """
     Plots times in INFOS_FILE, which defaults to complexity.json if not
     provided.
     """
-    plot_times(load_test_infos(infos_file), **kwargs)
+    plot_times(load_test_infos(infos_file), ungroup=set(ungroup), **kwargs)
 
 
-def group_times_by_trim_options(
+@dataclass(frozen=True)
+class OptionGrouping:
+    names: tuple[str, ...]
+    values: tuple[str, ...]
+
+    def __str__(self) -> str:
+        name_vals = zip(self.names, self.values, strict=True)
+        return ", ".join(f"{k}={v}" for k, v in name_vals)
+
+    @classmethod
+    def from_options(
+        cls, options: Options, ungroup: set[str]
+    ) -> "OptionGrouping":
+        names = []
+        values = []
+        for k, v in options.model_dump().items():
+            if k not in ungroup:
+                names.append(k)
+                values.append(v)
+
+        return cls(names=tuple(names), values=tuple(values))
+
+
+def group_times_by_options(
     infos: list[TestInfo],
     min_samples: float | None,
     max_samples: float | None,
-) -> dict[TrimOptions | None, tuple[Sequence[int], Sequence[float]]]:
+    ungroup: set[str],
+) -> dict[OptionGrouping, tuple[Sequence[int], Sequence[float]]]:
     def _num_samples_in_range(info: TestInfo) -> bool:
         num_samples = info.num_samples
         if num_samples < (min_samples or 0):
             return False
         return max_samples is None or num_samples <= max_samples
 
-    grouped_times: dict[TrimOptions | None, list[tuple[int, float]]] = {}
+    grouped_times: dict[OptionGrouping, list[tuple[int, float]]] = {}
     for info in filter(_num_samples_in_range, infos):
-        grouped_times.setdefault(info.options.trim, []).append(
+        group = OptionGrouping.from_options(info.options, ungroup)
+        grouped_times.setdefault(group, []).append(
             (info.num_samples, info.avg_execution_time)
         )
 
@@ -125,8 +158,8 @@ def group_times_by_trim_options(
         times.sort(key=lambda t: t[0])
 
     return {
-        trim: tuple(zip(*times, strict=True))  # type: ignore
-        for trim, times in grouped_times.items()
+        options: tuple(zip(*times, strict=True))  # type: ignore
+        for options, times in grouped_times.items()
     }
 
 
@@ -163,6 +196,7 @@ def plot_times(
     xmin: float | None,
     xmax: float | None,
     fit: bool,
+    ungroup: set[str],
 ):
     import matplotlib.pyplot as plt
 
@@ -173,13 +207,13 @@ def plot_times(
 
     best_fit_kw = dict(linestyle="--", linewidth=1)
 
-    grouped_times = group_times_by_trim_options(infos, xmin, xmax)
-    for trim, data in grouped_times.items():
+    grouped_times = group_times_by_options(infos, xmin, xmax, ungroup)
+    for options, data in grouped_times.items():
         line = ax.plot(
             *data,
             "o",
             markerfacecolor="none",
-            label=f"Trim({trim})" if trim else "No support trimming",
+            label=str(options),
         )
         if fit:
             ax.plot(

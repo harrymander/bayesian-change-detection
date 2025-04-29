@@ -34,6 +34,9 @@ line-length = 79
 [tool.ruff.lint]
 select = ["F", "E", "W", "I", "UP", "B", "NPY", "RUF", "T10", "SLOT"]
 
+[tool.mypy]
+plugins = ["pydantic.mypy"]
+
 [[tool.mypy.overrides]]
 module = "scipy.*,sklearn.*"
 ignore_missing_imports = true

@@ -95,15 +95,11 @@ def git_worktree_is_dirty() -> bool:
     return bool(r.stdout.strip())
 
 
-class TrimOptions(BaseModel):
-    model_config = ConfigDict(frozen=True)
-
-    max_num_probs: int | None = Field(..., ge=1)
-    min_prob: float = Field(..., ge=0)
-
-
 class Options(BaseModel):
-    trim: TrimOptions | None = None
+    model_config = ConfigDict(frozen=True, extra="allow")
+
+    max_num_probs: int | None = Field(None, ge=1)
+    min_prob: float = Field(0, ge=0)
 
 
 def _validate_git_sha(value: str) -> str:
@@ -205,18 +201,25 @@ class OptionsJsonOrPath(click.ParamType):
     required=True,
     help="Size of test data to perform change detection on.",
 )
-@click.option("--num-loops", default=100, type=click.IntRange(min=1))
+@click.option(
+    "--num-loops",
+    default=100,
+    type=click.IntRange(min=1),
+    help="Number of times to run the algorithm for timing.",
+)
 @click.option(
     "--single",
     "-1",
     "single_loop",
     is_flag=True,
-    help="Shorthand for --num-loops=1",
+    help="Shorthand for --num-loops=1.",
 )
 @click.option(
     "--output",
     "-o",
     type=click.Path(writable=True, dir_okay=False, path_type=Path),
+    help="""File to write tests results to. If already exists, will append the
+    results to the file. If not provided, prints the results to stdout.""",
 )
 def main(
     ref: str | None,
@@ -300,8 +303,10 @@ def get_profiling_function(
         from bayesian_change_detection import multivariate_bcdm
 
     kwargs: dict = dict(cov=2, hazard=0.1)
-    if options.trim:
-        kwargs.update(**options.trim.model_dump())
+    if options.max_num_probs:
+        kwargs.update(max_num_probs=options.max_num_probs)
+    if options.min_prob:
+        kwargs.update(min_prob=options.min_prob)
 
     return partial(multivariate_bcdm, *data, **kwargs)
 
