@@ -32,8 +32,19 @@ def _get_valid_scale_names() -> set[str]:
 
 
 class PlotScale(click.ParamType):
-    name = "linear|log[N]|..."
-    _valid_scales = _get_valid_scale_names()
+    name = "scale"
+
+    def __init__(self, *args, **kwargs) -> None:
+        self._valid_scales = _get_valid_scale_names()
+        self._metavar_choices = sorted(self._valid_scales | set(["log[N]"]))
+
+    def get_metavar(self, param: click.Parameter) -> str:
+        choices = "|".join(self._metavar_choices)
+
+        if param.required and param.param_type_name == "argument":
+            return f"{{{choices}}}"
+
+        return f"[{choices}]"
 
     def convert(self, value, param, ctx) -> dict:
         if value in self._valid_scales:
@@ -41,14 +52,17 @@ class PlotScale(click.ParamType):
         elif value.startswith("log"):
             base_str = value.removeprefix("log")
             try:
-                return {"value": "log", "base": float(base_str)}
+                base = float(base_str)
             except ValueError:
-                pass
+                self.fail("Invalid log scale: must be a valid number")
 
-        allowed = ", ".join(
-            f"'{val}'" for val in sorted(self._valid_scales | set(["log[N]"]))
-        )
-        super().fail(
+            if base <= 0 or base == 1:
+                self.fail("Invalid log scale: cannot be <= 0 or == 1")
+
+            return {"value": "log", "base": base}
+
+        allowed = ", ".join(f"'{val}'" for val in self._metavar_choices)
+        self.fail(
             f"Invalid axis scale '{value}'. Allowed values: {allowed}.",
             param,
             ctx,
@@ -72,13 +86,13 @@ class PlotScale(click.ParamType):
     "--xscale",
     type=PlotScale(),
     default="linear",
-    help="Scale for x axis; 'linear', 'log', 'log2' etc.",
+    help="Scale for x axis",
 )
 @click.option(
     "--yscale",
     type=PlotScale(),
     default="linear",
-    help="Scale for y axis; 'linear', 'log', 'log2' etc.",
+    help="Scale for y axis",
 )
 @click.option("--grid/--no-grid", default=True, help="Show grid in plot.")
 @click.option(
