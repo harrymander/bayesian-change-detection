@@ -243,6 +243,23 @@ class MultivariateBcdmResults:
 
 
 class _MultivariateBcdmWorker:
+    __slots__ = [
+        "init_log_joint",
+        "joint_support",
+        "log_1mhazard",
+        "log_hazard",
+        "log_joint",
+        "log_pred",
+        "max_num_probs",
+        "min_log_prob",
+        "n",
+        "p",
+        "params",
+        "prev_log_joint",
+        "x",
+        "y",
+    ]
+
     def __init__(
         self,
         x: np.ndarray,
@@ -361,6 +378,14 @@ class NigPrior:
     Parameters of p-dimensional normal-inverse-gamma distributions.
     """
 
+    __slots__ = [
+        "cov",
+        "mean",
+        "prec",
+        "scale",
+        "shape",
+    ]
+
     mean: np.ndarray
     """
     (p) mean array.
@@ -455,6 +480,14 @@ class NigParams:
     Recommended to use `from_priors` to initialise, rather than constructing
     directly.
     """
+
+    __slots__ = [
+        "cov",
+        "mean",
+        "prec",
+        "scale",
+        "shape",
+    ]
 
     mean: np.ndarray
     """

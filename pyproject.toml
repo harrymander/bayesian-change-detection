@@ -32,7 +32,7 @@ dev = [
 line-length = 79
 
 [tool.ruff.lint]
-select = ["F", "E", "W", "I", "UP", "B", "NPY", "RUF", "T10"]
+select = ["F", "E", "W", "I", "UP", "B", "NPY", "RUF", "T10", "SLOT"]
 
 [[tool.mypy.overrides]]
 module = "scipy.*,sklearn.*"
