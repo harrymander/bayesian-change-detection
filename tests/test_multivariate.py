@@ -234,32 +234,35 @@ class BcdmWithSupportTrimmingTester(BcdmTester):
         assert_array_less_strict(mask.sum(axis=1), max_sizes + 1)
 
 
+def _generate_1d_data(*, dtype=np.float64) -> np.ndarray:
+    samples = 100
+    hazard = 0.1  # Constant prior on changepoint probability.
+    mean0 = 0.0  # The prior mean on the mean parameter.
+    var0 = 2.0  # The prior variance for mean parameter.
+    varx = 1.0  # The known variance of the data.
+
+    rng = np.random.default_rng(42)
+
+    # Generate random piecewise data
+    data = []
+    meanx = mean0
+    for _ in range(samples):
+        if rng.random() < hazard:  # new changepoint
+            meanx = rng.normal(mean0, var0)
+        data.append(rng.normal(meanx, varx))
+
+    return np.asarray(data, dtype=dtype)
+
+
+def _1d_multivariate_bcdm(data: np.ndarray, **kwargs):
+    kwargs = dict(cov=2, hazard=0.1) | kwargs
+    return multivariate_bcdm(np.ones_like(data), data, **kwargs)
+
+
 class Test1DChangeDetection(BcdmWithoutSupportTrimmingTester):
     @classmethod
     def run_bcdm(cls) -> MultivariateBcdmResults:
-        samples = 100
-        hazard = 0.1  # Constant prior on changepoint probability.
-        mean0 = 0.0  # The prior mean on the mean parameter.
-        var0 = 2.0  # The prior variance for mean parameter.
-        varx = 1.0  # The known variance of the data.
-
-        rng = np.random.default_rng(42)
-
-        # Generate random piecewise data
-        data = []
-        meanx = mean0
-        for _ in range(samples):
-            if rng.random() < hazard:  # new changepoint
-                meanx = rng.normal(mean0, var0)
-            data.append(rng.normal(meanx, varx))
-
-        y = np.asarray(data)
-        return multivariate_bcdm(
-            np.ones_like(y),
-            y,
-            cov=var0,
-            hazard=hazard,
-        )
+        return _1d_multivariate_bcdm(_generate_1d_data())
 
 
 class Test1DChangeDetectionWithSupportTrimming(BcdmWithSupportTrimmingTester):
@@ -267,28 +270,8 @@ class Test1DChangeDetectionWithSupportTrimming(BcdmWithSupportTrimmingTester):
 
     @classmethod
     def run_bcdm(cls) -> MultivariateBcdmResults:
-        samples = 100
-        hazard = 0.1  # Constant prior on changepoint probability.
-        mean0 = 0.0  # The prior mean on the mean parameter.
-        var0 = 2.0  # The prior variance for mean parameter.
-        varx = 1.0  # The known variance of the data.
-
-        rng = np.random.default_rng(42)
-
-        # Generate random piecewise data
-        data = []
-        meanx = mean0
-        for _ in range(samples):
-            if rng.random() < hazard:  # new changepoint
-                meanx = rng.normal(mean0, var0)
-            data.append(rng.normal(meanx, varx))
-
-        y = np.asarray(data)
-        return multivariate_bcdm(
-            np.ones_like(y),
-            y,
-            cov=var0,
-            hazard=hazard,
+        return _1d_multivariate_bcdm(
+            _generate_1d_data(),
             max_num_probs=cls.max_num_probs,
             min_prob=1e-12,
         )
@@ -338,6 +321,28 @@ class Test3DChangeDetection(BcdmWithoutSupportTrimmingTester):
             hazard=hazard,
             mean=np.full_like(w, 0.5),
         )
+
+
+@pytest.fixture(scope="module")
+def bcdm_1d_results_float32() -> MultivariateBcdmResults:
+    data = _generate_1d_data(dtype=np.float32)
+    assert data.dtype == np.float32
+    return _1d_multivariate_bcdm(data)
+
+
+@pytest.mark.parametrize("attr", MultivariateBcdmResults.__dataclass_fields__)
+def test_bcdm_with_float32_has_float32_result(
+    bcdm_1d_results_float32: MultivariateBcdmResults, attr: str
+) -> None:
+    dtype = getattr(bcdm_1d_results_float32, attr).dtype
+    assert dtype == np.float32
+
+
+def test_bcdm_with_float32_has_float32_log_posterior(
+    bcdm_1d_results_float32: MultivariateBcdmResults,
+) -> None:
+    dtype = bcdm_1d_results_float32.log_posterior().dtype
+    assert dtype == np.float32
 
 
 def assert_nig_prior_equal(a: NigPrior, b: NigPrior):
