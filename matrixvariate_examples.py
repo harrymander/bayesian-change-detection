@@ -25,9 +25,6 @@ from bayesian_change_detection import (
     MatrixVariateNormalInvGamma,
 )
 
-# Use same random data for repeatability.
-DEFAULT_SEED = 1729
-
 DATA_DIR = Path(__file__).parent / "data"
 
 
