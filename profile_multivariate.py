@@ -13,7 +13,12 @@ import scipy.special
 import scipy.stats  # noqa: F401
 from scipy.stats import multivariate_t  # noqa: F401
 
-from multivariate_examples import load_well_data, well_data_multivarate_bcdm
+from time_bcdm import (
+    Options,
+    OptionsJsonOrPath,
+    generate_profiling_data,
+    get_profiling_function,
+)
 
 
 def run_snakeviz(file: str) -> int:
@@ -30,19 +35,42 @@ def run_snakeviz(file: str) -> int:
 
 
 @click.command()
-@click.option("--snakeviz", "-v", is_flag=True)
-@click.option("--output", "-o", type=click.Path(dir_okay=False, writable=True))
-def main(output: str | None, snakeviz: bool) -> None:
+@click.option(
+    "--snakeviz",
+    "-v",
+    is_flag=True,
+    help="Run snakeviz to visualize the profile in a browser.",
+)
+@click.option(
+    "--output",
+    "-o",
+    type=click.Path(dir_okay=False, writable=True),
+    help="Path to write profile to.",
+)
+@click.option("--options", "-c", type=OptionsJsonOrPath())
+@click.option(
+    "--num-samples",
+    "-n",
+    default=10_000,
+    type=click.IntRange(min=1),
+    show_default=True,
+    help="Number of samples in the test data to perform change detection on.",
+)
+def main(
+    output: str | None,
+    snakeviz: bool,
+    num_samples: int,
+    options: Options | None,
+) -> None:
+    if options is None:
+        options = Options()
+
     def run_profile(filename: str | None) -> None:
-        x, y = load_well_data()
+        data = generate_profiling_data(num_samples)
         cProfile.runctx(
-            "run_segmentation(x, y)",
+            "f()",
             globals={},
-            locals={
-                "run_segmentation": well_data_multivarate_bcdm,
-                "x": x,
-                "y": y,
-            },
+            locals=dict(f=get_profiling_function(data, options)),
             filename=filename,
         )
 
