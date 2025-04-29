@@ -1,4 +1,4 @@
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
@@ -131,7 +131,16 @@ class PlotScale(click.ParamType):
     help="Do not group times by this parameter in the plot. Can be repeated.",
     type=click.Choice(list(Options.model_fields)),
 )
-def main(infos_files: list[str], ungroup: list[str], **kwargs) -> None:
+@click.option(
+    "--group-refs/--ungroup-refs",
+    default=False,
+    help="Whether to group by Git ref in plot (disabled by default).",
+)
+def main(
+    infos_files: list[str],
+    ungroup: list[str],
+    **kwargs,
+) -> None:
     """
     Plots times in INFOS_FILES.
     """
@@ -144,19 +153,19 @@ def main(infos_files: list[str], ungroup: list[str], **kwargs) -> None:
 @dataclass(frozen=True)
 class OptionGrouping:
     names: tuple[str, ...]
-    values: tuple[str, ...]
+    values: tuple[Any, ...]
 
     def __str__(self) -> str:
         name_vals = zip(self.names, self.values, strict=True)
         return ", ".join(f"{k}={v}" for k, v in name_vals)
 
     @classmethod
-    def from_options(
-        cls, options: Options, ungroup: set[str]
+    def from_items(
+        cls, items: Mapping[str, Any], ungroup: set[str]
     ) -> "OptionGrouping":
         names = []
         values = []
-        for k, v in options.model_dump().items():
+        for k, v in items.items():
             if k not in ungroup:
                 names.append(k)
                 values.append(v)
@@ -169,6 +178,7 @@ def group_times_by_options(
     min_samples: float | None,
     max_samples: float | None,
     ungroup: set[str],
+    group_refs: bool,
 ) -> dict[OptionGrouping, tuple[Sequence[int], Sequence[float]]]:
     def _num_samples_in_range(info: TestInfo) -> bool:
         num_samples = info.num_samples
@@ -178,7 +188,10 @@ def group_times_by_options(
 
     grouped_times: dict[OptionGrouping, list[tuple[int, float]]] = {}
     for info in filter(_num_samples_in_range, infos):
-        group = OptionGrouping.from_options(info.options, ungroup)
+        items = info.options.model_dump()
+        if group_refs:
+            items["ref"] = info.ref
+        group = OptionGrouping.from_items(items, ungroup)
         grouped_times.setdefault(group, []).append(
             (info.num_samples, info.avg_execution_time)
         )
@@ -227,6 +240,7 @@ def plot_times(
     fit: int,
     fit_bias: bool,
     ungroup: set[str],
+    group_refs: bool,
 ):
     import matplotlib.pyplot as plt
 
@@ -236,7 +250,9 @@ def plot_times(
     fig, ax = plt.subplots(**subplots_kw)
 
     best_fit_kw = dict(linestyle="--", linewidth=1)
-    grouped_times = group_times_by_options(infos, xmin, xmax, ungroup)
+    grouped_times = group_times_by_options(
+        infos, xmin, xmax, ungroup, group_refs
+    )
     for options, data in grouped_times.items():
         line = ax.plot(
             *data,
