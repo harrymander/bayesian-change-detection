@@ -291,7 +291,7 @@ def predict_segment(
     x: np.ndarray,
     y: np.ndarray,
 ) -> tuple[np.ndarray, np.ndarray]:
-    model = NigParams.from_prior(prior).fit_regression(x, y)
+    model = NigParams.from_prior(prior, 1).fit_regression(x, y)
     var = model.mvt_variance(x, axis="t")
     var[var < 0] = np.nan
     return model.mvt_mean(x, axis="t"), var
