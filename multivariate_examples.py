@@ -354,7 +354,24 @@ EXAMPLES = {
     "-o",
     type=click.Path(dir_okay=False, writable=True, path_type=Path),
 )
-def main(examples, output: Path | None) -> None:
+@click.option(
+    "--show",
+    is_flag=True,
+    help="Show plot; default if --output not specified.",
+)
+@click.option(
+    "--no-show",
+    is_flag=True,
+    help="Do not show plot; default if --output specified.",
+)
+def main(examples, output: Path | None, show: bool, no_show: bool) -> None:
+    if no_show:
+        if show:
+            raise click.UsageError("Cannot specify both --show and --no-show.")
+        show = False
+    elif not show:
+        show = output is None
+
     if output and len(examples) != 1:
         raise click.UsageError(
             "--output can only be specified with a single example"
@@ -368,7 +385,7 @@ def main(examples, output: Path | None) -> None:
 
     if output:
         plt.savefig(output, format=None if output.suffix else "png")
-    else:
+    if show:
         plt.show()
 
 
