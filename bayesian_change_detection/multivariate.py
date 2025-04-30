@@ -317,7 +317,6 @@ class _MultivariateBcdmWorker:
         "n",
         "p",
         "params",
-        "prev_log_joint",
         "update_hook",
         "x",
         "y",
@@ -352,8 +351,6 @@ class _MultivariateBcdmWorker:
         self.max_num_probs = max_num_probs or 0
         self.update_hook = update_hook
 
-        self.prev_log_joint: np.ndarray  # set in fit()
-
     def fit(self) -> MultivariateBcdmResults:
         X = self.x[:, np.newaxis, :]
         Y = self.y[:, np.newaxis]
@@ -361,7 +358,6 @@ class _MultivariateBcdmWorker:
         # Compute the initial reset probability (Eq. 28).
         log_pred = self.params[:1].mvt_logpdf(X[0], Y[0])[0]
         log_joint = log_pred + self.log_hazard + self.init_log_joint
-        self.prev_log_joint = log_joint
         self.log_joint[0, 0] = log_joint[0]
         self.log_pred[0, 0] = log_pred[0]
         self.params[:1].update(X[0], Y[0])
@@ -392,13 +388,13 @@ class _MultivariateBcdmWorker:
         # Note that the variable `t` is 0-indexed here whereas in the notes it
         # starts from 1.
 
-        # self.params is stored in the opposite order to self.prev_log_joint,
-        # so it is reversed. Therefore params_view[0] corresponds to Theta_t in
+        # self.params is stored in the opposite order to `prev_log_joint`, so
+        # it is reversed. Therefore params_view[0] corresponds to Theta_t in
         # Eq. 25, and params_view[-1] corresponds to Theta_1.
         params_view = self.params[: t + 1][::-1]
 
-        prev_log_joint = self.prev_log_joint
-        mask = self.joint_support[-prev_log_joint.size :]
+        prev_log_joint = self.log_joint[t - 1, :t]
+        mask = self.joint_support[-t:]
 
         # Mask anything lower than the kth largest value
         max_probs = self.max_num_probs
@@ -417,7 +413,7 @@ class _MultivariateBcdmWorker:
 
         # Same as above, log_pred[0] corresponds to Theta_t etc. Use the mask
         # to avoid expensive PDF computation outside of the support
-        log_pred = np.full(t + 1, -np.inf)
+        log_pred = self.log_pred[t, : t + 1]  # all -np.inf
         log_pred[mask] = params_view[mask].mvt_logpdf(x, y).ravel()
 
         # The (t + 1) changepoint probabilities
@@ -437,9 +433,6 @@ class _MultivariateBcdmWorker:
         # Update the model parameters (Eqs. 30-33). Avoid expensive computation
         # outside of the support.
         params_view.update(x, y, mask=mask)
-
-        self.log_pred[t, : t + 1] = log_pred
-        self.prev_log_joint = log_joint
 
 
 class NigPrior:
