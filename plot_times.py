@@ -1,4 +1,5 @@
-from collections.abc import Mapping, Sequence
+import subprocess
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
@@ -137,18 +138,37 @@ class PlotScale(click.ParamType):
     default=False,
     help="Whether to group by Git commit in plot (disabled by default).",
 )
+@click.option(
+    "--show-sha",
+    is_flag=True,
+    help="""When --group-commits is passed, show full SHA instead of commit
+    message.""",
+)
 def main(
     infos_files: list[str],
     ungroup: list[str],
+    show_sha: bool,
+    group_commits: bool,
     **kwargs,
 ) -> None:
     """
     Plots times in INFOS_FILES.
     """
+    if show_sha and not group_commits:
+        raise click.UsageError(
+            "--show-sha can only be used with --group-commits"
+        )
+
     infos: list[TestInfo] = []
     for file in infos_files:
         infos.extend(load_test_infos(file))
-    plot_times(infos, ungroup=set(ungroup), **kwargs)
+    plot_times(
+        infos,
+        ungroup=set(ungroup),
+        show_sha=show_sha,
+        group_commits=group_commits,
+        **kwargs,
+    )
 
 
 @dataclass(frozen=True)
@@ -180,6 +200,7 @@ def group_times_by_options(
     max_samples: float | None,
     ungroup: set[str],
     group_commits: bool,
+    show_sha: bool,
 ) -> dict[OptionGrouping, tuple[Sequence[int], Sequence[float]]]:
     def _num_samples_in_range(info: TestInfo) -> bool:
         num_samples = info.num_samples
@@ -187,11 +208,18 @@ def group_times_by_options(
             return False
         return max_samples is None or num_samples <= max_samples
 
+    if group_commits and not show_sha:
+        summaries = get_summaries_for_refs(info.commit for info in infos)
+    else:
+        summaries = None
+
     grouped_times: dict[OptionGrouping, list[tuple[int, float]]] = {}
     for info in filter(_num_samples_in_range, infos):
         items = info.options.model_dump()
         if group_commits:
-            items["commit"] = info.commit
+            commit = summaries[info.commit] if summaries else info.commit
+            items["commit"] = commit
+
         group = OptionGrouping.from_items(items, ungroup)
         grouped_times.setdefault(group, []).append(
             (info.num_samples, info.avg_execution_time)
@@ -229,6 +257,23 @@ def poly_best_fit(
     return xr, model.predict(poly.fit_transform(xr))
 
 
+def git_ref_summary(ref: str) -> str:
+    r = subprocess.run(
+        ("git", "log", "--oneline", "--no-decorate", "-n1", ref, "--"),
+        check=True,
+        stdout=subprocess.PIPE,
+    )
+    return r.stdout.strip().decode()
+
+
+def get_summaries_for_refs(refs: Iterable[str]) -> dict[str, str]:
+    summaries = {}
+    for ref in refs:
+        if ref not in summaries:
+            summaries[ref] = git_ref_summary(ref)
+    return summaries
+
+
 def plot_times(
     infos: list[TestInfo],
     output: str | None,
@@ -242,6 +287,7 @@ def plot_times(
     fit_bias: bool,
     ungroup: set[str],
     group_commits: bool,
+    show_sha: bool,
 ):
     import matplotlib.pyplot as plt
 
@@ -256,11 +302,9 @@ def plot_times(
         max_samples=xmax,
         ungroup=ungroup,
         group_commits=group_commits,
+        show_sha=show_sha,
     )
     best_fit_kw = dict(linestyle="--", linewidth=1)
-    grouped_times = group_times_by_options(
-        infos, xmin, xmax, ungroup, group_commits
-    )
     for options, data in grouped_times.items():
         line = ax.plot(
             *data,
