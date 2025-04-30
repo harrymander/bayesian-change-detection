@@ -6,11 +6,7 @@ import numpy as np
 import scipy
 from numpy.typing import NDArray
 
-from bayesian_change_detection._tril import (
-    tril_expand,
-    tril_row_slice,
-    tril_size,
-)
+from bayesian_change_detection._tril import TrilArray, tril_full
 from bayesian_change_detection.array_utils import masked_argmin
 from bayesian_change_detection.linalg import (
     inv_positive_definite,
@@ -64,13 +60,13 @@ class NigPriorKwargs(TypedDict, total=False):
 
 class HookData(Protocol):
     @property
-    def joint_support(self) -> np.ndarray: ...
+    def joint_support(self) -> TrilArray: ...
 
     @property
-    def log_joint(self) -> np.ndarray: ...
+    def log_joint(self) -> TrilArray: ...
 
     @property
-    def log_pred(self) -> np.ndarray: ...
+    def log_pred(self) -> TrilArray: ...
 
     @property
     def params(self) -> "NigParams": ...
@@ -231,18 +227,18 @@ class MultivariateBcdmResults:
     scale: np.ndarray
     """`(n,)` array of scale parameters. Is `np.nan` outside of the support."""
 
-    log_joint: np.ndarray
+    log_joint: TrilArray
     """
-    `(n, n)` array of log joint probabilities of the run-length at each time
-    point.
+    `(n, n)` lower triangular matrix of log joint probabilities of the
+    run-length at each time point.
 
-    An upper-triangular matrix where each column contains the natural logarithm
-    of the posterior probability of the segment running length at that time
-    point. E.g. the element in row `i` and column `j` is the log probability of
-    the observation at time `j` belonging to a segment that began `i`
-    observations before.
+    A lower-triangular matrix where each row contains the natural logarithm of
+    the posterior probability of the segment running length at that time point.
+    E.g. the element in row `i` and column `j` is the log probability of the
+    observation at time `i` belonging to a segment that began `j` observations
+    before.
 
-    The lower triangular elements are `-inf`, corresponding to a zero
+    The upper triangular elements are `-inf`, corresponding to a zero
     probability (i.e. a point cannot belong to a segment longer than the number
     of points observed so far).
 
@@ -250,26 +246,28 @@ class MultivariateBcdmResults:
     each time point and are returned by `log_posterior()`.
     """
 
-    log_predictive: np.ndarray
+    log_predictive: TrilArray
     """
-    `(n, n)` array of log probabilities of the predictive distributions at each
-    time point.
+    `(n, n)` lower triangular matrix of log probabilities of the predictive
+    distributions at each time point.
 
-    Has a similar structure to `log_joint`, i.e., an upper-triangular matrix
-    where the columns corresponds to the time points. In each column, the
-    elements are the log density of the predictive distribution of the model
-    given the elements in the segment up to that timepoint. E.g., the element
-    in row `i` and column `j` is the log predictive probability of the `j`th
-    observation given the model for the segment containing the `i` previous
-    observations.
+    Has a similar structure to `log_joint`, i.e., an lower-triangular matrix
+    where the rows corresponds to the time points. In each row, the elements
+    are the log density of the predictive distribution of the model given the
+    elements in the segment up to that timepoint. E.g., the element in row `i`
+    and column `j` is the log predictive probability of the `i`th observation
+    given the model for the segment containing the `j` previous observations.
     """
 
-    joint_support: np.ndarray
+    joint_support: TrilArray
 
     def log_posterior(self) -> np.ndarray:
-        """Convert joint probabilities to a triangular matrix of posterior
-        probabilities. See docs for `log_joint` for structure."""
-        return self.log_joint - scipy.special.logsumexp(self.log_joint, axis=0)
+        """Convert joint probabilities to a 2D lower triangular matrix of
+        posterior probabilities. Obtained by normalising the joint probabilites
+        across the rows. See docs for `log_joint` for structure."""
+        log_joint = self.log_joint.full()
+        norm = scipy.special.logsumexp(log_joint, axis=1)
+        return log_joint - norm.reshape(-1, 1)
 
     def changepoints(self) -> list[int]:
         """Compute indices of changepoints in ascending order.
@@ -278,13 +276,13 @@ class MultivariateBcdmResults:
             List of (0-indexed) changepoint indices. Does not include first and
             last indices, which may be changepoints.
         """
-        changepoints: list[int] = []
         probs = self.log_joint
-        run_length = probs[:, -1].argmax()
-        i = len(probs) - 1 - run_length
+        run_length = probs[probs.n - 1].argmax()
+        i = probs.n - 1 - run_length
+        changepoints = []
         while i > 0:
             changepoints.append(i.item())
-            i -= 1 + probs[: i + 1, i].argmax()
+            i -= 1 + probs[i].argmax()
 
         changepoints.reverse()
         return changepoints
@@ -336,9 +334,9 @@ class _MultivariateBcdmWorker:
 
         # To reduce memory usage, store only the lower triangular part of these
         # matrices
-        self.joint_support = np.ones(tril_size(self.n), dtype=bool)
-        self.log_joint = np.full(tril_size(self.n), -np.inf)
-        self.log_pred = self.log_joint.copy()
+        self.joint_support = tril_full(self.n, True, dtype=bool)
+        self.log_joint = tril_full(self.n, -np.inf, upper_val=-np.inf)
+        self.log_pred = tril_full(self.n, -np.inf, upper_val=-np.inf)
 
     def fit(self) -> MultivariateBcdmResults:
         X = self.x[:, np.newaxis, :]
@@ -358,11 +356,11 @@ class _MultivariateBcdmWorker:
             if self.update_hook:
                 self.update_hook(t, x, y, self)
 
-        joint_support = tril_expand(self.joint_support)
-        mask = ~joint_support[-1]
+        joint_support = self.joint_support
+        nan_mask = ~joint_support[joint_support.n - 1]
 
         def _mask_to_nan(a: np.ndarray) -> np.ndarray:
-            a[mask] = np.nan
+            a[nan_mask] = np.nan
             return a
 
         return MultivariateBcdmResults(
@@ -370,9 +368,9 @@ class _MultivariateBcdmWorker:
             cov=_mask_to_nan(self.params.cov),
             shape=_mask_to_nan(self.params.shape),
             scale=_mask_to_nan(self.params.scale),
-            log_joint=tril_expand(self.log_joint, upper_val=-np.inf).T,
-            joint_support=joint_support.T,
-            log_predictive=tril_expand(self.log_pred, upper_val=-np.inf).T,
+            log_joint=self.log_joint,
+            joint_support=joint_support,
+            log_predictive=self.log_pred,
         )
 
     def _update(self, t: int, x: np.ndarray, y: np.ndarray) -> None:
@@ -384,14 +382,14 @@ class _MultivariateBcdmWorker:
         # Eq. 25, and params_view[-1] corresponds to Theta_1.
         params_view = self.params[: t + 1][::-1]
 
-        prev_row_slice = tril_row_slice(t - 1)
-        prev_log_joint = self.log_joint[prev_row_slice]
+        prev_log_joint = self.log_joint[t - 1]
 
         # Copy the previous support to the current one, shifted right by one,
         # since `self.joint_support[t, 0]` must be True since it corresponds to
         # the 'hypothesis' that a new segment begins after this time step.
-        mask = self.joint_support[tril_row_slice(t, col_start=1)]
-        mask[:] = self.joint_support[prev_row_slice]
+        new_mask = self.joint_support[t]
+        mask = new_mask[1:]
+        mask[:] = self.joint_support[t - 1]
 
         # Mask anything lower than the kth largest value
         max_probs = self.max_num_probs
@@ -404,16 +402,15 @@ class _MultivariateBcdmWorker:
             log_normaliser = scipy.special.logsumexp(prev_log_joint[mask])
             mask[(prev_log_joint - log_normaliser) < self.min_log_prob] = False
 
-        row_slice = tril_row_slice(t)
-        mask = self.joint_support[row_slice]
+        mask = new_mask
 
         # Same as above, log_pred[0] corresponds to Theta_t etc. Use the mask
         # to avoid expensive PDF computation outside of the support
-        log_pred = self.log_pred[row_slice]  # all -np.inf
+        log_pred = self.log_pred[t]  # all -np.inf
         log_pred[mask] = params_view[mask].mvt_logpdf(x, y).ravel()
 
         # The (t + 1) changepoint probabilities
-        log_joint = self.log_joint[row_slice]
+        log_joint = self.log_joint[t]
 
         # Reset probability.
         log_joint[0] = scipy.special.logsumexp(

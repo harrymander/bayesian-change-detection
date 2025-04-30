@@ -1,11 +1,7 @@
 import numpy as np
 import pytest
 
-from bayesian_change_detection._tril import (
-    tril_expand,
-    tril_row_slice,
-    tril_size,
-)
+from bayesian_change_detection._tril import tril_full
 from tests.utils import assert_array_equal_strict
 
 
@@ -13,12 +9,13 @@ from tests.utils import assert_array_equal_strict
 def test_tril(upper_val) -> None:
     n = 5
     lower_val = -np.inf
-    compressed = np.full(tril_size(n), lower_val, dtype=float)
+    kw = {} if upper_val is None else {"upper_val": upper_val}
+    tril = tril_full(n, lower_val, **kw)
 
-    compressed[tril_row_slice(0)] = 1
-    compressed[tril_row_slice(1)] = [10, 20]
-    compressed[tril_row_slice(3, col_start=2)] = [-1, -2]
-    compressed[tril_row_slice(4, col_start=1)] = [1, 2, 3, 4]
+    tril[0] = 1
+    tril[1] = [10, 20]
+    tril[3][2:] = [-1, -2]
+    tril[4][1:] = [1, 2, 3, 4]
 
     U = upper_val or 0
     L = lower_val
@@ -31,5 +28,5 @@ def test_tril(upper_val) -> None:
         [L,  1,  2,  3,  4],
     ])
     # fmt: on
-    expanded = tril_expand(compressed, upper_val=upper_val)
-    assert_array_equal_strict(expanded, expected)
+
+    assert_array_equal_strict(tril.full(), expected)

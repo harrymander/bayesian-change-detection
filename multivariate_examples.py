@@ -43,8 +43,14 @@ def plot_probabilities(
     trim_zero: bool = True,
     add_colorbar: bool = True,
     label: str | None = "Probability",
+    time_axis: int = 0,
     **kwargs,
 ) -> tuple[np.ndarray, AxesImage]:
+    if time_axis == 0:
+        log_probabilities = log_probabilities.T
+    elif time_axis != 1:
+        raise ValueError("time_axis must be 0 or 1")
+
     samples = len(log_probabilities)
     if x is None:
         x = np.arange(samples)
@@ -137,16 +143,17 @@ def triangular() -> None:
     )[0]
     axes[1].plot(t, t[posterior.argmax(axis=0)], color="green")
 
+    log_predictive = res.log_predictive.full()
     plot_probabilities(
         axes[2],
-        res.log_predictive,
+        log_predictive,
         x=t,
         trim_zero=False,
         label="Predictive probability",
     )
     axes[2].plot(
         t,
-        t[res.log_predictive.argmax(axis=0)],
+        t[log_predictive.argmax(axis=1)],
         color="orange",
         linewidth=0.8,
         alpha=0.7,
@@ -228,14 +235,15 @@ def random_piecewise() -> None:
         trim_zero=False,
         label="Posterior probability",
     )[0]
+    log_predictive = res.log_predictive.full()
     plot_probabilities(
         axes[2],
-        res.log_predictive,
+        log_predictive,
         trim_zero=False,
         label="Predictive probability",
     )
     axes[2].plot(
-        res.log_predictive.argmax(axis=0),
+        log_predictive.argmax(axis=1),
         color="orange",
         linewidth=0.8,
         alpha=0.7,

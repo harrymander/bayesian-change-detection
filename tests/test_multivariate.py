@@ -11,6 +11,7 @@ from bayesian_change_detection import (
     MultivariateBcdmResults,
     multivariate_bcdm,
 )
+from bayesian_change_detection._tril import TrilArray
 from bayesian_change_detection.multivariate import NigParams, NigPrior
 from tests.conftest import JsonSnapshot, NDArraySnapshot
 from tests.utils import (
@@ -135,7 +136,7 @@ class BcdmTester(ABC):
 
     def test_log_posteriors_are_normalised(self) -> None:
         log_posterior = self.results.log_posterior()
-        col_sums = scipy.special.logsumexp(log_posterior, axis=0)
+        col_sums = scipy.special.logsumexp(log_posterior, axis=1)
         assert_allclose(col_sums, 0, atol=1e-12, rtol=1e-12)
 
     def test_changepoints_snapshot(self, json_snapshot: JsonSnapshot):
@@ -181,17 +182,18 @@ class BcdmTester(ABC):
     def test_parameters_all_nan_outside_final_support(self, attrname: str):
         parameters = getattr(self.results, attrname)
         nans = np.isnan(parameters).reshape((parameters.shape[0], -1))
+        support = self.results.joint_support
         assert_array_equal_strict(
-            self.results.joint_support[:, -1],
+            support[support.n - 1],
             ~nans.all(axis=1),
             err_msg="Support mask does not match position of NaNs",
         )
 
-    def _assert_array_is_zero_outside_support(self, arr: np.ndarray) -> None:
+    def _assert_array_is_zero_outside_support(self, arr: TrilArray) -> None:
         __tracebackhide__ = True
         assert_array_equal_strict(
-            np.isneginf(arr),
-            ~self.results.joint_support,
+            np.isneginf(arr.full()),
+            ~self.results.joint_support.full(),
             err_msg="Array is not all-zero outside of the support",
         )
 
@@ -203,28 +205,29 @@ class BcdmTester(ABC):
 
 
 class BcdmWithoutSupportTrimmingTester(BcdmTester):
-    def test_support_mask_is_upper_triangular_constant(self) -> None:
-        expected = np.triu(np.ones(self.results.log_joint.shape, dtype=bool))
-        assert_array_equal_strict(self.results.joint_support, expected)
+    def test_support_mask_is_lower_triangular_constant(self) -> None:
+        support_2d = self.results.joint_support.full()
+        expected = np.tril(np.ones(support_2d.shape, dtype=bool))
+        assert_array_equal_strict(support_2d, expected)
 
 
 class BcdmWithSupportTrimmingTester(BcdmTester):
     max_num_probs: int
 
-    def test_support_mask_is_upper_triangular(self) -> None:
-        support = self.results.joint_support
-        support_tril = support[np.tril_indices_from(support, -1)]
+    def test_support_mask_is_lower_triangular(self) -> None:
+        support = self.results.joint_support.full()
+        support_triu = support[np.triu_indices_from(support, 1)]
         assert_array_equal_strict(
-            support_tril,
-            np.zeros_like(support_tril),
-            err_msg="Support is not upper-triangular",
+            support_triu,
+            np.zeros_like(support_triu),
+            err_msg="Support is not lower-triangular",
         )
 
     def test_support_mask_max_size(self) -> None:
-        mask = self.results.joint_support
+        mask = self.results.joint_support.full()
         max_sizes = np.full(mask.shape[0], self.max_num_probs)
         max_sizes[: self.max_num_probs] = np.arange(self.max_num_probs) + 1
-        assert_array_less_strict(mask.sum(axis=0), max_sizes + 1)
+        assert_array_less_strict(mask.sum(axis=1), max_sizes + 1)
 
 
 class Test1DChangeDetection(BcdmWithoutSupportTrimmingTester):
