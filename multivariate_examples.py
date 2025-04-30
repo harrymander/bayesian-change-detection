@@ -25,7 +25,7 @@ DATA_DIR = Path(__file__).parent / "data"
 
 def multivariate_bcdm(x, y, **kwargs) -> MultivariateBcdmResults:
     """Wrap multivariate_bcdm with progress bar."""
-    with tqdm.tqdm(total=len(x)) as pbar:
+    with tqdm.tqdm(total=len(x), unit="") as pbar:
         return _multivariate_bcdm(
             x,
             y,
