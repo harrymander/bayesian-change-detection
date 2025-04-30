@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
-from collections.abc import Callable, Sequence
-from typing import Any, Protocol, cast
+from collections.abc import Sequence
+from typing import cast
 
 import numpy as np
 import numpy.testing
@@ -13,76 +13,11 @@ from bayesian_change_detection import (
 )
 from bayesian_change_detection.multivariate import NigParams, NigPrior
 from tests.conftest import JsonSnapshot, NDArraySnapshot
-
-
-@pytest.fixture(autouse=True)
-def _set_numpy_err():
-    old_settings = np.seterr(all="raise")
-    try:
-        yield
-    finally:
-        np.seterr(**old_settings)
-
-
-class _NumpyAssertFunction(Protocol):
-    def __call__(
-        self,
-        actual,
-        desired,
-        *args: Any,
-        err_msg: str | None = ...,
-        **kwargs: Any,
-    ) -> None: ...
-
-
-def _make_numpy_assert_function(
-    assert_func: Callable,
-    default_err_msg: str,
-    **default_kwargs,
-) -> _NumpyAssertFunction:
-    def _assert(
-        actual, desired, *args, err_msg: str | None = None, **kwargs
-    ) -> None:
-        __tracebackhide__ = True
-        kwargs = default_kwargs | kwargs
-        if not err_msg:
-            err_msg = default_err_msg
-        try:
-            assert_func(actual, desired, *args, err_msg=err_msg, **kwargs)
-        except AssertionError as e:
-            raise AssertionError(f"{err_msg}{e}") from None
-
-    return _assert
-
-
-assert_allclose = _make_numpy_assert_function(
-    numpy.testing.assert_allclose, "Arrays are not close"
+from tests.utils import (
+    assert_allclose,
+    assert_array_equal_strict,
+    assert_array_less_strict,
 )
-assert_array_equal_strict = _make_numpy_assert_function(
-    numpy.testing.assert_array_equal, "Arrays are not equal", strict=True
-)
-
-
-def assert_array_less_strict(actual, desired, *args, **kwargs) -> None:
-    __tracebackhide__ = True
-
-    # strict only supported on numpy v2
-    if int(np.__version__.split(".", maxsplit=1)[0]) >= 2:
-        default_kwargs = {"strict": True}
-    else:
-        default_kwargs = {}
-        assert actual.shape == desired.shape, (
-            f"Shapes are not equal: {actual.shape} != {desired.shape}"
-        )
-        assert actual.dtype is desired.dtype, (
-            f"Dtypes are not equivalent: {actual.dtype} is not {desired.dtype}"
-        )
-
-    _make_numpy_assert_function(
-        numpy.testing.assert_array_less,
-        "Arrays are not strictly ordered `x < y`",
-        **default_kwargs,
-    )(actual, desired, *args, **kwargs)
 
 
 def new_params(t: int, p: int) -> NigParams:

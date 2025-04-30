@@ -1,12 +1,19 @@
 import json
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, ClassVar, Generic, TypeVar
+from typing import Any, ClassVar, Generic, TypeVar
 
+import numpy as np
 import pytest
 
-if TYPE_CHECKING:
-    import numpy as np
+
+@pytest.fixture(autouse=True)
+def _set_numpy_err():
+    old_settings = np.seterr(all="raise")
+    try:
+        yield
+    finally:
+        np.seterr(**old_settings)
 
 
 def pytest_addoption(parser: pytest.Parser):
@@ -88,11 +95,11 @@ class _SnapshotFixture(ABC, Generic[T]):
         return self._data
 
 
-class NDArraySnapshot(_SnapshotFixture["np.ndarray"]):
+class NDArraySnapshot(_SnapshotFixture[np.ndarray]):
     suffix = "txt"
 
     @staticmethod
-    def _save(path: Path, data: "np.ndarray") -> None:
+    def _save(path: Path, data: np.ndarray) -> None:
         import numpy as np
 
         data = np.atleast_1d(data)
@@ -102,7 +109,7 @@ class NDArraySnapshot(_SnapshotFixture["np.ndarray"]):
         np.savetxt(path, data)
 
     @staticmethod
-    def _load(path: Path) -> "np.ndarray":
+    def _load(path: Path) -> np.ndarray:
         import numpy as np
 
         return np.loadtxt(path)

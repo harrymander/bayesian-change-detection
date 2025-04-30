@@ -6,6 +6,11 @@ import numpy as np
 import scipy
 from numpy.typing import NDArray
 
+from bayesian_change_detection._tril import (
+    tril_expand,
+    tril_row_slice,
+    tril_size,
+)
 from bayesian_change_detection.array_utils import masked_argmin
 from bayesian_change_detection.linalg import (
     inv_positive_definite,
@@ -322,15 +327,18 @@ class _MultivariateBcdmWorker:
         self.params = NigParams.from_prior(prior, self.n)
         self.log_hazard: float = np.log(hazard)
         self.log_1mhazard: float = np.log1p(-hazard)
-        self.joint_support = np.ones((self.n, self.n), dtype=bool)
         self.init_log_joint = np.log(init_prob) if init_prob else -np.inf
-        self.log_joint = np.full((self.n, self.n), -np.inf)
-        self.log_pred = self.log_joint.copy()
         self.min_log_prob: float | None = (
             np.log(min_prob) if min_prob else None
         )
         self.max_num_probs = max_num_probs or 0
         self.update_hook = update_hook
+
+        # To reduce memory usage, store only the lower triangular part of these
+        # matrices
+        self.joint_support = np.ones(tril_size(self.n), dtype=bool)
+        self.log_joint = np.full(tril_size(self.n), -np.inf)
+        self.log_pred = self.log_joint.copy()
 
     def fit(self) -> MultivariateBcdmResults:
         X = self.x[:, np.newaxis, :]
@@ -339,8 +347,8 @@ class _MultivariateBcdmWorker:
         # Compute the initial reset probability (Eq. 28).
         log_pred = self.params[:1].mvt_logpdf(X[0], Y[0])[0]
         log_joint = log_pred + self.log_hazard + self.init_log_joint
-        self.log_joint[0, 0] = log_joint[0]
-        self.log_pred[0, 0] = log_pred[0]
+        self.log_joint[0] = log_joint[0]
+        self.log_pred[0] = log_pred[0]
         self.params[:1].update(X[0], Y[0])
         if self.update_hook:
             self.update_hook(0, X[0], Y[0], self)
@@ -350,7 +358,8 @@ class _MultivariateBcdmWorker:
             if self.update_hook:
                 self.update_hook(t, x, y, self)
 
-        mask = ~self.joint_support[-1]
+        joint_support = tril_expand(self.joint_support)
+        mask = ~joint_support[-1]
 
         def _mask_to_nan(a: np.ndarray) -> np.ndarray:
             a[mask] = np.nan
@@ -361,9 +370,9 @@ class _MultivariateBcdmWorker:
             cov=_mask_to_nan(self.params.cov),
             shape=_mask_to_nan(self.params.shape),
             scale=_mask_to_nan(self.params.scale),
-            log_joint=self.log_joint.T,
-            joint_support=np.triu(self.joint_support.T),
-            log_predictive=self.log_pred.T,
+            log_joint=tril_expand(self.log_joint, upper_val=-np.inf).T,
+            joint_support=joint_support.T,
+            log_predictive=tril_expand(self.log_pred, upper_val=-np.inf).T,
         )
 
     def _update(self, t: int, x: np.ndarray, y: np.ndarray) -> None:
@@ -375,13 +384,14 @@ class _MultivariateBcdmWorker:
         # Eq. 25, and params_view[-1] corresponds to Theta_1.
         params_view = self.params[: t + 1][::-1]
 
-        prev_log_joint = self.log_joint[t - 1, :t]
+        prev_row_slice = tril_row_slice(t - 1)
+        prev_log_joint = self.log_joint[prev_row_slice]
 
         # Copy the previous support to the current one, shifted right by one,
         # since `self.joint_support[t, 0]` must be True since it corresponds to
         # the 'hypothesis' that a new segment begins after this time step.
-        mask = self.joint_support[t, 1 : t + 1]
-        mask[:] = self.joint_support[t - 1, :t]
+        mask = self.joint_support[tril_row_slice(t, col_start=1)]
+        mask[:] = self.joint_support[prev_row_slice]
 
         # Mask anything lower than the kth largest value
         max_probs = self.max_num_probs
@@ -394,16 +404,16 @@ class _MultivariateBcdmWorker:
             log_normaliser = scipy.special.logsumexp(prev_log_joint[mask])
             mask[(prev_log_joint - log_normaliser) < self.min_log_prob] = False
 
-        # Expand the mask to include the True at index 0.
-        mask = self.joint_support[t, : t + 1]
+        row_slice = tril_row_slice(t)
+        mask = self.joint_support[row_slice]
 
         # Same as above, log_pred[0] corresponds to Theta_t etc. Use the mask
         # to avoid expensive PDF computation outside of the support
-        log_pred = self.log_pred[t, : t + 1]  # all -np.inf
+        log_pred = self.log_pred[row_slice]  # all -np.inf
         log_pred[mask] = params_view[mask].mvt_logpdf(x, y).ravel()
 
         # The (t + 1) changepoint probabilities
-        log_joint = self.log_joint[t, : t + 1]
+        log_joint = self.log_joint[row_slice]
 
         # Reset probability.
         log_joint[0] = scipy.special.logsumexp(
