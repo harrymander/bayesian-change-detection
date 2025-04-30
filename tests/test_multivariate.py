@@ -134,6 +134,10 @@ class BcdmTester(ABC):
         log_posterior = self.results.log_posterior()
         assert_allclose(log_posterior, ndarray_snapshot(log_posterior))
 
+    def test_log_predictive_snapshot(self, ndarray_snapshot: NDArraySnapshot):
+        log_predictive = self.results.log_predictive.full()
+        assert_allclose(log_predictive, ndarray_snapshot(log_predictive))
+
     def test_log_posteriors_are_normalised(self) -> None:
         log_posterior = self.results.log_posterior()
         col_sums = scipy.special.logsumexp(log_posterior, axis=1)
