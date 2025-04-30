@@ -109,7 +109,7 @@ def _validate_git_sha(value: str) -> str:
 
 
 class TestInfo(BaseModel):
-    ref: Annotated[str, AfterValidator(_validate_git_sha)]
+    commit: Annotated[str, AfterValidator(_validate_git_sha)]
     datetime: AwareDatetime
     num_samples: int = Field(..., ge=1)
     execution_time: float = Field(..., gt=0)
@@ -186,7 +186,7 @@ class OptionsJsonOrPath(click.ParamType):
 
 
 @click.command(context_settings=dict(show_default=True))
-@click.argument("ref", required=False)
+@click.argument("commit", required=False)
 @click.option(
     "--options",
     help="""Options JSON or path to JSON file (or - to read from stdin).""",
@@ -227,7 +227,7 @@ class OptionsJsonOrPath(click.ParamType):
     prints the results to stdout.""",
 )
 def main(
-    ref: str | None,
+    commit: str | None,
     output: str,
     num_loops: int,
     single_loop: bool,
@@ -246,9 +246,9 @@ def main(
         else []
     )
     worktree: AbstractContextManager[Path]
-    if ref:
-        ref_sha = get_sha_for_ref(ref)
-        slog(f"Profiling {ref} ({get_commit_message_summary(ref_sha)})...")
+    if commit:
+        ref_sha = get_sha_for_ref(commit)
+        slog(f"Profiling {commit} ({get_commit_message_summary(ref_sha)})...")
         worktree = git_worktree(ref_sha)
     else:
         worktree = nullcontext(THIS_DIR)
@@ -273,7 +273,7 @@ def main(
         )
 
     info = TestInfo(
-        ref=ref_sha,
+        commit=ref_sha,
         datetime=profile_datetime,
         execution_time=execution_time,
         number_loops=num_loops,

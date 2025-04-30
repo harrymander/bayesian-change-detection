@@ -132,10 +132,10 @@ class PlotScale(click.ParamType):
     type=click.Choice(list(Options.model_fields)),
 )
 @click.option(
-    "--group-refs/--ungroup-refs",
-    "-r/",
+    "--group-commits/--ungroup-commits",
+    "-c/",
     default=False,
-    help="Whether to group by Git ref in plot (disabled by default).",
+    help="Whether to group by Git commit in plot (disabled by default).",
 )
 def main(
     infos_files: list[str],
@@ -179,7 +179,7 @@ def group_times_by_options(
     min_samples: float | None,
     max_samples: float | None,
     ungroup: set[str],
-    group_refs: bool,
+    group_commits: bool,
 ) -> dict[OptionGrouping, tuple[Sequence[int], Sequence[float]]]:
     def _num_samples_in_range(info: TestInfo) -> bool:
         num_samples = info.num_samples
@@ -190,8 +190,8 @@ def group_times_by_options(
     grouped_times: dict[OptionGrouping, list[tuple[int, float]]] = {}
     for info in filter(_num_samples_in_range, infos):
         items = info.options.model_dump()
-        if group_refs:
-            items["ref"] = info.ref
+        if group_commits:
+            items["commit"] = info.commit
         group = OptionGrouping.from_items(items, ungroup)
         grouped_times.setdefault(group, []).append(
             (info.num_samples, info.avg_execution_time)
@@ -241,7 +241,7 @@ def plot_times(
     fit: int,
     fit_bias: bool,
     ungroup: set[str],
-    group_refs: bool,
+    group_commits: bool,
 ):
     import matplotlib.pyplot as plt
 
@@ -250,9 +250,16 @@ def plot_times(
         subplots_kw["figsize"] = figsize
     fig, ax = plt.subplots(**subplots_kw)
 
+    grouped_times = group_times_by_options(
+        infos=infos,
+        min_samples=xmin,
+        max_samples=xmax,
+        ungroup=ungroup,
+        group_commits=group_commits,
+    )
     best_fit_kw = dict(linestyle="--", linewidth=1)
     grouped_times = group_times_by_options(
-        infos, xmin, xmax, ungroup, group_refs
+        infos, xmin, xmax, ungroup, group_commits
     )
     for options, data in grouped_times.items():
         line = ax.plot(
