@@ -133,6 +133,7 @@ class PlotScale(click.ParamType):
 )
 @click.option(
     "--group-refs/--ungroup-refs",
+    "-r/",
     default=False,
     help="Whether to group by Git ref in plot (disabled by default).",
 )
