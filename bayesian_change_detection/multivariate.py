@@ -259,26 +259,7 @@ class MultivariateBcdmResults:
     observations.
     """
 
-    def final_support_mask(self) -> np.ndarray:
-        """
-        Return a (n,) boolean array over the support at the final time step.
-
-        This corresponds to the support of the joint probabilities at the final
-        time step. If changepoint detection was run without support trimming
-        (i.e. no `max_num_probs` and `min_prob`), then will be all `True`.
-        """
-        return ~np.isnan(self.scale)
-
-    def full_support_mask(self) -> np.ndarray:
-        """
-        Return a (n, n) boolean array over the support with the same structure
-        as `log_joint`.
-        """
-        full_mask = np.zeros(self.log_joint.shape, dtype=bool)
-        mask = self.final_support_mask()
-        for i in range(len(mask)):
-            full_mask[i, : i + 1] = mask[: i + 1]
-        return full_mask.T
+    joint_support: np.ndarray
 
     def log_posterior(self) -> np.ndarray:
         """Convert joint probabilities to a triangular matrix of posterior
@@ -341,7 +322,7 @@ class _MultivariateBcdmWorker:
         self.params = NigParams.from_prior(prior, self.n)
         self.log_hazard: float = np.log(hazard)
         self.log_1mhazard: float = np.log1p(-hazard)
-        self.joint_support = np.ones(self.n, dtype=bool)
+        self.joint_support = np.ones((self.n, self.n), dtype=bool)
         self.init_log_joint = np.log(init_prob) if init_prob else -np.inf
         self.log_joint = np.full((self.n, self.n), -np.inf)
         self.log_pred = self.log_joint.copy()
@@ -369,7 +350,7 @@ class _MultivariateBcdmWorker:
             if self.update_hook:
                 self.update_hook(t, x, y, self)
 
-        mask = ~self.joint_support
+        mask = ~self.joint_support[-1]
 
         def _mask_to_nan(a: np.ndarray) -> np.ndarray:
             a[mask] = np.nan
@@ -381,6 +362,7 @@ class _MultivariateBcdmWorker:
             shape=_mask_to_nan(self.params.shape),
             scale=_mask_to_nan(self.params.scale),
             log_joint=self.log_joint.T,
+            joint_support=np.triu(self.joint_support.T),
             log_predictive=self.log_pred.T,
         )
 
@@ -394,7 +376,12 @@ class _MultivariateBcdmWorker:
         params_view = self.params[: t + 1][::-1]
 
         prev_log_joint = self.log_joint[t - 1, :t]
-        mask = self.joint_support[-t:]
+
+        # Copy the previous support to the current one, shifted right by one,
+        # since `self.joint_support[t, 0]` must be True since it corresponds to
+        # the 'hypothesis' that a new segment begins after this time step.
+        mask = self.joint_support[t, 1 : t + 1]
+        mask[:] = self.joint_support[t - 1, :t]
 
         # Mask anything lower than the kth largest value
         max_probs = self.max_num_probs
@@ -407,9 +394,8 @@ class _MultivariateBcdmWorker:
             log_normaliser = scipy.special.logsumexp(prev_log_joint[mask])
             mask[(prev_log_joint - log_normaliser) < self.min_log_prob] = False
 
-        # mask[0] must be True since it corresponds to params[0], which is a
-        # new 'hypothesis' that a new segment begins after this time step.
-        mask = self.joint_support[-t - 1 :]
+        # Expand the mask to include the True at index 0.
+        mask = self.joint_support[t, : t + 1]
 
         # Same as above, log_pred[0] corresponds to Theta_t etc. Use the mask
         # to avoid expensive PDF computation outside of the support

@@ -230,52 +230,63 @@ class BcdmTester(ABC):
         assert_allclose(parameters, snapshot)
 
     @parametrize_attrs("attrname")
-    def test_parameters_all_nan_outside_support(self, attrname: str):
+    def test_parameters_no_mixed_nans_across_first_axis(self, attrname: str):
         parameters = getattr(self.results, attrname)
         nans = np.isnan(parameters).reshape((parameters.shape[0], -1))
         assert_array_equal_strict(
             nans.all(axis=1),
             nans.any(axis=1),
-            err_msg=f"{attrname} has mixture of NaNs and normal numbers",
+            err_msg=(
+                f"{attrname} has mixture of NaNs and normal numbers along "
+                "the first axis"
+            ),
         )
+
+    @parametrize_attrs("attrname")
+    def test_parameters_all_nan_outside_final_support(self, attrname: str):
+        parameters = getattr(self.results, attrname)
+        nans = np.isnan(parameters).reshape((parameters.shape[0], -1))
         assert_array_equal_strict(
-            self.results.final_support_mask(),
+            self.results.joint_support[:, -1],
             ~nans.all(axis=1),
             err_msg="Support mask does not match position of NaNs",
         )
 
-    def test_final_predictive_is_zero_outside_support(self) -> None:
-        zeros = np.isneginf(self.results.log_predictive[:, -1])
-        assert_array_equal_strict(zeros, ~self.results.final_support_mask())
+    def _assert_array_is_zero_outside_support(self, arr: np.ndarray) -> None:
+        __tracebackhide__ = True
+        assert_array_equal_strict(
+            np.isneginf(arr),
+            ~self.results.joint_support,
+            err_msg="Array is not all-zero outside of the support",
+        )
 
-    def test_final_joint_is_zero_outside_support(self) -> None:
-        zeros = np.isneginf(self.results.log_joint[:, -1])
-        assert_array_equal_strict(zeros, ~self.results.final_support_mask())
+    def test_predictive_is_zero_outside_support(self) -> None:
+        self._assert_array_is_zero_outside_support(self.results.log_predictive)
+
+    def test_joint_is_zero_outside_support(self) -> None:
+        self._assert_array_is_zero_outside_support(self.results.log_joint)
 
 
 class BcdmWithoutSupportTrimmingTester(BcdmTester):
-    def test_final_support_mask_is_all_true(self) -> None:
-        support = self.results.final_support_mask()
-        assert_array_equal_strict(
-            support,
-            np.ones_like(support),
-            err_msg="Support not all True",
-        )
-
-    def test_full_support_mask_is_upper_triangular_bool_matrix(self) -> None:
+    def test_support_mask_is_upper_triangular_constant(self) -> None:
         expected = np.triu(np.ones(self.results.log_joint.shape, dtype=bool))
-        assert_array_equal_strict(self.results.full_support_mask(), expected)
+        assert_array_equal_strict(self.results.joint_support, expected)
 
 
 class BcdmWithSupportTrimmingTester(BcdmTester):
     max_num_probs: int
 
-    def test_final_support_max_size(self) -> None:
-        support_size = self.results.final_support_mask().sum()
-        assert support_size <= self.max_num_probs
+    def test_support_mask_is_upper_triangular(self) -> None:
+        support = self.results.joint_support
+        support_tril = support[np.tril_indices_from(support, -1)]
+        assert_array_equal_strict(
+            support_tril,
+            np.zeros_like(support_tril),
+            err_msg="Support is not upper-triangular",
+        )
 
-    def test_full_support_mask_max_size(self) -> None:
-        mask = self.results.full_support_mask()
+    def test_support_mask_max_size(self) -> None:
+        mask = self.results.joint_support
         max_sizes = np.full(mask.shape[0], self.max_num_probs)
         max_sizes[: self.max_num_probs] = np.arange(self.max_num_probs) + 1
         assert_array_less_strict(mask.sum(axis=0), max_sizes + 1)
