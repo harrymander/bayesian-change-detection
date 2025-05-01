@@ -113,7 +113,7 @@ class TestNigParams:
         assert_allclose(batch_logpdf, iterative_logpdf)
 
 
-def parametrize_attrs(name: str):
+def parametrize_nig_params_attrs(name: str):
     return pytest.mark.parametrize(name, ("mean", "cov", "shape", "scale"))
 
 
@@ -151,25 +151,16 @@ class BcdmTester(ABC):
         changepoints = self.results.changepoints()
         assert changepoints == sorted(changepoints)
 
-    @parametrize_attrs("attrname")
+    @parametrize_nig_params_attrs("attrname")
     def test_parameters_snapshot(
         self,
         attrname: str,
         ndarray_snapshot: NDArraySnapshot,
     ):
         parameters = getattr(self.results, attrname)
-        assert parameters.ndim <= 3
-        if parameters.ndim == 3:
-            b, m, n = parameters.shape
-            parameters_2d = parameters.reshape(-1, m * n)
-            snapshot = ndarray_snapshot(parameters_2d)
-            snapshot = snapshot.reshape(b, m, n)
-        else:
-            snapshot = ndarray_snapshot(parameters).reshape(*parameters.shape)
+        assert_allclose(parameters, ndarray_snapshot(parameters))
 
-        assert_allclose(parameters, snapshot)
-
-    @parametrize_attrs("attrname")
+    @parametrize_nig_params_attrs("attrname")
     def test_parameters_no_mixed_nans_across_first_axis(self, attrname: str):
         parameters = getattr(self.results, attrname)
         nans = np.isnan(parameters).reshape((parameters.shape[0], -1))
@@ -182,7 +173,7 @@ class BcdmTester(ABC):
             ),
         )
 
-    @parametrize_attrs("attrname")
+    @parametrize_nig_params_attrs("attrname")
     def test_parameters_all_nan_outside_final_support(self, attrname: str):
         parameters = getattr(self.results, attrname)
         nans = np.isnan(parameters).reshape((parameters.shape[0], -1))

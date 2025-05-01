@@ -50,7 +50,7 @@ class _SnapshotFixture(ABC, Generic[T]):
 
     @staticmethod
     @abstractmethod
-    def _load(path: Path) -> T:
+    def _load(path: Path, test_data: T) -> T:
         pass
 
     @staticmethod
@@ -75,12 +75,12 @@ class _SnapshotFixture(ABC, Generic[T]):
         self._generating = generating
         self._data: T | None = None
 
-    def __call__(self, data: T) -> T:
+    def __call__(self, test_data: T) -> T:
         if self._generating:
-            self._data = data
+            self._data = test_data
             self.snapshot_path.parent.mkdir(exist_ok=True, parents=False)
-            self._save(self.snapshot_path, data)
-            return data
+            self._save(self.snapshot_path, test_data)
+            return test_data
 
         if self._data is None:
             path = self.snapshot_path
@@ -90,7 +90,7 @@ class _SnapshotFixture(ABC, Generic[T]):
                     "did you run pytest with --snapshot-generate?"
                 )
                 raise SnapshotError(msg)
-            self._data = self._load(path)
+            self._data = self._load(path, test_data)
 
         return self._data
 
@@ -102,17 +102,21 @@ class NDArraySnapshot(_SnapshotFixture[np.ndarray]):
     def _save(path: Path, data: np.ndarray) -> None:
         import numpy as np
 
+        # I think we could support arbitrary ndim...
         data = np.atleast_1d(data)
-        if data.ndim > 2:
-            raise SnapshotError("Only 1D and 2D arrays are supported.")
+        if data.ndim > 3:
+            raise SnapshotError("Only 1, 2, or 3 dimensional arrays supported")
 
+        b, *shape = data.shape
+        data = data.reshape(b, int(np.prod(shape)))
         np.savetxt(path, data)
 
     @staticmethod
-    def _load(path: Path) -> np.ndarray:
+    def _load(path: Path, test_data: np.ndarray) -> np.ndarray:
         import numpy as np
 
-        return np.loadtxt(path)
+        assert test_data.ndim <= 3
+        return np.loadtxt(path).reshape(*test_data.shape)
 
 
 class JsonSnapshot(_SnapshotFixture[Any]):
@@ -125,7 +129,7 @@ class JsonSnapshot(_SnapshotFixture[Any]):
             f.write("\n")
 
     @staticmethod
-    def _load(path: Path) -> Any:
+    def _load(path: Path, _) -> Any:
         with path.open() as f:
             return json.load(f)
 
