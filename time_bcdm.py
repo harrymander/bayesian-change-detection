@@ -6,7 +6,7 @@ import subprocess
 import sys
 import tempfile
 import timeit
-from collections.abc import Callable, Generator, Iterable
+from collections.abc import Callable, Generator, Hashable, Iterable
 from contextlib import AbstractContextManager, contextmanager, nullcontext
 from functools import partial
 from os import PathLike
@@ -97,6 +97,8 @@ def git_worktree_is_dirty() -> bool:
 
 class Options(BaseModel):
     model_config = ConfigDict(frozen=True, extra="allow")
+
+    __pydantic_extra__: dict[str, Hashable]
 
     max_num_probs: int | None = Field(None, ge=1)
     min_prob: float = Field(0, ge=0)
