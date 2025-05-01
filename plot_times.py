@@ -150,6 +150,11 @@ class PlotScale(click.ParamType):
     default=True,
     help="Sort grouping in legend in order of execution time.",
 )
+@click.option(
+    "--annotate/--no-annotate",
+    default=True,
+    help="Annote the slowest time in each group on the plot.",
+)
 def main(
     infos_files: list[str],
     ungroup: list[str],
@@ -297,6 +302,7 @@ def plot_times(
     group_commits: bool,
     show_sha: bool,
     sort_by_execution_time: bool,
+    annotate: bool,
 ):
     import matplotlib.pyplot as plt
 
@@ -332,6 +338,15 @@ def plot_times(
                 *poly_best_fit(*data, degree=fit, bias=fit_bias),
                 color=line[0].get_color(),
                 **best_fit_kw,
+            )
+        if annotate:
+            x, y = max(zip(*data, strict=True))
+            ax.annotate(
+                f"{y:g}",
+                xy=(x, y),
+                xytext=(5, 0),
+                textcoords="offset points",
+                va="center",
             )
 
     ax.set_yscale(**yscale)
