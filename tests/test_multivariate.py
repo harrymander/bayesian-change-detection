@@ -449,6 +449,14 @@ class TestNigBayesianLinearRegression:
         param = getattr(self.model, attr)
         assert_allclose(param, ndarray_snapshot(param))
 
+    def test_mvt_mean_is_equivalent_to_prediction_from_fitted_coefficients(
+        self,
+    ) -> None:
+        mean = self.model[-1:].mvt_mean(self.x)[-1]
+        coeffs = self.model.mean[-1]
+        pred = self.x @ coeffs
+        assert_allclose(mean, pred)
+
     def test_mvt_mean_axis_t_snapshot(self, ndarray_snapshot: NDArraySnapshot):
         mean = self.model.mvt_mean(self.x, axis="t")
         assert mean.shape == (self.n,)
