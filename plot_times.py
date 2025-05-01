@@ -260,9 +260,10 @@ def poly_best_fit(
 def git_ref_summary(ref: str) -> str:
     r = subprocess.run(
         ("git", "log", "--oneline", "--no-decorate", "-n1", ref, "--"),
-        check=True,
         stdout=subprocess.PIPE,
     )
+    if r.returncode:
+        return f"Unknown commit: {ref}"
     return r.stdout.strip().decode()
 
 
