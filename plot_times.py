@@ -144,6 +144,12 @@ class PlotScale(click.ParamType):
     help="""When --group-commits is passed, show full SHA instead of commit
     message.""",
 )
+@click.option(
+    "--sort/--no-sort",
+    "sort_by_execution_time",
+    default=True,
+    help="Sort grouping in legend in order of execution time.",
+)
 def main(
     infos_files: list[str],
     ungroup: list[str],
@@ -163,7 +169,7 @@ def main(
     for file in infos_files:
         infos.extend(load_test_infos(file))
     plot_times(
-        infos,
+        infos=infos,
         ungroup=set(ungroup),
         show_sha=show_sha,
         group_commits=group_commits,
@@ -201,7 +207,7 @@ def group_times_by_options(
     ungroup: set[str],
     group_commits: bool,
     show_sha: bool,
-) -> dict[OptionGrouping, tuple[Sequence[int], Sequence[float]]]:
+) -> list[tuple[OptionGrouping, tuple[Sequence[int], Sequence[float]]]]:
     def _num_samples_in_range(info: TestInfo) -> bool:
         num_samples = info.num_samples
         if num_samples < (min_samples or 0):
@@ -228,10 +234,10 @@ def group_times_by_options(
     for times in grouped_times.values():
         times.sort(key=lambda t: t[0])
 
-    return {
-        options: tuple(zip(*times, strict=True))  # type: ignore
+    return [
+        (options, tuple(zip(*times, strict=True)))  # type: ignore
         for options, times in grouped_times.items()
-    }
+    ]
 
 
 def poly_best_fit(
@@ -276,6 +282,7 @@ def get_summaries_for_refs(refs: Iterable[str]) -> dict[str, str]:
 
 
 def plot_times(
+    *,
     infos: list[TestInfo],
     output: str | None,
     xscale: dict,
@@ -289,6 +296,7 @@ def plot_times(
     ungroup: set[str],
     group_commits: bool,
     show_sha: bool,
+    sort_by_execution_time: bool,
 ):
     import matplotlib.pyplot as plt
 
@@ -305,8 +313,14 @@ def plot_times(
         group_commits=group_commits,
         show_sha=show_sha,
     )
+    if sort_by_execution_time:
+        # Sort by slowest time in each group, so the groups should be listed in
+        # the legend in the order they are shown in the plot (i.e. from top to
+        # bottom - slowest to fastest). Makes it easier to read the plot.
+        grouped_times.sort(key=lambda times: max(times[1][1]), reverse=True)
+
     best_fit_kw = dict(linestyle="--", linewidth=1)
-    for options, data in grouped_times.items():
+    for options, data in grouped_times:
         line = ax.plot(
             *data,
             "o",
