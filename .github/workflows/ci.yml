@@ -44,6 +44,6 @@ jobs:
       - name: Python type checking
         run: uv run --frozen mypy .
       - name: Run tests
-        run: uv run --frozen pytest -vvv
+        run: COLUMNS=160 uv run pytest --color=yes -vv
       - name: Minimise uv cache
         run: uv cache prune --ci
