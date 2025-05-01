@@ -32,7 +32,18 @@ dev = [
 line-length = 79
 
 [tool.ruff.lint]
-select = ["F", "E", "W", "I", "UP", "B", "NPY", "RUF", "T10", "SLOT"]
+select = [
+    "B", # flake8-bugbear
+    "E", # pycodestyle errors
+    "F", # Pyflakes
+    "I", # isort
+    "NPY", # NumPy-specific rules
+    "RUF", # Ruff-specific rules
+    "SLOT", # flake8-slots
+    "T10", # flake8-debugger
+    "UP", # pyupgrade
+    "W", # pycodestyle warnings
+]
 
 [tool.mypy]
 plugins = ["pydantic.mypy"]
