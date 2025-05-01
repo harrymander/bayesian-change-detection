@@ -221,7 +221,7 @@ def group_times_by_options(
 
     grouped_times: dict[OptionGrouping, list[tuple[int, float]]] = {}
     for info in filter(_num_samples_in_range, infos):
-        items = info.options.model_dump()
+        items = info.options.model_dump(exclude_unset=True)
         if group_commits:
             commit = summaries[info.commit] if summaries else info.commit
             items["commit"] = commit
