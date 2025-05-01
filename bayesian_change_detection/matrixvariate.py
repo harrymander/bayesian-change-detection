@@ -15,6 +15,10 @@ are propagated and re-weighted to reflect this new knowledge.
 .. codeauthor:: Gabriel Agamennoni <gabriel.agamennoni@mavt.ethz.ch>
 .. codeauthor:: Asher Bender <a.bender@acfr.usyd.edu.au>
 
+---
+
+Code modified by Harry Mander mostly to just tidy up some code and change the
+API slightly.
 """
 
 from collections.abc import Callable, Sequence
