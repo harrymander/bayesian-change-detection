@@ -41,6 +41,9 @@ class TrilArray(Protocol):
     """
 
     @property
+    def dtype(self) -> np.dtype: ...
+
+    @property
     def n(self) -> int:
         """Number of rows (also the number of columns)."""
         ...
@@ -108,6 +111,10 @@ class _TrilArray:
 
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}({self.n}, {self.data!r})"
+
+    @property
+    def dtype(self) -> np.dtype:
+        return self.data.dtype
 
 
 def tril_full(

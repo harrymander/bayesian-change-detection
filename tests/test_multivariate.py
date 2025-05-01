@@ -371,13 +371,7 @@ float32_fields.pop(float32_fields.index("joint_support"))
 @pytest.mark.parametrize("attr", float32_fields)
 def test_bcdm_with_float32_has_float32_result(generator, attr: str) -> None:
     results = generator(dtype=np.float32)
-    field = getattr(results, attr)
-    if isinstance(field, np.ndarray):
-        dtype = field.dtype
-    else:
-        # Is a _TrilArray
-        dtype = field.data.dtype
-
+    dtype = getattr(results, attr).dtype
     assert dtype == np.float32
 
 
