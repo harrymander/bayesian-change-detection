@@ -524,6 +524,14 @@ class NigPrior:
 
         self.prec = inv_positive_definite(cast(np.ndarray, cov))
 
+    def fit_regression(self, x: np.ndarray, y: np.ndarray) -> "NigParams":
+        """Fit Bayesian linear regression on `x` and `y` using this prior.
+
+        Convenience wrapper for `NigParams.fit_regression` - see that
+        function's documentation for more information.
+        """
+        return NigParams.from_prior(self, 1).fit_regression(x, y)
+
 
 @dataclass
 class NigParams:
@@ -905,9 +913,9 @@ class NigParams:
         Returns the NIG parameters after each observation.
 
         ```python
-        prior = NigPrior.from_priors(2)
+        prior = NigPrior(2)
         # x.shape == is (n, 2) and y.shape == (n,)
-        model = prior.fit_regression(x, y)
+        model = NigParams.from_prior(prior, 1).fit_regression(x, y)
 
         # The MAP estimate for the regression coefficients is the mean of the
         # final model:

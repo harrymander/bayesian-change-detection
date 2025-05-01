@@ -418,3 +418,57 @@ def test_hook_function_called_with_correct_data_shape() -> None:
         hazard=0.5,
         update_hook=hook,
     )
+
+
+class TestNigBayesianLinearRegression:
+    model: NigParams
+    x: np.ndarray
+
+    n = 50
+    coeffs = np.array([3.4, 2.4])
+
+    @pytest.fixture(scope="class", autouse=True)
+    @classmethod
+    def _fit_regression(cls) -> None:
+        rng = np.random.default_rng(42)
+        x = np.linspace(0, 10, cls.n) + rng.normal(size=cls.n)
+        cls.x = np.c_[np.ones_like(x), x]
+        y = cls.x @ cls.coeffs + rng.normal(size=cls.n)
+        cls.model = NigPrior(p=2).fit_regression(cls.x, y)
+
+    def test_model_dimensions(self) -> None:
+        assert self.model.mean.shape == (self.n, 2)
+
+    def test_fitted_coefficients_are_close_to_actual(self) -> None:
+        assert_allclose(self.model.mean[-1], self.coeffs, atol=0, rtol=0.1)
+
+    @parametrize_nig_params_attrs("attr")
+    def test_parameters_snapshot(
+        self, attr: str, ndarray_snapshot: NDArraySnapshot
+    ):
+        param = getattr(self.model, attr)
+        assert_allclose(param, ndarray_snapshot(param))
+
+    def test_mvt_mean_axis_t_snapshot(self, ndarray_snapshot: NDArraySnapshot):
+        mean = self.model.mvt_mean(self.x, axis="t")
+        assert mean.shape == (self.n,)
+        assert_allclose(mean, ndarray_snapshot(mean))
+
+    def test_mvt_variance_axis_t_snapshot(
+        self, ndarray_snapshot: NDArraySnapshot
+    ):
+        variance = self.model.mvt_variance(self.x, axis="t")
+        assert variance.shape == (self.n,)
+        assert_allclose(variance, ndarray_snapshot(variance))
+
+    def test_mvt_mean_axis_n_snapshot(self, ndarray_snapshot: NDArraySnapshot):
+        mean = self.model.mvt_mean(self.x, axis="n")
+        assert mean.shape == (self.n, self.n)
+        assert_allclose(mean, ndarray_snapshot(mean))
+
+    def test_mvt_variance_axis_n_snapshot(
+        self, ndarray_snapshot: NDArraySnapshot
+    ):
+        variance = self.model.mvt_variance(self.x, axis="n")
+        assert variance.shape == (self.n, self.n)
+        assert_allclose(variance, ndarray_snapshot(variance))
