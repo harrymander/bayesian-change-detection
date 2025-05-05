@@ -79,11 +79,12 @@ def get_commit_message_summary(ref: str) -> str:
 
 def get_sha_for_ref(ref: str) -> str:
     r = run_git(
-        ("rev-parse", ref, "--"),
-        check=True,
+        ("rev-parse", "--verify", f"{ref}^{{commit}}", "--"),
         stdout=subprocess.PIPE,
     )
-    return r.stdout.decode().splitlines()[0]
+    if r.returncode:
+        raise click.ClickException(f"Invalid ref '{ref}'")
+    return r.stdout.decode().strip()
 
 
 def git_worktree_is_dirty() -> bool:
