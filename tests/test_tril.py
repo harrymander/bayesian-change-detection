@@ -1,3 +1,5 @@
+import re
+
 import numpy as np
 import pytest
 
@@ -30,3 +32,20 @@ def test_tril(upper_val) -> None:
     # fmt: on
 
     assert_array_equal_strict(tril.full(), expected)
+
+
+def test_single_element_nonzero_tril_is_truthy() -> None:
+    a = tril_full(1, 1)
+    assert a
+
+
+def test_single_element_zero_tril_is_falsy() -> None:
+    a = tril_full(1, 0)
+    assert not a
+
+
+def test_bool_of_tril_with_more_than_one_element_raises_error() -> None:
+    b = tril_full(2, 1)
+    m = "The truth value of an array with more than one element is ambiguous."
+    with pytest.raises(ValueError, match=f"^{re.escape(m)}"):
+        bool(b)

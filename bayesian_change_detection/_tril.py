@@ -18,7 +18,7 @@ such an array. For example:
   [b, c]
 """
 
-from typing import Any, Protocol, TypeVar
+from typing import Any, TypeVar
 
 import numpy as np
 from numpy.typing import DTypeLike
@@ -26,7 +26,12 @@ from numpy.typing import DTypeLike
 _IntegerT = TypeVar("_IntegerT", np.integer, int)
 
 
-class TrilArray(Protocol):
+def tril_size(n: _IntegerT) -> _IntegerT:
+    """Returns the number of lower-triangular elements in an (n, n) matrix."""
+    return n * (n + 1) // 2
+
+
+class TrilArray:
     """
     The lower-triangular elements of an (n, n) matrix stored contiguously.
 
@@ -40,15 +45,27 @@ class TrilArray(Protocol):
     will be the zero value of the dtype of `data`.
     """
 
+    __slots__ = ["_data", "_n", "upper_val"]
+
+    def __init__(self, n: int, data: np.ndarray, upper_val: Any = None):
+        """Do not instantiate directly - use tril_full"""
+        self._n = n
+        self._data = data
+        self.upper_val = upper_val
+
     @property
     def n(self) -> int:
         """Number of rows (also the number of columns)."""
-        ...
+        return self._n
 
     @property
     def data(self) -> np.ndarray:
-        """1D array storing the lower diagonal elements of the matrix."""
-        ...
+        """A 1D array of the lower-triangular elements of the matrix."""
+        return self._data
+
+    def _row_slice(self, i: _IntegerT) -> np.ndarray:
+        n = tril_size(i)
+        return self._data[n : n + i + 1]
 
     def __getitem__(self, i: _IntegerT) -> np.ndarray:
         """
@@ -57,57 +74,42 @@ class TrilArray(Protocol):
         `i` must be in [0, n - 1]. Negative indexing not supported. Boundary
         checking is not necessarily performed.
         """
-        ...
-
-    def __setitem__(self, i: _IntegerT, v: Any) -> None: ...
-
-    def full(self) -> np.ndarray:
-        """Returns a full (n, n) 2D lower-triangular matrix.
-
-        The upper-triangular elements are set to `self.upper_val`."""
-        ...
-
-
-def tril_size(n: _IntegerT) -> _IntegerT:
-    """Returns the number of lower-triangular elements in an (n, n) matrix."""
-    return n * (n + 1) // 2
-
-
-class _TrilArray:
-    """Implementation of _TrilArray."""
-
-    __slots__ = ["data", "n", "upper_val"]
-
-    def __init__(self, n: int, data: np.ndarray, upper_val: Any = None):
-        """Do not instantiate directly - use tril_full"""
-        self.n = n
-        self.data = data
-        self.upper_val = upper_val
-
-    def _row_slice(self, i: _IntegerT) -> np.ndarray:
-        n = tril_size(i)
-        return self.data[n : n + i + 1]
-
-    def __getitem__(self, i: _IntegerT) -> np.ndarray:
         return self._row_slice(i)
 
     def __setitem__(self, i: _IntegerT, v: Any) -> None:
         self._row_slice(i)[:] = v
 
     def full(self) -> np.ndarray:
-        data = self.data
+        """
+        Returns a full (n, n) 2D lower-triangular matrix.
+
+        The upper-triangular elements are set to `self.upper_val`.
+        """
+        data = self._data
         dtype = data.dtype
         upper_val = self.upper_val
         if upper_val is None:
             upper_val = np.zeros((), dtype=dtype)
 
-        full = np.empty((self.n, self.n), dtype=dtype)
+        full = np.empty((self._n, self._n), dtype=dtype)
         full[np.tril_indices_from(full)] = data
         full[np.triu_indices_from(full, 1)] = upper_val
         return full
 
     def __repr__(self) -> str:
-        return f"{self.__class__.__name__}({self.n}, {self.data!r})"
+        return f"{self.__class__.__name__}({self._n}, {self._data!r})"
+
+    def __bool__(self) -> bool:
+        if self._n == 1:
+            return bool(self._data)
+
+        # Similar to the message raised by numpy.ndarray.
+        msg = (
+            "The truth value of an array with more than one element "
+            "is ambiguous. Use a.data.any(), a.data.all(), a.full().any(), "
+            "or a.full().all()"
+        )
+        raise ValueError(msg)
 
 
 def tril_full(
@@ -119,4 +121,4 @@ def tril_full(
 ) -> TrilArray:
     if n <= 0:
         raise ValueError("n must be > 0")
-    return _TrilArray(n, np.full(tril_size(n), val, dtype=dtype), upper_val)
+    return TrilArray(n, np.full(tril_size(n), val, dtype=dtype), upper_val)
