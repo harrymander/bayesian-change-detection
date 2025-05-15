@@ -288,6 +288,41 @@ class MultivariateBcdmResults:
         return changepoints
 
 
+class SparseMultivariateBcdmResults:
+    def __init__(self, results: MultivariateBcdmResults):
+        self.log_predictive = results.log_predictive
+        self.joint_support = results.joint_support
+        self.log_joint = results.log_joint
+        mask = self.joint_support[self.joint_support.n - 1]
+        self.scale = results.scale[mask]
+        self.shape = results.shape[mask]
+        self.cov = results.cov[mask]
+        self.mean = results.mean[mask]
+
+    def expand(self) -> MultivariateBcdmResults:
+        n = self.joint_support.n
+        mask = self.joint_support[n - 1]
+
+        def _expand(array: np.ndarray) -> np.ndarray:
+            expanded = np.full(
+                (n, *array.shape[1:]),
+                np.nan,
+                dtype=array.dtype,
+            )
+            expanded[mask] = array
+            return expanded
+
+        return MultivariateBcdmResults(
+            mean=_expand(self.mean),
+            cov=_expand(self.cov),
+            scale=_expand(self.scale),
+            shape=_expand(self.shape),
+            log_predictive=self.log_predictive,
+            joint_support=self.joint_support,
+            log_joint=self.log_joint,
+        )
+
+
 class _MultivariateBcdmWorker:
     __slots__ = [
         "init_log_joint",

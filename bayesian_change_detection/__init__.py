@@ -3,6 +3,7 @@ from .multivariate import (
     MultivariateBcdmResults,
     NigParams,
     NigPrior,
+    SparseMultivariateBcdmResults,
     multivariate_bcdm,
 )
 
@@ -12,5 +13,6 @@ __all__ = [
     "MultivariateBcdmResults",
     "NigParams",
     "NigPrior",
+    "SparseMultivariateBcdmResults",
     "multivariate_bcdm",
 ]

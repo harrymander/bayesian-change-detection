@@ -12,7 +12,11 @@ from bayesian_change_detection import (
     multivariate_bcdm,
 )
 from bayesian_change_detection._tril import TrilArray
-from bayesian_change_detection.multivariate import NigParams, NigPrior
+from bayesian_change_detection.multivariate import (
+    NigParams,
+    NigPrior,
+    SparseMultivariateBcdmResults,
+)
 from tests.conftest import JsonSnapshot, NDArraySnapshot
 from tests.utils import (
     assert_allclose,
@@ -287,7 +291,7 @@ class Test1DChangeDetectionWithSupportTrimming(BcdmWithSupportTrimmingTester):
 
 class Test2DChangeDetection(BcdmWithoutSupportTrimmingTester):
     @classmethod
-    def run_bcdm(cls) -> MultivariateBcdmResults:
+    def run_bcdm(cls, **kw) -> MultivariateBcdmResults:
         rng = np.random.default_rng(42)
 
         # Create input and outputs.
@@ -302,7 +306,52 @@ class Test2DChangeDetection(BcdmWithoutSupportTrimmingTester):
             cov=1e6,
             shape=1e-3,
             scale=1e-6,
+            **kw,
         )
+
+
+def test_sparse_results() -> None:
+    max_num_probs = 20
+    results = Test2DChangeDetection.run_bcdm(max_num_probs=max_num_probs)
+    final_support = results.joint_support[results.joint_support.n - 1]
+    assert final_support.sum() == max_num_probs
+
+    sparse = SparseMultivariateBcdmResults(results)
+
+    for attrname in ("mean", "cov", "shape", "scale"):
+        attr: np.ndarray = getattr(sparse, attrname)
+        exp_shape = (max_num_probs, *getattr(results, attrname).shape[1:])
+        assert attr.shape == exp_shape
+        nans = np.isnan(getattr(sparse, attrname))
+        assert_array_equal_strict(
+            nans,
+            np.zeros_like(nans),
+            err_msg=f"sparse {attrname} has nans",
+        )
+
+    expanded = sparse.expand()
+    for attrname in results.__dataclass_fields__:
+        results_attr = getattr(results, attrname)
+        expanded_attr = getattr(expanded, attrname)
+        if isinstance(results_attr, TrilArray):
+            results_attr = results_attr.full()
+            expanded_attr = expanded_attr.full()
+        else:
+            assert isinstance(results_attr, np.ndarray)
+            assert isinstance(expanded_attr, np.ndarray)
+        assert_array_equal_strict(
+            expanded_attr,
+            results_attr,
+            err_msg=f"{attrname} not equal",
+        )
+
+    assert_array_equal_strict(
+        expanded.log_posterior(),
+        results.log_posterior(),
+        err_msg="log_posterior() not equal",
+    )
+
+    assert expanded.changepoints() == results.changepoints()
 
 
 class Test3DChangeDetection(BcdmWithoutSupportTrimmingTester):
