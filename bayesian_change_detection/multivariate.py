@@ -251,7 +251,7 @@ class MultivariateBcdmResults:
     `(n, n)` lower triangular matrix of log probabilities of the predictive
     distributions at each time point.
 
-    Has a similar structure to `log_joint`, i.e., an lower-triangular matrix
+    Has a similar structure to `log_joint`, i.e., a lower-triangular matrix
     where the rows corresponds to the time points. In each row, the elements
     are the log density of the predictive distribution of the model given the
     elements in the segment up to that timepoint. E.g., the element in row `i`
