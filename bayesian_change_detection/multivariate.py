@@ -260,6 +260,16 @@ class MultivariateBcdmResults:
     """
 
     joint_support: TrilArray
+    """
+    `(n, n)` lower triangular boolean matrix over the support of the
+    changepoint probabilities (i.e. `log_joint` or `log_posterior()`).
+
+    The lower triangular are `True` where the corresponding element in
+    `log_joint` was used to compute the next changepoint probabilities. If
+    segmentation was run without any support trimming (i.e.
+    `max_num_probs=None` and `min_prob=0`), then all the lower triangular
+    elements will be `True`.
+    """
 
     def log_posterior(self) -> np.ndarray:
         """Convert joint probabilities to a 2D lower triangular matrix of
