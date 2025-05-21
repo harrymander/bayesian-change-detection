@@ -420,6 +420,24 @@ def test_hook_function_called_with_correct_data_shape() -> None:
     )
 
 
+def test_hook_function_called_with_correct_input_data() -> None:
+    p = 3
+    n = 5
+    X_hook = np.empty((n, p))
+    Y_hook = np.empty(n)
+
+    def hook(t: int, x: np.ndarray, y: np.ndarray, _):
+        X_hook[t] = x
+        Y_hook[t] = y.item()
+
+    rng = np.random.default_rng(42)
+    X = rng.normal(size=(5, 3))
+    Y = rng.normal(size=5)
+    multivariate_bcdm(X, Y, hazard=0.5, update_hook=hook)
+    assert_array_equal_strict(X_hook, X)
+    assert_array_equal_strict(Y_hook, Y)
+
+
 class TestNigBayesianLinearRegression:
     model: NigParams
     x: np.ndarray
