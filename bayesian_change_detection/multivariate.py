@@ -6,7 +6,7 @@ import numpy as np
 import scipy
 from numpy.typing import NDArray
 
-from bayesian_change_detection._tril import TrilArray, tril_full
+from bayesian_change_detection._tril import TrilArray, tril_empty, tril_full
 from bayesian_change_detection.array_utils import masked_argmin
 from bayesian_change_detection.linalg import (
     inv_positive_definite,
@@ -345,7 +345,7 @@ class _MultivariateBcdmWorker:
         # To reduce memory usage, store only the lower triangular part of these
         # matrices
         self.joint_support = tril_full(self.n, True, dtype=bool)
-        self.log_joint = tril_full(self.n, -np.inf, upper_val=-np.inf)
+        self.log_joint = tril_empty(self.n, upper_val=-np.inf)
         self.log_pred = tril_full(self.n, -np.inf, upper_val=-np.inf)
 
     def fit(self) -> MultivariateBcdmResults:

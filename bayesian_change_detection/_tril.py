@@ -18,7 +18,7 @@ such an array. For example:
   [b, c]
 """
 
-from typing import Any, TypeVar
+from typing import Any, Protocol, TypeVar
 
 import numpy as np
 from numpy.typing import DTypeLike
@@ -112,6 +112,21 @@ class TrilArray:
         raise ValueError(msg)
 
 
+class _ArrayCreator(Protocol):
+    def __call__(self, size: int, /, *, dtype: DTypeLike) -> np.ndarray: ...
+
+
+def _new_tril(
+    n: int,
+    f: _ArrayCreator,
+    upper_val: Any,
+    dtype: DTypeLike,
+) -> TrilArray:
+    if n <= 0:
+        raise ValueError("n must be > 0")
+    return TrilArray(n, f(tril_size(n), dtype=dtype), upper_val)
+
+
 def tril_full(
     n: int,
     val: Any,
@@ -119,6 +134,18 @@ def tril_full(
     upper_val: Any = None,
     dtype: DTypeLike = np.float64,
 ) -> TrilArray:
-    if n <= 0:
-        raise ValueError("n must be > 0")
-    return TrilArray(n, np.full(tril_size(n), val, dtype=dtype), upper_val)
+    return _new_tril(
+        n,
+        lambda size, dtype: np.full(size, val, dtype=dtype),
+        upper_val,
+        dtype,
+    )
+
+
+def tril_empty(
+    n: int,
+    *,
+    upper_val: Any = None,
+    dtype: DTypeLike = np.float64,
+) -> TrilArray:
+    return _new_tril(n, np.empty, upper_val, dtype)
