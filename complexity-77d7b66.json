@@ -1,0 +1,1322 @@
+[
+  {
+    "commit": "77d7b664222f476e2c8246b2b707b3b36ce2c855",
+    "datetime": "2025-05-22T09:38:46.793304Z",
+    "num_samples": 100,
+    "execution_time": 0.1942870640050387,
+    "number_loops": 10,
+    "options": {
+      "max_num_probs": null,
+      "min_prob": 0.0
+    }
+  },
+  {
+    "commit": "77d7b664222f476e2c8246b2b707b3b36ce2c855",
+    "datetime": "2025-05-22T09:38:47.336876Z",
+    "num_samples": 100,
+    "execution_time": 0.2687136829990777,
+    "number_loops": 10,
+    "options": {
+      "max_num_probs": 50,
+      "min_prob": 1e-6
+    }
+  },
+  {
+    "commit": "77d7b664222f476e2c8246b2b707b3b36ce2c855",
+    "datetime": "2025-05-22T09:38:47.979691Z",
+    "num_samples": 100,
+    "execution_time": 0.26067647399759153,
+    "number_loops": 10,
+    "options": {
+      "max_num_probs": 10,
+      "min_prob": 1e-6
+    }
+  },
+  {
+    "commit": "77d7b664222f476e2c8246b2b707b3b36ce2c855",
+    "datetime": "2025-05-22T09:38:48.582630Z",
+    "num_samples": 100,
+    "execution_time": 0.20107545199425658,
+    "number_loops": 10,
+    "options": {
+      "max_num_probs": 50,
+      "min_prob": 0.0
+    }
+  },
+  {
+    "commit": "77d7b664222f476e2c8246b2b707b3b36ce2c855",
+    "datetime": "2025-05-22T09:38:49.170083Z",
+    "num_samples": 100,
+    "execution_time": 0.20460061699850485,
+    "number_loops": 10,
+    "options": {
+      "max_num_probs": 10,
+      "min_prob": 0.0
+    }
+  },
+  {
+    "commit": "77d7b664222f476e2c8246b2b707b3b36ce2c855",
+    "datetime": "2025-05-22T09:38:49.730765Z",
+    "num_samples": 200,
+    "execution_time": 0.411371672002133,
+    "number_loops": 10,
+    "options": {
+      "max_num_probs": null,
+      "min_prob": 0.0
+    }
+  },
+  {
+    "commit": "77d7b664222f476e2c8246b2b707b3b36ce2c855",
+    "datetime": "2025-05-22T09:38:50.487154Z",
+    "num_samples": 200,
+    "execution_time": 0.5243706460023532,
+    "number_loops": 10,
+    "options": {
+      "max_num_probs": 50,
+      "min_prob": 1e-6
+    }
+  },
+  {
+    "commit": "77d7b664222f476e2c8246b2b707b3b36ce2c855",
+    "datetime": "2025-05-22T09:38:51.354805Z",
+    "num_samples": 200,
+    "execution_time": 0.5407308759968146,
+    "number_loops": 10,
+    "options": {
+      "max_num_probs": 10,
+      "min_prob": 1e-6
+    }
+  },
+  {
+    "commit": "77d7b664222f476e2c8246b2b707b3b36ce2c855",
+    "datetime": "2025-05-22T09:38:52.281349Z",
+    "num_samples": 200,
+    "execution_time": 0.401693587002228,
+    "number_loops": 10,
+    "options": {
+      "max_num_probs": 50,
+      "min_prob": 0.0
+    }
+  },
+  {
+    "commit": "77d7b664222f476e2c8246b2b707b3b36ce2c855",
+    "datetime": "2025-05-22T09:38:53.025692Z",
+    "num_samples": 200,
+    "execution_time": 0.41199434400186874,
+    "number_loops": 10,
+    "options": {
+      "max_num_probs": 10,
+      "min_prob": 0.0
+    }
+  },
+  {
+    "commit": "77d7b664222f476e2c8246b2b707b3b36ce2c855",
+    "datetime": "2025-05-22T09:38:53.784749Z",
+    "num_samples": 300,
+    "execution_time": 0.6513442990035401,
+    "number_loops": 10,
+    "options": {
+      "max_num_probs": null,
+      "min_prob": 0.0
+    }
+  },
+  {
+    "commit": "77d7b664222f476e2c8246b2b707b3b36ce2c855",
+    "datetime": "2025-05-22T09:38:54.806678Z",
+    "num_samples": 300,
+    "execution_time": 0.8079455780025455,
+    "number_loops": 10,
+    "options": {
+      "max_num_probs": 50,
+      "min_prob": 1e-6
+    }
+  },
+  {
+    "commit": "77d7b664222f476e2c8246b2b707b3b36ce2c855",
+    "datetime": "2025-05-22T09:38:55.960203Z",
+    "num_samples": 300,
+    "execution_time": 0.7887715019969619,
+    "number_loops": 10,
+    "options": {
+      "max_num_probs": 10,
+      "min_prob": 1e-6
+    }
+  },
+  {
+    "commit": "77d7b664222f476e2c8246b2b707b3b36ce2c855",
+    "datetime": "2025-05-22T09:38:57.132889Z",
+    "num_samples": 300,
+    "execution_time": 0.60951773099805,
+    "number_loops": 10,
+    "options": {
+      "max_num_probs": 50,
+      "min_prob": 0.0
+    }
+  },
+  {
+    "commit": "77d7b664222f476e2c8246b2b707b3b36ce2c855",
+    "datetime": "2025-05-22T09:38:58.086498Z",
+    "num_samples": 300,
+    "execution_time": 0.6125798989960458,
+    "number_loops": 10,
+    "options": {
+      "max_num_probs": 10,
+      "min_prob": 0.0
+    }
+  },
+  {
+    "commit": "77d7b664222f476e2c8246b2b707b3b36ce2c855",
+    "datetime": "2025-05-22T09:38:59.053003Z",
+    "num_samples": 400,
+    "execution_time": 0.8849167290027253,
+    "number_loops": 10,
+    "options": {
+      "max_num_probs": null,
+      "min_prob": 0.0
+    }
+  },
+  {
+    "commit": "77d7b664222f476e2c8246b2b707b3b36ce2c855",
+    "datetime": "2025-05-22T09:39:00.283754Z",
+    "num_samples": 400,
+    "execution_time": 1.0549755910033127,
+    "number_loops": 10,
+    "options": {
+      "max_num_probs": 50,
+      "min_prob": 1e-6
+    }
+  },
+  {
+    "commit": "77d7b664222f476e2c8246b2b707b3b36ce2c855",
+    "datetime": "2025-05-22T09:39:01.680549Z",
+    "num_samples": 400,
+    "execution_time": 1.0413684159939294,
+    "number_loops": 10,
+    "options": {
+      "max_num_probs": 10,
+      "min_prob": 1e-6
+    }
+  },
+  {
+    "commit": "77d7b664222f476e2c8246b2b707b3b36ce2c855",
+    "datetime": "2025-05-22T09:39:03.064370Z",
+    "num_samples": 400,
+    "execution_time": 0.8181519969948567,
+    "number_loops": 10,
+    "options": {
+      "max_num_probs": 50,
+      "min_prob": 0.0
+    }
+  },
+  {
+    "commit": "77d7b664222f476e2c8246b2b707b3b36ce2c855",
+    "datetime": "2025-05-22T09:39:04.245603Z",
+    "num_samples": 400,
+    "execution_time": 0.8103765170017141,
+    "number_loops": 10,
+    "options": {
+      "max_num_probs": 10,
+      "min_prob": 0.0
+    }
+  },
+  {
+    "commit": "77d7b664222f476e2c8246b2b707b3b36ce2c855",
+    "datetime": "2025-05-22T09:39:05.398527Z",
+    "num_samples": 500,
+    "execution_time": 1.141235262999544,
+    "number_loops": 10,
+    "options": {
+      "max_num_probs": null,
+      "min_prob": 0.0
+    }
+  },
+  {
+    "commit": "77d7b664222f476e2c8246b2b707b3b36ce2c855",
+    "datetime": "2025-05-22T09:39:06.881677Z",
+    "num_samples": 500,
+    "execution_time": 1.3486829199973727,
+    "number_loops": 10,
+    "options": {
+      "max_num_probs": 50,
+      "min_prob": 1e-6
+    }
+  },
+  {
+    "commit": "77d7b664222f476e2c8246b2b707b3b36ce2c855",
+    "datetime": "2025-05-22T09:39:08.571642Z",
+    "num_samples": 500,
+    "execution_time": 1.3350003069936065,
+    "number_loops": 10,
+    "options": {
+      "max_num_probs": 10,
+      "min_prob": 1e-6
+    }
+  },
+  {
+    "commit": "77d7b664222f476e2c8246b2b707b3b36ce2c855",
+    "datetime": "2025-05-22T09:39:10.268102Z",
+    "num_samples": 500,
+    "execution_time": 1.057498222005961,
+    "number_loops": 10,
+    "options": {
+      "max_num_probs": 50,
+      "min_prob": 0.0
+    }
+  },
+  {
+    "commit": "77d7b664222f476e2c8246b2b707b3b36ce2c855",
+    "datetime": "2025-05-22T09:39:11.672246Z",
+    "num_samples": 500,
+    "execution_time": 1.012609056000656,
+    "number_loops": 10,
+    "options": {
+      "max_num_probs": 10,
+      "min_prob": 0.0
+    }
+  },
+  {
+    "commit": "77d7b664222f476e2c8246b2b707b3b36ce2c855",
+    "datetime": "2025-05-22T09:39:13.027145Z",
+    "num_samples": 1000,
+    "execution_time": 2.6573491620001732,
+    "number_loops": 10,
+    "options": {
+      "max_num_probs": null,
+      "min_prob": 0.0
+    }
+  },
+  {
+    "commit": "77d7b664222f476e2c8246b2b707b3b36ce2c855",
+    "datetime": "2025-05-22T09:39:16.032932Z",
+    "num_samples": 1000,
+    "execution_time": 2.738873166999838,
+    "number_loops": 10,
+    "options": {
+      "max_num_probs": 50,
+      "min_prob": 1e-6
+    }
+  },
+  {
+    "commit": "77d7b664222f476e2c8246b2b707b3b36ce2c855",
+    "datetime": "2025-05-22T09:39:19.115921Z",
+    "num_samples": 1000,
+    "execution_time": 2.679869644998689,
+    "number_loops": 10,
+    "options": {
+      "max_num_probs": 10,
+      "min_prob": 1e-6
+    }
+  },
+  {
+    "commit": "77d7b664222f476e2c8246b2b707b3b36ce2c855",
+    "datetime": "2025-05-22T09:39:22.138951Z",
+    "num_samples": 1000,
+    "execution_time": 2.132178401996498,
+    "number_loops": 10,
+    "options": {
+      "max_num_probs": 50,
+      "min_prob": 0.0
+    }
+  },
+  {
+    "commit": "77d7b664222f476e2c8246b2b707b3b36ce2c855",
+    "datetime": "2025-05-22T09:39:24.614254Z",
+    "num_samples": 1000,
+    "execution_time": 2.107619952999812,
+    "number_loops": 10,
+    "options": {
+      "max_num_probs": 10,
+      "min_prob": 0.0
+    }
+  },
+  {
+    "commit": "77d7b664222f476e2c8246b2b707b3b36ce2c855",
+    "datetime": "2025-05-22T09:39:27.070799Z",
+    "num_samples": 2000,
+    "execution_time": 6.5708723760035355,
+    "number_loops": 10,
+    "options": {
+      "max_num_probs": null,
+      "min_prob": 0.0
+    }
+  },
+  {
+    "commit": "77d7b664222f476e2c8246b2b707b3b36ce2c855",
+    "datetime": "2025-05-22T09:39:33.985378Z",
+    "num_samples": 2000,
+    "execution_time": 5.776714018000348,
+    "number_loops": 10,
+    "options": {
+      "max_num_probs": 50,
+      "min_prob": 1e-6
+    }
+  },
+  {
+    "commit": "77d7b664222f476e2c8246b2b707b3b36ce2c855",
+    "datetime": "2025-05-22T09:39:40.107054Z",
+    "num_samples": 2000,
+    "execution_time": 5.510450998001033,
+    "number_loops": 10,
+    "options": {
+      "max_num_probs": 10,
+      "min_prob": 1e-6
+    }
+  },
+  {
+    "commit": "77d7b664222f476e2c8246b2b707b3b36ce2c855",
+    "datetime": "2025-05-22T09:39:45.965465Z",
+    "num_samples": 2000,
+    "execution_time": 4.383721618003619,
+    "number_loops": 10,
+    "options": {
+      "max_num_probs": 50,
+      "min_prob": 0.0
+    }
+  },
+  {
+    "commit": "77d7b664222f476e2c8246b2b707b3b36ce2c855",
+    "datetime": "2025-05-22T09:39:50.695723Z",
+    "num_samples": 2000,
+    "execution_time": 4.2779325769952266,
+    "number_loops": 10,
+    "options": {
+      "max_num_probs": 10,
+      "min_prob": 0.0
+    }
+  },
+  {
+    "commit": "77d7b664222f476e2c8246b2b707b3b36ce2c855",
+    "datetime": "2025-05-22T09:39:55.320427Z",
+    "num_samples": 3000,
+    "execution_time": 11.726466239000729,
+    "number_loops": 10,
+    "options": {
+      "max_num_probs": null,
+      "min_prob": 0.0
+    }
+  },
+  {
+    "commit": "77d7b664222f476e2c8246b2b707b3b36ce2c855",
+    "datetime": "2025-05-22T09:40:07.393397Z",
+    "num_samples": 3000,
+    "execution_time": 8.768888309998147,
+    "number_loops": 10,
+    "options": {
+      "max_num_probs": 50,
+      "min_prob": 1e-6
+    }
+  },
+  {
+    "commit": "77d7b664222f476e2c8246b2b707b3b36ce2c855",
+    "datetime": "2025-05-22T09:40:16.511585Z",
+    "num_samples": 3000,
+    "execution_time": 8.803079711004102,
+    "number_loops": 10,
+    "options": {
+      "max_num_probs": 10,
+      "min_prob": 1e-6
+    }
+  },
+  {
+    "commit": "77d7b664222f476e2c8246b2b707b3b36ce2c855",
+    "datetime": "2025-05-22T09:40:25.663870Z",
+    "num_samples": 3000,
+    "execution_time": 6.880649580001773,
+    "number_loops": 10,
+    "options": {
+      "max_num_probs": 50,
+      "min_prob": 0.0
+    }
+  },
+  {
+    "commit": "77d7b664222f476e2c8246b2b707b3b36ce2c855",
+    "datetime": "2025-05-22T09:40:32.900994Z",
+    "num_samples": 3000,
+    "execution_time": 6.775589990997105,
+    "number_loops": 10,
+    "options": {
+      "max_num_probs": 10,
+      "min_prob": 0.0
+    }
+  },
+  {
+    "commit": "77d7b664222f476e2c8246b2b707b3b36ce2c855",
+    "datetime": "2025-05-22T09:40:40.028537Z",
+    "num_samples": 4000,
+    "execution_time": 18.478313156003424,
+    "number_loops": 10,
+    "options": {
+      "max_num_probs": null,
+      "min_prob": 0.0
+    }
+  },
+  {
+    "commit": "77d7b664222f476e2c8246b2b707b3b36ce2c855",
+    "datetime": "2025-05-22T09:40:58.856353Z",
+    "num_samples": 4000,
+    "execution_time": 12.136101022995717,
+    "number_loops": 10,
+    "options": {
+      "max_num_probs": 50,
+      "min_prob": 1e-6
+    }
+  },
+  {
+    "commit": "77d7b664222f476e2c8246b2b707b3b36ce2c855",
+    "datetime": "2025-05-22T09:41:11.343892Z",
+    "num_samples": 4000,
+    "execution_time": 12.1267902949985,
+    "number_loops": 10,
+    "options": {
+      "max_num_probs": 10,
+      "min_prob": 1e-6
+    }
+  },
+  {
+    "commit": "77d7b664222f476e2c8246b2b707b3b36ce2c855",
+    "datetime": "2025-05-22T09:41:23.838704Z",
+    "num_samples": 4000,
+    "execution_time": 9.540904056004365,
+    "number_loops": 10,
+    "options": {
+      "max_num_probs": 50,
+      "min_prob": 0.0
+    }
+  },
+  {
+    "commit": "77d7b664222f476e2c8246b2b707b3b36ce2c855",
+    "datetime": "2025-05-22T09:41:33.731598Z",
+    "num_samples": 4000,
+    "execution_time": 9.111829129004036,
+    "number_loops": 10,
+    "options": {
+      "max_num_probs": 10,
+      "min_prob": 0.0
+    }
+  },
+  {
+    "commit": "77d7b664222f476e2c8246b2b707b3b36ce2c855",
+    "datetime": "2025-05-22T09:41:43.192809Z",
+    "num_samples": 5000,
+    "execution_time": 25.572559465996164,
+    "number_loops": 10,
+    "options": {
+      "max_num_probs": null,
+      "min_prob": 0.0
+    }
+  },
+  {
+    "commit": "77d7b664222f476e2c8246b2b707b3b36ce2c855",
+    "datetime": "2025-05-22T09:42:09.116414Z",
+    "num_samples": 5000,
+    "execution_time": 15.418738120002672,
+    "number_loops": 10,
+    "options": {
+      "max_num_probs": 50,
+      "min_prob": 1e-6
+    }
+  },
+  {
+    "commit": "77d7b664222f476e2c8246b2b707b3b36ce2c855",
+    "datetime": "2025-05-22T09:42:24.889549Z",
+    "num_samples": 5000,
+    "execution_time": 15.47825723799906,
+    "number_loops": 10,
+    "options": {
+      "max_num_probs": 10,
+      "min_prob": 1e-6
+    }
+  },
+  {
+    "commit": "77d7b664222f476e2c8246b2b707b3b36ce2c855",
+    "datetime": "2025-05-22T09:42:40.725320Z",
+    "num_samples": 5000,
+    "execution_time": 12.383595106002758,
+    "number_loops": 10,
+    "options": {
+      "max_num_probs": 50,
+      "min_prob": 0.0
+    }
+  },
+  {
+    "commit": "77d7b664222f476e2c8246b2b707b3b36ce2c855",
+    "datetime": "2025-05-22T09:42:53.463371Z",
+    "num_samples": 5000,
+    "execution_time": 12.094599119998747,
+    "number_loops": 10,
+    "options": {
+      "max_num_probs": 10,
+      "min_prob": 0.0
+    }
+  },
+  {
+    "commit": "77d7b664222f476e2c8246b2b707b3b36ce2c855",
+    "datetime": "2025-05-22T09:43:05.909513Z",
+    "num_samples": 6000,
+    "execution_time": 34.20124133399804,
+    "number_loops": 10,
+    "options": {
+      "max_num_probs": null,
+      "min_prob": 0.0
+    }
+  },
+  {
+    "commit": "77d7b664222f476e2c8246b2b707b3b36ce2c855",
+    "datetime": "2025-05-22T09:43:40.468488Z",
+    "num_samples": 6000,
+    "execution_time": 18.863654420005332,
+    "number_loops": 10,
+    "options": {
+      "max_num_probs": 50,
+      "min_prob": 1e-6
+    }
+  },
+  {
+    "commit": "77d7b664222f476e2c8246b2b707b3b36ce2c855",
+    "datetime": "2025-05-22T09:43:59.685862Z",
+    "num_samples": 6000,
+    "execution_time": 18.814008894994913,
+    "number_loops": 10,
+    "options": {
+      "max_num_probs": 10,
+      "min_prob": 1e-6
+    }
+  },
+  {
+    "commit": "77d7b664222f476e2c8246b2b707b3b36ce2c855",
+    "datetime": "2025-05-22T09:44:18.851304Z",
+    "num_samples": 6000,
+    "execution_time": 14.93780123799661,
+    "number_loops": 10,
+    "options": {
+      "max_num_probs": 50,
+      "min_prob": 0.0
+    }
+  },
+  {
+    "commit": "77d7b664222f476e2c8246b2b707b3b36ce2c855",
+    "datetime": "2025-05-22T09:44:34.143871Z",
+    "num_samples": 6000,
+    "execution_time": 14.897675246997096,
+    "number_loops": 10,
+    "options": {
+      "max_num_probs": 10,
+      "min_prob": 0.0
+    }
+  },
+  {
+    "commit": "77d7b664222f476e2c8246b2b707b3b36ce2c855",
+    "datetime": "2025-05-22T09:44:49.393192Z",
+    "num_samples": 7000,
+    "execution_time": 44.17455925800459,
+    "number_loops": 10,
+    "options": {
+      "max_num_probs": null,
+      "min_prob": 0.0
+    }
+  },
+  {
+    "commit": "77d7b664222f476e2c8246b2b707b3b36ce2c855",
+    "datetime": "2025-05-22T09:45:33.922443Z",
+    "num_samples": 7000,
+    "execution_time": 23.05243024799711,
+    "number_loops": 10,
+    "options": {
+      "max_num_probs": 50,
+      "min_prob": 1e-6
+    }
+  },
+  {
+    "commit": "77d7b664222f476e2c8246b2b707b3b36ce2c855",
+    "datetime": "2025-05-22T09:45:57.326263Z",
+    "num_samples": 7000,
+    "execution_time": 22.52660982099769,
+    "number_loops": 10,
+    "options": {
+      "max_num_probs": 10,
+      "min_prob": 1e-6
+    }
+  },
+  {
+    "commit": "77d7b664222f476e2c8246b2b707b3b36ce2c855",
+    "datetime": "2025-05-22T09:46:20.205792Z",
+    "num_samples": 7000,
+    "execution_time": 18.252834610997525,
+    "number_loops": 10,
+    "options": {
+      "max_num_probs": 50,
+      "min_prob": 0.0
+    }
+  },
+  {
+    "commit": "77d7b664222f476e2c8246b2b707b3b36ce2c855",
+    "datetime": "2025-05-22T09:46:38.810633Z",
+    "num_samples": 7000,
+    "execution_time": 17.615004619998217,
+    "number_loops": 10,
+    "options": {
+      "max_num_probs": 10,
+      "min_prob": 0.0
+    }
+  },
+  {
+    "commit": "77d7b664222f476e2c8246b2b707b3b36ce2c855",
+    "datetime": "2025-05-22T09:46:56.779430Z",
+    "num_samples": 8000,
+    "execution_time": 54.606491878003,
+    "number_loops": 10,
+    "options": {
+      "max_num_probs": null,
+      "min_prob": 0.0
+    }
+  },
+  {
+    "commit": "77d7b664222f476e2c8246b2b707b3b36ce2c855",
+    "datetime": "2025-05-22T09:47:51.743275Z",
+    "num_samples": 8000,
+    "execution_time": 26.624283812001522,
+    "number_loops": 10,
+    "options": {
+      "max_num_probs": 50,
+      "min_prob": 1e-6
+    }
+  },
+  {
+    "commit": "77d7b664222f476e2c8246b2b707b3b36ce2c855",
+    "datetime": "2025-05-22T09:48:18.727711Z",
+    "num_samples": 8000,
+    "execution_time": 27.037305236000975,
+    "number_loops": 10,
+    "options": {
+      "max_num_probs": 10,
+      "min_prob": 1e-6
+    }
+  },
+  {
+    "commit": "77d7b664222f476e2c8246b2b707b3b36ce2c855",
+    "datetime": "2025-05-22T09:48:46.120268Z",
+    "num_samples": 8000,
+    "execution_time": 21.325202376996458,
+    "number_loops": 10,
+    "options": {
+      "max_num_probs": 50,
+      "min_prob": 0.0
+    }
+  },
+  {
+    "commit": "77d7b664222f476e2c8246b2b707b3b36ce2c855",
+    "datetime": "2025-05-22T09:49:07.799667Z",
+    "num_samples": 8000,
+    "execution_time": 20.755787202993815,
+    "number_loops": 10,
+    "options": {
+      "max_num_probs": 10,
+      "min_prob": 0.0
+    }
+  },
+  {
+    "commit": "77d7b664222f476e2c8246b2b707b3b36ce2c855",
+    "datetime": "2025-05-22T09:49:28.910326Z",
+    "num_samples": 9000,
+    "execution_time": 71.0413209929975,
+    "number_loops": 10,
+    "options": {
+      "max_num_probs": null,
+      "min_prob": 0.0
+    }
+  },
+  {
+    "commit": "77d7b664222f476e2c8246b2b707b3b36ce2c855",
+    "datetime": "2025-05-22T09:50:40.309141Z",
+    "num_samples": 9000,
+    "execution_time": 30.944365532996017,
+    "number_loops": 10,
+    "options": {
+      "max_num_probs": 50,
+      "min_prob": 1e-6
+    }
+  },
+  {
+    "commit": "77d7b664222f476e2c8246b2b707b3b36ce2c855",
+    "datetime": "2025-05-22T09:51:11.614913Z",
+    "num_samples": 9000,
+    "execution_time": 31.238769614996272,
+    "number_loops": 10,
+    "options": {
+      "max_num_probs": 10,
+      "min_prob": 1e-6
+    }
+  },
+  {
+    "commit": "77d7b664222f476e2c8246b2b707b3b36ce2c855",
+    "datetime": "2025-05-22T09:51:43.209492Z",
+    "num_samples": 9000,
+    "execution_time": 24.310618107003393,
+    "number_loops": 10,
+    "options": {
+      "max_num_probs": 50,
+      "min_prob": 0.0
+    }
+  },
+  {
+    "commit": "77d7b664222f476e2c8246b2b707b3b36ce2c855",
+    "datetime": "2025-05-22T09:52:07.879780Z",
+    "num_samples": 9000,
+    "execution_time": 24.053906221000943,
+    "number_loops": 10,
+    "options": {
+      "max_num_probs": 10,
+      "min_prob": 0.0
+    }
+  },
+  {
+    "commit": "77d7b664222f476e2c8246b2b707b3b36ce2c855",
+    "datetime": "2025-05-22T09:52:32.286431Z",
+    "num_samples": 10000,
+    "execution_time": 87.3105619190028,
+    "number_loops": 10,
+    "options": {
+      "max_num_probs": null,
+      "min_prob": 0.0
+    }
+  },
+  {
+    "commit": "77d7b664222f476e2c8246b2b707b3b36ce2c855",
+    "datetime": "2025-05-22T09:53:59.953304Z",
+    "num_samples": 10000,
+    "execution_time": 35.500958468001045,
+    "number_loops": 10,
+    "options": {
+      "max_num_probs": 50,
+      "min_prob": 1e-6
+    }
+  },
+  {
+    "commit": "77d7b664222f476e2c8246b2b707b3b36ce2c855",
+    "datetime": "2025-05-22T09:54:35.810294Z",
+    "num_samples": 10000,
+    "execution_time": 35.5393552759997,
+    "number_loops": 10,
+    "options": {
+      "max_num_probs": 10,
+      "min_prob": 1e-6
+    }
+  },
+  {
+    "commit": "77d7b664222f476e2c8246b2b707b3b36ce2c855",
+    "datetime": "2025-05-22T09:55:11.706275Z",
+    "num_samples": 10000,
+    "execution_time": 27.967074849999335,
+    "number_loops": 10,
+    "options": {
+      "max_num_probs": 50,
+      "min_prob": 0.0
+    }
+  },
+  {
+    "commit": "77d7b664222f476e2c8246b2b707b3b36ce2c855",
+    "datetime": "2025-05-22T09:55:40.029712Z",
+    "num_samples": 10000,
+    "execution_time": 27.64010219299962,
+    "number_loops": 10,
+    "options": {
+      "max_num_probs": 10,
+      "min_prob": 0.0
+    }
+  },
+  {
+    "commit": "77d7b664222f476e2c8246b2b707b3b36ce2c855",
+    "datetime": "2025-05-22T09:56:08.026188Z",
+    "num_samples": 12500,
+    "execution_time": 136.91735234999942,
+    "number_loops": 10,
+    "options": {
+      "max_num_probs": null,
+      "min_prob": 0.0
+    }
+  },
+  {
+    "commit": "77d7b664222f476e2c8246b2b707b3b36ce2c855",
+    "datetime": "2025-05-22T09:58:25.304563Z",
+    "num_samples": 12500,
+    "execution_time": 45.85586680700362,
+    "number_loops": 10,
+    "options": {
+      "max_num_probs": 50,
+      "min_prob": 1e-6
+    }
+  },
+  {
+    "commit": "77d7b664222f476e2c8246b2b707b3b36ce2c855",
+    "datetime": "2025-05-22T09:59:11.527047Z",
+    "num_samples": 12500,
+    "execution_time": 46.416504858003464,
+    "number_loops": 10,
+    "options": {
+      "max_num_probs": 10,
+      "min_prob": 1e-6
+    }
+  },
+  {
+    "commit": "77d7b664222f476e2c8246b2b707b3b36ce2c855",
+    "datetime": "2025-05-22T09:59:58.301752Z",
+    "num_samples": 12500,
+    "execution_time": 37.26979286000278,
+    "number_loops": 10,
+    "options": {
+      "max_num_probs": 50,
+      "min_prob": 0.0
+    }
+  },
+  {
+    "commit": "77d7b664222f476e2c8246b2b707b3b36ce2c855",
+    "datetime": "2025-05-22T10:00:35.930915Z",
+    "num_samples": 12500,
+    "execution_time": 36.79898442400008,
+    "number_loops": 10,
+    "options": {
+      "max_num_probs": 10,
+      "min_prob": 0.0
+    }
+  },
+  {
+    "commit": "77d7b664222f476e2c8246b2b707b3b36ce2c855",
+    "datetime": "2025-05-22T10:01:13.091849Z",
+    "num_samples": 15000,
+    "execution_time": 196.57022885399783,
+    "number_loops": 10,
+    "options": {
+      "max_num_probs": null,
+      "min_prob": 0.0
+    }
+  },
+  {
+    "commit": "77d7b664222f476e2c8246b2b707b3b36ce2c855",
+    "datetime": "2025-05-22T10:04:30.021521Z",
+    "num_samples": 15000,
+    "execution_time": 59.62126124399947,
+    "number_loops": 10,
+    "options": {
+      "max_num_probs": 50,
+      "min_prob": 1e-6
+    }
+  },
+  {
+    "commit": "77d7b664222f476e2c8246b2b707b3b36ce2c855",
+    "datetime": "2025-05-22T10:05:30.005560Z",
+    "num_samples": 15000,
+    "execution_time": 58.26902416799567,
+    "number_loops": 10,
+    "options": {
+      "max_num_probs": 10,
+      "min_prob": 1e-6
+    }
+  },
+  {
+    "commit": "77d7b664222f476e2c8246b2b707b3b36ce2c855",
+    "datetime": "2025-05-22T10:06:28.635409Z",
+    "num_samples": 15000,
+    "execution_time": 47.562262942003144,
+    "number_loops": 10,
+    "options": {
+      "max_num_probs": 50,
+      "min_prob": 0.0
+    }
+  },
+  {
+    "commit": "77d7b664222f476e2c8246b2b707b3b36ce2c855",
+    "datetime": "2025-05-22T10:07:16.558389Z",
+    "num_samples": 15000,
+    "execution_time": 47.25752635500248,
+    "number_loops": 10,
+    "options": {
+      "max_num_probs": 10,
+      "min_prob": 0.0
+    }
+  },
+  {
+    "commit": "77d7b664222f476e2c8246b2b707b3b36ce2c855",
+    "datetime": "2025-05-22T10:08:04.179534Z",
+    "num_samples": 17500,
+    "execution_time": 265.81244473900006,
+    "number_loops": 10,
+    "options": {
+      "max_num_probs": null,
+      "min_prob": 0.0
+    }
+  },
+  {
+    "commit": "77d7b664222f476e2c8246b2b707b3b36ce2c855",
+    "datetime": "2025-05-22T10:12:30.358939Z",
+    "num_samples": 17500,
+    "execution_time": 72.10518427499483,
+    "number_loops": 10,
+    "options": {
+      "max_num_probs": 50,
+      "min_prob": 1e-6
+    }
+  },
+  {
+    "commit": "77d7b664222f476e2c8246b2b707b3b36ce2c855",
+    "datetime": "2025-05-22T10:13:42.828335Z",
+    "num_samples": 17500,
+    "execution_time": 72.7839967789987,
+    "number_loops": 10,
+    "options": {
+      "max_num_probs": 10,
+      "min_prob": 1e-6
+    }
+  },
+  {
+    "commit": "77d7b664222f476e2c8246b2b707b3b36ce2c855",
+    "datetime": "2025-05-22T10:14:55.977141Z",
+    "num_samples": 17500,
+    "execution_time": 58.70510007700068,
+    "number_loops": 10,
+    "options": {
+      "max_num_probs": 50,
+      "min_prob": 0.0
+    }
+  },
+  {
+    "commit": "77d7b664222f476e2c8246b2b707b3b36ce2c855",
+    "datetime": "2025-05-22T10:15:55.047871Z",
+    "num_samples": 17500,
+    "execution_time": 59.517619858001126,
+    "number_loops": 10,
+    "options": {
+      "max_num_probs": 10,
+      "min_prob": 0.0
+    }
+  },
+  {
+    "commit": "77d7b664222f476e2c8246b2b707b3b36ce2c855",
+    "datetime": "2025-05-22T10:16:54.932317Z",
+    "num_samples": 20000,
+    "execution_time": 344.3683247299996,
+    "number_loops": 10,
+    "options": {
+      "max_num_probs": null,
+      "min_prob": 0.0
+    }
+  },
+  {
+    "commit": "77d7b664222f476e2c8246b2b707b3b36ce2c855",
+    "datetime": "2025-05-22T10:22:39.667988Z",
+    "num_samples": 20000,
+    "execution_time": 86.1457550089981,
+    "number_loops": 10,
+    "options": {
+      "max_num_probs": 50,
+      "min_prob": 1e-6
+    }
+  },
+  {
+    "commit": "77d7b664222f476e2c8246b2b707b3b36ce2c855",
+    "datetime": "2025-05-22T10:24:06.179405Z",
+    "num_samples": 20000,
+    "execution_time": 86.47240362699813,
+    "number_loops": 10,
+    "options": {
+      "max_num_probs": 10,
+      "min_prob": 1e-6
+    }
+  },
+  {
+    "commit": "77d7b664222f476e2c8246b2b707b3b36ce2c855",
+    "datetime": "2025-05-22T10:25:33.021462Z",
+    "num_samples": 20000,
+    "execution_time": 71.11094954500004,
+    "number_loops": 10,
+    "options": {
+      "max_num_probs": 50,
+      "min_prob": 0.0
+    }
+  },
+  {
+    "commit": "77d7b664222f476e2c8246b2b707b3b36ce2c855",
+    "datetime": "2025-05-22T10:26:44.497797Z",
+    "num_samples": 20000,
+    "execution_time": 69.28200888099673,
+    "number_loops": 10,
+    "options": {
+      "max_num_probs": 10,
+      "min_prob": 0.0
+    }
+  },
+  {
+    "commit": "77d7b664222f476e2c8246b2b707b3b36ce2c855",
+    "datetime": "2025-05-22T10:27:54.144256Z",
+    "num_samples": 22000,
+    "execution_time": 417.38966031999735,
+    "number_loops": 10,
+    "options": {
+      "max_num_probs": null,
+      "min_prob": 0.0
+    }
+  },
+  {
+    "commit": "77d7b664222f476e2c8246b2b707b3b36ce2c855",
+    "datetime": "2025-05-22T10:34:51.901746Z",
+    "num_samples": 22000,
+    "execution_time": 101.05323594200308,
+    "number_loops": 10,
+    "options": {
+      "max_num_probs": 50,
+      "min_prob": 1e-6
+    }
+  },
+  {
+    "commit": "77d7b664222f476e2c8246b2b707b3b36ce2c855",
+    "datetime": "2025-05-22T10:36:33.329539Z",
+    "num_samples": 22000,
+    "execution_time": 97.94025569299993,
+    "number_loops": 10,
+    "options": {
+      "max_num_probs": 10,
+      "min_prob": 1e-6
+    }
+  },
+  {
+    "commit": "77d7b664222f476e2c8246b2b707b3b36ce2c855",
+    "datetime": "2025-05-22T10:38:11.645745Z",
+    "num_samples": 22000,
+    "execution_time": 81.39504500000476,
+    "number_loops": 10,
+    "options": {
+      "max_num_probs": 50,
+      "min_prob": 0.0
+    }
+  },
+  {
+    "commit": "77d7b664222f476e2c8246b2b707b3b36ce2c855",
+    "datetime": "2025-05-22T10:39:33.411173Z",
+    "num_samples": 22000,
+    "execution_time": 79.26667747200554,
+    "number_loops": 10,
+    "options": {
+      "max_num_probs": 10,
+      "min_prob": 0.0
+    }
+  },
+  {
+    "commit": "77d7b664222f476e2c8246b2b707b3b36ce2c855",
+    "datetime": "2025-05-22T10:40:53.060677Z",
+    "num_samples": 24000,
+    "execution_time": 495.6509234180048,
+    "number_loops": 10,
+    "options": {
+      "max_num_probs": null,
+      "min_prob": 0.0
+    }
+  },
+  {
+    "commit": "77d7b664222f476e2c8246b2b707b3b36ce2c855",
+    "datetime": "2025-05-22T10:49:09.082788Z",
+    "num_samples": 24000,
+    "execution_time": 111.33378920900577,
+    "number_loops": 10,
+    "options": {
+      "max_num_probs": 50,
+      "min_prob": 1e-6
+    }
+  },
+  {
+    "commit": "77d7b664222f476e2c8246b2b707b3b36ce2c855",
+    "datetime": "2025-05-22T10:51:00.795897Z",
+    "num_samples": 24000,
+    "execution_time": 110.35604972400324,
+    "number_loops": 10,
+    "options": {
+      "max_num_probs": 10,
+      "min_prob": 1e-6
+    }
+  },
+  {
+    "commit": "77d7b664222f476e2c8246b2b707b3b36ce2c855",
+    "datetime": "2025-05-22T10:52:51.525103Z",
+    "num_samples": 24000,
+    "execution_time": 92.95888634899893,
+    "number_loops": 10,
+    "options": {
+      "max_num_probs": 50,
+      "min_prob": 0.0
+    }
+  },
+  {
+    "commit": "77d7b664222f476e2c8246b2b707b3b36ce2c855",
+    "datetime": "2025-05-22T10:54:24.852491Z",
+    "num_samples": 24000,
+    "execution_time": 91.23215038900526,
+    "number_loops": 10,
+    "options": {
+      "max_num_probs": 10,
+      "min_prob": 0.0
+    }
+  },
+  {
+    "commit": "77d7b664222f476e2c8246b2b707b3b36ce2c855",
+    "datetime": "2025-05-22T10:55:56.452854Z",
+    "num_samples": 26000,
+    "execution_time": 578.5357430189979,
+    "number_loops": 10,
+    "options": {
+      "max_num_probs": null,
+      "min_prob": 0.0
+    }
+  },
+  {
+    "commit": "77d7b664222f476e2c8246b2b707b3b36ce2c855",
+    "datetime": "2025-05-22T11:05:35.368873Z",
+    "num_samples": 26000,
+    "execution_time": 125.30911972399917,
+    "number_loops": 10,
+    "options": {
+      "max_num_probs": 50,
+      "min_prob": 1e-6
+    }
+  },
+  {
+    "commit": "77d7b664222f476e2c8246b2b707b3b36ce2c855",
+    "datetime": "2025-05-22T11:07:41.050680Z",
+    "num_samples": 26000,
+    "execution_time": 125.93140628399851,
+    "number_loops": 10,
+    "options": {
+      "max_num_probs": 10,
+      "min_prob": 1e-6
+    }
+  },
+  {
+    "commit": "77d7b664222f476e2c8246b2b707b3b36ce2c855",
+    "datetime": "2025-05-22T11:09:47.353504Z",
+    "num_samples": 26000,
+    "execution_time": 104.05748171600135,
+    "number_loops": 10,
+    "options": {
+      "max_num_probs": 50,
+      "min_prob": 0.0
+    }
+  },
+  {
+    "commit": "77d7b664222f476e2c8246b2b707b3b36ce2c855",
+    "datetime": "2025-05-22T11:11:31.786702Z",
+    "num_samples": 26000,
+    "execution_time": 102.84054941799695,
+    "number_loops": 10,
+    "options": {
+      "max_num_probs": 10,
+      "min_prob": 0.0
+    }
+  },
+  {
+    "commit": "77d7b664222f476e2c8246b2b707b3b36ce2c855",
+    "datetime": "2025-05-22T11:13:14.998413Z",
+    "num_samples": 28000,
+    "execution_time": 671.1633330049954,
+    "number_loops": 10,
+    "options": {
+      "max_num_probs": null,
+      "min_prob": 0.0
+    }
+  },
+  {
+    "commit": "77d7b664222f476e2c8246b2b707b3b36ce2c855",
+    "datetime": "2025-05-22T11:24:26.537114Z",
+    "num_samples": 28000,
+    "execution_time": 138.677436760001,
+    "number_loops": 10,
+    "options": {
+      "max_num_probs": 50,
+      "min_prob": 1e-6
+    }
+  },
+  {
+    "commit": "77d7b664222f476e2c8246b2b707b3b36ce2c855",
+    "datetime": "2025-05-22T11:26:45.589394Z",
+    "num_samples": 28000,
+    "execution_time": 139.76759222100372,
+    "number_loops": 10,
+    "options": {
+      "max_num_probs": 10,
+      "min_prob": 1e-6
+    }
+  },
+  {
+    "commit": "77d7b664222f476e2c8246b2b707b3b36ce2c855",
+    "datetime": "2025-05-22T11:29:05.730685Z",
+    "num_samples": 28000,
+    "execution_time": 117.64503821499966,
+    "number_loops": 10,
+    "options": {
+      "max_num_probs": 50,
+      "min_prob": 0.0
+    }
+  },
+  {
+    "commit": "77d7b664222f476e2c8246b2b707b3b36ce2c855",
+    "datetime": "2025-05-22T11:31:03.749871Z",
+    "num_samples": 28000,
+    "execution_time": 113.7397602580022,
+    "number_loops": 10,
+    "options": {
+      "max_num_probs": 10,
+      "min_prob": 0.0
+    }
+  },
+  {
+    "commit": "77d7b664222f476e2c8246b2b707b3b36ce2c855",
+    "datetime": "2025-05-22T11:32:57.860702Z",
+    "num_samples": 30000,
+    "execution_time": 767.8590230469999,
+    "number_loops": 10,
+    "options": {
+      "max_num_probs": null,
+      "min_prob": 0.0
+    }
+  },
+  {
+    "commit": "77d7b664222f476e2c8246b2b707b3b36ce2c855",
+    "datetime": "2025-05-22T11:45:46.097552Z",
+    "num_samples": 30000,
+    "execution_time": 155.7184999020028,
+    "number_loops": 10,
+    "options": {
+      "max_num_probs": 50,
+      "min_prob": 1e-6
+    }
+  },
+  {
+    "commit": "77d7b664222f476e2c8246b2b707b3b36ce2c855",
+    "datetime": "2025-05-22T11:48:22.192747Z",
+    "num_samples": 30000,
+    "execution_time": 153.27948035799636,
+    "number_loops": 10,
+    "options": {
+      "max_num_probs": 10,
+      "min_prob": 1e-6
+    }
+  },
+  {
+    "commit": "77d7b664222f476e2c8246b2b707b3b36ce2c855",
+    "datetime": "2025-05-22T11:50:55.878112Z",
+    "num_samples": 30000,
+    "execution_time": 128.14532026500092,
+    "number_loops": 10,
+    "options": {
+      "max_num_probs": 50,
+      "min_prob": 0.0
+    }
+  },
+  {
+    "commit": "77d7b664222f476e2c8246b2b707b3b36ce2c855",
+    "datetime": "2025-05-22T11:53:04.398765Z",
+    "num_samples": 30000,
+    "execution_time": 126.67046425800072,
+    "number_loops": 10,
+    "options": {
+      "max_num_probs": 10,
+      "min_prob": 0.0
+    }
+  }
+]
