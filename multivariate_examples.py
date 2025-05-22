@@ -253,35 +253,38 @@ def random_piecewise() -> None:
     plt.tight_layout()
 
 
-def load_well_data() -> tuple[np.ndarray, np.ndarray]:
-    y = np.loadtxt(DATA_DIR / "well-data.txt", comments="#")
-    assert y.ndim == 1
-    return np.ones_like(y), y
+def load_well_data() -> np.ndarray:
+    data = np.loadtxt(DATA_DIR / "well-data.txt", comments="#")
+    assert data.ndim == 1
+    return data
 
 
 def well_data_multivarate_bcdm(
-    x: np.ndarray, y: np.ndarray, **kwargs
+    data: np.ndarray, **kwargs
 ) -> MultivariateBcdmResults:
-    return multivariate_bcdm(x, y, hazard=0.01, mean=1e5, scale=1e4, **kwargs)
+    return multivariate_bcdm(
+        np.ones_like(data),
+        data,
+        hazard=0.01,
+        mean=1e5,
+        scale=1e4,
+        **kwargs,
+    )
 
 
 def well_data() -> None:
-    x, y = load_well_data()
-    results = well_data_multivarate_bcdm(
-        x,
-        y,
-        max_num_probs=20,
-        min_prob=1e-12,
-    )
+    data = load_well_data()
+    results = well_data_multivarate_bcdm(data, max_num_probs=20)
 
     axes = plt.subplots(2, 1, figsize=FIGSIZE, sharex=True)[1]
-    axes[0].plot(y)
+    axes[0].plot(data)
     axes[0].set_ylabel("Nuclear magnetic response")
     axes[-1].set_xlabel("Time")
     plot_probabilities(
         axes[1],
         results.log_posterior(),
         label="Posterior probability",
+        norm=LogNorm(vmin=1e-12, vmax=1),
     )
 
     changepoints = results.changepoints()
@@ -294,7 +297,7 @@ def well_data() -> None:
             linestyle="--",
         )
 
-    for segment in batched(chain((0,), changepoints, (len(x) - 1,)), 2):
+    for segment in batched(chain((0,), changepoints, (len(data) - 1,)), 2):
         if len(segment) < 2:
             break
         for ax in axes:
