@@ -551,7 +551,7 @@ class NigPrior:
         return NigParams.from_prior(self, 1).fit_regression(x, y)
 
 
-@dataclass
+@dataclass(slots=True)
 class NigParams:
     """
     Parameters of t independent p-dimensional normal-inverse-gamma
@@ -560,14 +560,6 @@ class NigParams:
     Recommended to use `from_priors` to initialise, rather than constructing
     directly.
     """
-
-    __slots__ = [
-        "cov",
-        "mean",
-        "prec",
-        "scale",
-        "shape",
-    ]
 
     mean: FloatArray
     """
