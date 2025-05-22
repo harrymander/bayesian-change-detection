@@ -264,7 +264,7 @@ class Test1DChangeDetectionWithMaxNumProbsAndMinProb(
 
     @classmethod
     def run_bcdm(cls) -> MultivariateBcdmResults:
-        return _run_1d_bcdm(max_num_probs=cls.max_num_probs, min_prob=1e-12)
+        return _run_1d_bcdm(max_num_probs=cls.max_num_probs, min_prob=1e-6)
 
     def test_support_mask_max_size_less_equal_than_max_num_probs(self) -> None:
         mask = self.results.joint_support.full()

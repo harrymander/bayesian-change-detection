@@ -402,13 +402,16 @@ class _MultivariateBcdmWorker:
         mask[:] = self.joint_support[t - 1]
 
         # Mask out the smallest probability in the previous timestep if
-        # `max_probs` is set. This maintains a maximum of `max_probs` `True`
-        # values in `new_mask`. FIXME: if `self.min_log_prob` is set, this may
-        # cause more mask values to be cleared than necessary...
-        max_probs = self.max_num_probs
-        if max_probs and t >= max_probs:
-            mask[masked_argmin(prev_log_joint, mask)] = False
-            # I.e., at this point: `new_mask.sum() <= max_probs`
+        # `max_num_probs` is set. This maintains a maximum of `max_num_probs`
+        # `True` values in `new_mask`.
+        max_num_probs = self.max_num_probs
+        if max_num_probs and t >= max_num_probs:
+            # `num_probs` may already be less than `max_num_probs` if
+            # probabilities were trimmed due to being less than `min_log_prob`.
+            num_probs = mask.sum()
+            assert num_probs <= max_num_probs
+            if num_probs == max_num_probs:
+                mask[masked_argmin(prev_log_joint, mask)] = False
 
         # Mask anything lower than min_log_prob
         if self.min_log_prob:
