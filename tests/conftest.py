@@ -50,12 +50,12 @@ class _SnapshotFixture(ABC, Generic[T]):
 
     @staticmethod
     @abstractmethod
-    def _load(path: Path, test_data: T) -> T:
+    def _load(path: Path, test_data: T, **kwargs) -> T:
         pass
 
     @staticmethod
     @abstractmethod
-    def _save(path: Path, data: T) -> None:
+    def _save(path: Path, data: T, **kwargs) -> None:
         pass
 
     def __init__(
@@ -75,11 +75,17 @@ class _SnapshotFixture(ABC, Generic[T]):
         self._generating = generating
         self._data: T | None = None
 
-    def __call__(self, test_data: T) -> T:
+    def get_snapshot(
+        self,
+        test_data: T,
+        *,
+        load_kwargs: dict | None = None,
+        save_kwargs: dict | None = None,
+    ) -> T:
         if self._generating:
             self._data = test_data
             self.snapshot_path.parent.mkdir(exist_ok=True, parents=False)
-            self._save(self.snapshot_path, test_data)
+            self._save(self.snapshot_path, test_data, **(save_kwargs or {}))
             return test_data
 
         if self._data is None:
@@ -90,7 +96,7 @@ class _SnapshotFixture(ABC, Generic[T]):
                     "did you run pytest with --snapshot-generate?"
                 )
                 raise SnapshotError(msg)
-            self._data = self._load(path, test_data)
+            self._data = self._load(path, test_data, **(load_kwargs or {}))
 
         return self._data
 
@@ -98,8 +104,22 @@ class _SnapshotFixture(ABC, Generic[T]):
 class NDArraySnapshot(_SnapshotFixture[np.ndarray]):
     suffix = "txt"
 
+    def __call__(
+        self,
+        data: np.ndarray,
+        *,
+        fmt: str | None = None,
+    ) -> np.ndarray:
+        return self.get_snapshot(data, save_kwargs=dict(fmt=fmt))
+
     @staticmethod
-    def _save(path: Path, data: np.ndarray) -> None:
+    def _save(
+        path: Path,
+        data: np.ndarray,
+        *,
+        fmt: None | str = None,
+        **kwargs,
+    ) -> None:
         import numpy as np
 
         # I think we could support arbitrary ndim...
@@ -109,10 +129,12 @@ class NDArraySnapshot(_SnapshotFixture[np.ndarray]):
 
         b, *shape = data.shape
         data = data.reshape(b, int(np.prod(shape)))
-        np.savetxt(path, data)
+        if fmt:
+            kwargs["fmt"] = fmt
+        np.savetxt(path, data, **kwargs)
 
     @staticmethod
-    def _load(path: Path, test_data: np.ndarray) -> np.ndarray:
+    def _load(path: Path, test_data: np.ndarray, **kwargs) -> np.ndarray:
         import numpy as np
 
         assert test_data.ndim <= 3
@@ -122,14 +144,17 @@ class NDArraySnapshot(_SnapshotFixture[np.ndarray]):
 class JsonSnapshot(_SnapshotFixture[Any]):
     suffix = "json"
 
+    def __call__(self, data) -> Any:
+        return self.get_snapshot(data)
+
     @staticmethod
-    def _save(path: Path, data) -> None:
+    def _save(path: Path, data, **_) -> None:
         with path.open("w") as f:
             json.dump(data, f, indent=2)
             f.write("\n")
 
     @staticmethod
-    def _load(path: Path, _) -> Any:
+    def _load(path: Path, test_data: Any, **_) -> Any:
         with path.open() as f:
             return json.load(f)
 

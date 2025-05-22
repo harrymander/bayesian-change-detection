@@ -173,6 +173,13 @@ class BcdmTester(ABC):
             ),
         )
 
+    def test_joint_support_snapshot(self, ndarray_snapshot: NDArraySnapshot):
+        support = self.results.joint_support.full()
+        assert_array_equal_strict(
+            support,
+            ndarray_snapshot(support, fmt="%d").astype(bool),
+        )
+
     @parametrize_nig_params_attrs("attrname")
     def test_parameters_all_nan_outside_final_support(self, attrname: str):
         parameters = getattr(self.results, attrname)
