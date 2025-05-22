@@ -335,7 +335,7 @@ class Test3DChangeDetection(BcdmWithoutSupportTrimmingTester):
 
 def assert_nig_prior_equal(a: NigPrior, b: NigPrior):
     __tracebackhide__ = True
-    for field in NigParams.__dataclass_fields__:
+    for field in NigPrior.__slots__:
         numpy.testing.assert_array_equal(
             getattr(a, field),
             getattr(b, field),
