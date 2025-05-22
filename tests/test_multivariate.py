@@ -207,8 +207,6 @@ class BcdmWithoutSupportTrimmingTester(BcdmTester):
 
 
 class BcdmWithSupportTrimmingTester(BcdmTester):
-    max_num_probs: int
-
     def test_support_mask_is_lower_triangular(self) -> None:
         support = self.results.joint_support.full()
         support_triu = support[np.triu_indices_from(support, 1)]
@@ -217,12 +215,6 @@ class BcdmWithSupportTrimmingTester(BcdmTester):
             np.zeros_like(support_triu),
             err_msg="Support is not lower-triangular",
         )
-
-    def test_support_mask_max_size(self) -> None:
-        mask = self.results.joint_support.full()
-        max_sizes = np.full(mask.shape[0], self.max_num_probs)
-        max_sizes[: self.max_num_probs] = np.arange(self.max_num_probs) + 1
-        assert_array_less_strict(mask.sum(axis=1), max_sizes + 1)
 
 
 def _run_1d_bcdm(**kwargs) -> MultivariateBcdmResults:
@@ -258,12 +250,34 @@ class Test1DChangeDetection(BcdmWithoutSupportTrimmingTester):
         return _run_1d_bcdm()
 
 
-class Test1DChangeDetectionWithSupportTrimming(BcdmWithSupportTrimmingTester):
+class Test1DChangeDetectionWithMaxNumProbsAndMinProb(
+    BcdmWithSupportTrimmingTester
+):
     max_num_probs = 10
 
     @classmethod
     def run_bcdm(cls) -> MultivariateBcdmResults:
         return _run_1d_bcdm(max_num_probs=cls.max_num_probs, min_prob=1e-12)
+
+    def test_support_mask_max_size_less_equal_than_max_num_probs(self) -> None:
+        mask = self.results.joint_support.full()
+        max_sizes = np.full(mask.shape[0], self.max_num_probs)
+        max_sizes[: self.max_num_probs] = np.arange(self.max_num_probs) + 1
+        assert_array_less_strict(mask.sum(axis=1), max_sizes + 1)
+
+
+class Test1DChangeDetectionWithMaxNumProbs(BcdmWithSupportTrimmingTester):
+    max_num_probs = 10
+
+    @classmethod
+    def run_bcdm(cls) -> MultivariateBcdmResults:
+        return _run_1d_bcdm(max_num_probs=cls.max_num_probs)
+
+    def test_support_mask_max_size_equal_to_max_num_probs(self) -> None:
+        mask = self.results.joint_support.full()
+        max_sizes = np.full(mask.shape[0], self.max_num_probs)
+        max_sizes[: self.max_num_probs] = np.arange(self.max_num_probs) + 1
+        assert_array_equal_strict(mask.sum(axis=1), max_sizes)
 
 
 class Test2DChangeDetection(BcdmWithoutSupportTrimmingTester):
