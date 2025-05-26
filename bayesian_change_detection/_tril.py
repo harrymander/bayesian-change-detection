@@ -18,15 +18,13 @@ such an array. For example:
   [b, c]
 """
 
-from typing import Any, Protocol, TypeVar
+from typing import Any, Protocol
 
 import numpy as np
 from numpy.typing import DTypeLike
 
-_IntegerT = TypeVar("_IntegerT", np.integer, int)
 
-
-def tril_size(n: _IntegerT) -> _IntegerT:
+def tril_size(n: int) -> int:
     """Returns the number of lower-triangular elements in an (n, n) matrix."""
     return n * (n + 1) // 2
 
@@ -63,11 +61,11 @@ class TrilArray:
         """A 1D array of the lower-triangular elements of the matrix."""
         return self._data
 
-    def _row_slice(self, i: _IntegerT) -> np.ndarray:
+    def _row_slice(self, i: int) -> np.ndarray:
         n = tril_size(i)
         return self._data[n : n + i + 1]
 
-    def __getitem__(self, i: _IntegerT) -> np.ndarray:
+    def __getitem__(self, i: int) -> np.ndarray:
         """
         Returns a view into the lower-triangular elements of the ith row.
 
@@ -76,7 +74,7 @@ class TrilArray:
         """
         return self._row_slice(i)
 
-    def __setitem__(self, i: _IntegerT, v: Any) -> None:
+    def __setitem__(self, i: int, v: Any) -> None:
         self._row_slice(i)[:] = v
 
     def full(self) -> np.ndarray:

@@ -287,12 +287,12 @@ class MultivariateBcdmResults:
             last indices, which may be changepoints.
         """
         probs = self.log_joint
-        run_length = probs[probs.n - 1].argmax()
+        run_length = probs[probs.n - 1].argmax().item()
         i = probs.n - 1 - run_length
         changepoints = []
         while i > 0:
-            changepoints.append(i.item())
-            i -= 1 + probs[i].argmax()
+            changepoints.append(i)
+            i -= 1 + probs[i].argmax().item()
 
         changepoints.reverse()
         return changepoints
