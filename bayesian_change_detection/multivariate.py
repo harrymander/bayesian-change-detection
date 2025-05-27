@@ -183,6 +183,7 @@ def multivariate_bcdm(
     else:
         n, p = x.shape
 
+    _check_array_dtype("x", x)
     _check_array_shape_and_dtype("y", y, (n,))
 
     if prior:

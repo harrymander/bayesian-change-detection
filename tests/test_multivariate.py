@@ -440,6 +440,18 @@ def test_hook_function_called_with_correct_input_data() -> None:
     assert_array_equal_strict(Y_hook, Y)
 
 
+def test_bcdm_called_with_invalid_x_dtype_fails() -> None:
+    x = np.arange(10)
+    assert x.dtype == np.dtype(np.int_)
+    y = np.random.normal(size=x.size)  # noqa: NPY002
+    with pytest.raises(TypeError, match=r"^x must be of type float64"):
+        multivariate_bcdm(
+            x,  # type: ignore
+            y,
+            hazard=0.5,
+        )
+
+
 class TestNigBayesianLinearRegression:
     model: NigParams
     x: np.ndarray
