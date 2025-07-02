@@ -1,5 +1,5 @@
 import json
-from abc import ABC, abstractmethod
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any, ClassVar
 
@@ -42,18 +42,12 @@ class SnapshotError(RuntimeError):
     pass
 
 
-class _SnapshotFixture[T](ABC):
+type SnapshotEncoder[T] = Callable[[Path, T], None]
+type SnapshotDecoder[T] = Callable[[Path], T]
+
+
+class _SnapshotFixture:
     suffix: ClassVar[str]
-
-    @staticmethod
-    @abstractmethod
-    def _load(path: Path, test_data: T, **kwargs) -> T:
-        pass
-
-    @staticmethod
-    @abstractmethod
-    def _save(path: Path, data: T, **kwargs) -> None:
-        pass
 
     def __init__(
         self,
@@ -63,42 +57,37 @@ class _SnapshotFixture[T](ABC):
         generating: bool,
     ):
         # Assume the path does not contain any "::"
-        self.nodeid = nodeid
-        _, test_name = self.nodeid.split("::", maxsplit=1)
+        self._nodeid = nodeid
+        _, test_name = self._nodeid.split("::", maxsplit=1)
         snapshot_dir = test_path.parent / "snapshots"
-        self.snapshot_path = (
+        self._snapshot_path = (
             snapshot_dir / f"{test_path.name}::{test_name}.{self.suffix}"
         )
         self._generating = generating
-        self._data: T | None = None
 
-    def get_snapshot(
+    def get_snapshot[T](
         self,
-        test_data: T,
-        *,
-        load_kwargs: dict | None = None,
-        save_kwargs: dict | None = None,
+        snapshot_data: T,
+        encode: SnapshotEncoder[T],
+        decode: SnapshotDecoder[T],
     ) -> T:
         if self._generating:
-            self._data = test_data
-            self.snapshot_path.parent.mkdir(exist_ok=True, parents=False)
-            self._save(self.snapshot_path, test_data, **(save_kwargs or {}))
-            return test_data
+            self._data = snapshot_data
+            self._snapshot_path.parent.mkdir(exist_ok=True, parents=False)
+            encode(self._snapshot_path, snapshot_data)
+            return snapshot_data
 
-        if self._data is None:
-            path = self.snapshot_path
-            if not path.exists():
-                msg = (
-                    f"snapshot file not found for '{self.nodeid}': "
-                    "did you run pytest with --snapshot-generate?"
-                )
-                raise SnapshotError(msg)
-            self._data = self._load(path, test_data, **(load_kwargs or {}))
+        if not self._snapshot_path.exists():
+            msg = (
+                f"snapshot file not found for '{self._nodeid}': "
+                "did you run pytest with --snapshot-generate?"
+            )
+            raise SnapshotError(msg)
 
-        return self._data
+        return decode(self._snapshot_path)
 
 
-class NDArraySnapshot(_SnapshotFixture[np.ndarray]):
+class NDArraySnapshot(_SnapshotFixture):
     suffix = "txt"
 
     def __call__(
@@ -107,51 +96,40 @@ class NDArraySnapshot(_SnapshotFixture[np.ndarray]):
         *,
         fmt: str | None = None,
     ) -> np.ndarray:
-        return self.get_snapshot(data, save_kwargs=dict(fmt=fmt))
-
-    @staticmethod
-    def _save(
-        path: Path,
-        data: np.ndarray,
-        *,
-        fmt: None | str = None,
-        **kwargs,
-    ) -> None:
-        import numpy as np
-
-        # I think we could support arbitrary ndim...
-        data = np.atleast_1d(data)
         if data.ndim > 3:
-            raise SnapshotError("Only 1, 2, or 3 dimensional arrays supported")
+            # I think we could support arbitrary ndim pretty easily...
+            msg = "Only 1, 2, or 3 dimensional arrays supported"
+            raise SnapshotError(msg)
 
-        b, *shape = data.shape
-        data = data.reshape(b, int(np.prod(shape)))
-        if fmt:
-            kwargs["fmt"] = fmt
-        np.savetxt(path, data, **kwargs)
+        shape = data.shape
 
-    @staticmethod
-    def _load(path: Path, test_data: np.ndarray, **kwargs) -> np.ndarray:
-        import numpy as np
+        def encode(path: Path, data: np.ndarray) -> None:
+            assert shape == data.shape
+            b, *end_shape = data.shape
+            data = data.reshape(b, int(np.prod(end_shape)))
+            kwargs = {"fmt": fmt} if fmt else {}
+            np.savetxt(path, data, **kwargs)
 
-        assert test_data.ndim <= 3
-        return np.loadtxt(path).reshape(*test_data.shape)
+        def decode(path: Path) -> np.ndarray:
+            return np.loadtxt(path).reshape(*shape)
+
+        return self.get_snapshot(data, encode, decode)
 
 
-class JsonSnapshot(_SnapshotFixture[Any]):
+class JsonSnapshot(_SnapshotFixture):
     suffix = "json"
 
-    def __call__(self, data) -> Any:
-        return self.get_snapshot(data)
+    def __call__(self, data: Any) -> Any:
+        return self.get_snapshot(data, self._save, self._load)
 
     @staticmethod
-    def _save(path: Path, data, **_) -> None:
+    def _save(path: Path, data: Any) -> None:
         with path.open("w") as f:
             json.dump(data, f, indent=2)
             f.write("\n")
 
     @staticmethod
-    def _load(path: Path, test_data: Any, **_) -> Any:
+    def _load(path: Path) -> Any:
         with path.open() as f:
             return json.load(f)
 
