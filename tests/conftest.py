@@ -1,7 +1,7 @@
 import json
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import Any, ClassVar, Generic, TypeVar
+from typing import Any, ClassVar
 
 import numpy as np
 import pytest
@@ -42,10 +42,7 @@ class SnapshotError(RuntimeError):
     pass
 
 
-T = TypeVar("T")
-
-
-class _SnapshotFixture(ABC, Generic[T]):
+class _SnapshotFixture[T](ABC):
     suffix: ClassVar[str]
 
     @staticmethod
