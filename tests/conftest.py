@@ -48,6 +48,16 @@ type SnapshotDecoder[T] = Callable[[Path], T]
 
 class _SnapshotFixture:
     suffix: ClassVar[str]
+    """
+    Must be an empty string or a string of 2 or more chars starting with a dot.
+    """
+
+    def __init_subclass__(cls) -> None:
+        suffix = getattr(cls, "suffix", None)
+        if suffix is None:
+            raise ValueError("suffix must be defined")
+        if suffix and (len(suffix) == 1 or suffix[0] != "."):
+            raise ValueError(f"invalid suffix {suffix!r}")
 
     def __init__(
         self,
@@ -61,7 +71,7 @@ class _SnapshotFixture:
         _, test_name = self._nodeid.split("::", maxsplit=1)
         snapshot_dir = test_path.parent / "snapshots"
         self._snapshot_path = (
-            snapshot_dir / f"{test_path.name}::{test_name}.{self.suffix}"
+            snapshot_dir / f"{test_path.name}::{test_name}{self.suffix}"
         )
         self._generating = generating
 
@@ -88,7 +98,7 @@ class _SnapshotFixture:
 
 
 class NDArraySnapshot(_SnapshotFixture):
-    suffix = "txt"
+    suffix = ".txt"
 
     def __call__(
         self,
@@ -117,7 +127,7 @@ class NDArraySnapshot(_SnapshotFixture):
 
 
 class JsonSnapshot(_SnapshotFixture):
-    suffix = "json"
+    suffix = ".json"
 
     def __call__(self, data: Any) -> Any:
         return self.get_snapshot(data, self._save, self._load)
