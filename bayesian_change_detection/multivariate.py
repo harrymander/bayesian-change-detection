@@ -6,12 +6,12 @@ import numpy as np
 import scipy
 from numpy.typing import NDArray
 
-from bayesian_change_detection._tril import TrilArray, tril_empty, tril_full
 from bayesian_change_detection.array_utils import masked_argmin
 from bayesian_change_detection.linalg import (
     inv_positive_definite,
     matrix_transpose,
 )
+from bayesian_change_detection.tril import TrilArray, tril_empty, tril_full
 
 _LOG_2PI = np.log(2 * np.pi)
 

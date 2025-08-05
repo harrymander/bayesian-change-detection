@@ -11,8 +11,8 @@ from bayesian_change_detection import (
     MultivariateBcdmResults,
     multivariate_bcdm,
 )
-from bayesian_change_detection._tril import TrilArray
 from bayesian_change_detection.multivariate import NigParams, NigPrior
+from bayesian_change_detection.tril import TrilArray
 from tests.conftest import JsonSnapshot, NDArraySnapshot
 from tests.utils import (
     assert_allclose,

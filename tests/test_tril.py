@@ -3,7 +3,7 @@ import re
 import numpy as np
 import pytest
 
-from bayesian_change_detection._tril import tril_full
+from bayesian_change_detection.tril import tril_full
 from tests.utils import assert_array_equal_strict
 
 
