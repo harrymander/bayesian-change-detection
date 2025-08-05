@@ -1,6 +1,6 @@
 [project]
 name = "bayesian-change-detection"
-version = "0.7.0"
+version = "0.8.0"
 description = "Bayesian change detection for input-output sequence data."
 readme = "README.md"
 requires-python = ">=3.12"
