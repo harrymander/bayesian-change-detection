@@ -485,6 +485,13 @@ class NigPrior:
     (p, p) precision.
     """
 
+    def __repr__(self) -> str:
+        attrs = ", ".join(
+            f"{attrname}={getattr(self, attrname)!r}"
+            for attrname in self.__slots__
+        )
+        return f"{type(self).__name__}({attrs})"
+
     @property
     def p(self) -> int:
         """Dimensionality of the distribution (i.e. the dimensionality of the
