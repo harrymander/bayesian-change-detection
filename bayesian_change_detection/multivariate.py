@@ -550,13 +550,23 @@ class NigPrior:
 
         self.prec = inv_positive_definite(cast(np.ndarray, cov))
 
-    def fit_regression(self, x: np.ndarray, y: np.ndarray) -> "NigParams":
+    def fit_regression(
+        self,
+        x: np.ndarray,
+        y: np.ndarray,
+        *,
+        include_prior: bool = False,
+    ) -> "NigParams":
         """Fit Bayesian linear regression on `x` and `y` using this prior.
 
         Convenience wrapper for `NigParams.fit_regression` - see that
         function's documentation for more information.
         """
-        return NigParams.from_prior(self, 1).fit_regression(x, y)
+        return NigParams.from_prior(self, 1).fit_regression(
+            x,
+            y,
+            include_prior=include_prior,
+        )
 
 
 @dataclass(slots=True)
@@ -924,11 +934,14 @@ class NigParams:
         self,
         x: np.ndarray,
         y: np.ndarray,
+        *,
+        include_prior: bool = False,
     ) -> "NigParams":
         """
         Fit a Bayesian linear regression model using this NIG prior.
 
-        Returns the NIG parameters after each observation.
+        Returns the NIG posterior over the parameters after observing each
+        datapoint.
 
         ```python
         prior = NigPrior(2)
@@ -950,10 +963,13 @@ class NigParams:
         Args:
             x: (n, p) array of predictor variables.
             y: (n,) array of response variables.
+            include_prior: If `True`, include the prior in the result.
 
         Returns:
-            NigParams object with n distributions, representing the model
-            parameters after observing each (x, y).
+            NigParams object with `n` distributions, representing the posterior
+            distributions after observing each (x, y). If `include_prior=True`,
+            then returns object with `n + 1` distributions, where the first
+            is the prior.
         """
         self._validate_x_arg(x)
         n, p = x.shape
@@ -970,8 +986,16 @@ class NigParams:
             shape=self.shape[0],
             scale=self.scale[0],
         )
-        params = NigParams.from_prior(prior, n)
-        for t, (xt, yt) in enumerate(zip(x, y, strict=True)):
+
+        if include_prior:
+            num_params = n + 1
+            t_start = 1
+        else:
+            num_params = n
+            t_start = 0
+
+        params = NigParams.from_prior(prior, num_params)
+        for t, (xt, yt) in enumerate(zip(x, y, strict=True), start=t_start):
             assert xt.ndim == 1, xt.shape
             assert np.isscalar(yt), yt
             params[t:].update(xt.reshape(1, -1), np.atleast_1d(yt))

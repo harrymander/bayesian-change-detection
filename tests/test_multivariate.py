@@ -512,3 +512,27 @@ class TestNigBayesianLinearRegression:
         variance = self.model.mvt_variance(self.x, axis="n")
         assert variance.shape == (self.n, self.n)
         assert_allclose(variance, ndarray_snapshot(variance))
+
+
+def test_nig_params_regression_including_prior_has_same_posterior_params_as_without() -> (  # noqa: E501
+    None
+):
+    rng = np.random.default_rng(42)
+    n = 50
+    coeffs = np.array([1.2, 5.6])
+    x = np.linspace(0, 10, n) + rng.normal(size=n)
+    x = np.c_[np.ones_like(x), x]
+    y = x @ coeffs + rng.normal(size=n)
+
+    prior = NigPrior(p=2)
+    posteriors = prior.fit_regression(x, y, include_prior=False)
+    prior_and_posteriors = prior.fit_regression(x, y, include_prior=True)
+
+    assert prior_and_posteriors.mean.shape == (n + 1, 2)
+    for attrname in posteriors.__dataclass_fields__:
+        numpy.testing.assert_array_equal(
+            getattr(prior_and_posteriors[1:], attrname),
+            getattr(posteriors, attrname),
+            strict=True,
+            err_msg=f"posteriors' {attrname} are not equal",
+        )
