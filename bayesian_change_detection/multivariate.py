@@ -450,6 +450,8 @@ class _MultivariateBcdmWorker:
 class NigPrior:
     """
     Parameters of p-dimensional normal-inverse-gamma distributions.
+
+    See `NigParams` for more explanation.
     """
 
     __slots__ = [
@@ -577,31 +579,80 @@ class NigParams:
 
     Recommended to use `from_priors` to initialise, rather than constructing
     directly.
+
+    # Conventions
+
+    Given t observations of p-dimensional independent variables, x, and their
+    corresponding real dependent variables, y, assume that each y is generated
+    from some linear model
+
+        y = xᵀ β + ϵ
+
+    where
+
+        ϵ ~ N(0, σ²)
+        β | σ² ~ N(μ, σ² V)
+        σ² ~ IG(a, b)
+
+    where N denotes the normal distribution and IG the inverse-gamma
+    distribution. The joint prior over the parameters β and σ² is a
+    normal-inverse-gamma distribution
+
+        β, σ² ~ NIG(μ, V, a, b)
+
+    The parameters correspond to the attributes as follows:
+
+    * `mean`: μ
+    * `cov`: V
+    * `shape`: a
+    * `scale`: b
+    * `prec`: inverse of V
+
+    The attributes are poorly named, but are kept for backwards compatibility.
+    They reflect the names of the parameters of the original prior
+    distributions of β and σ².
+
+    The joint posterior over the parameters is also NIG. The posterior after
+    observing n new observations of (x, y) is obtained by calling `update`.
+
+    The predictive distribution of y given x is a multivariate t-distribution
+
+        MVT(xᵀ μ*, b*/a* (I + X V* Xᵀ)) with dof = 2a*
+
+    where μ*, V*, a*, b* are the parameters of the corresponding NIG posterior
+    ('learned' using `update`). The PDF of this distribution given (x, y) is
+    obtained via `mvt_logpdf`. The expected value and variance of this
+    predictive distribution are computed using `mvt_mean` and `mvt_variance`,
+    respectively.
     """
 
     mean: FloatArray
     """
-    (t, p) array of means.
+    (t, p) array of μ. Corresponds to the mean of the normal prior distribution
+    over β.
     """
 
     cov: FloatArray
     """
-    (t, p, p) array of covariances.
+    (t, p, p) array of V. Corresponds to the scale matrix of the normal prior
+    distribution over β (i.e. the covariance of the prior scaled by 1/σ²).
     """
 
     shape: FloatArray
     """
-    (t,) array of shape parameters.
+    (t,) array of a. Corresponds to the shape parameter of the inverse-gamma
+    prior distribution over σ².
     """
 
     scale: FloatArray
     """
-    (t,) array of scale parameters.
+    (t,) array of b. Corresponds to the scale parameter of the inverse-gamma
+    prior distribution over σ².
     """
 
     prec: FloatArray
     """
-    (t, p, p) array of precisions.
+    (t, p, p) inverses of `cov` (V⁻¹).
     """
 
     def __post_init__(self) -> None:
@@ -946,15 +997,17 @@ class NigParams:
         ```python
         prior = NigPrior(2)
         # x.shape == is (n, 2) and y.shape == (n,)
-        model = NigParams.from_prior(prior, 1).fit_regression(x, y)
+        posteriors = NigParams.from_prior(prior, 1).fit_regression(x, y)
 
         # The MAP estimate for the regression coefficients is the mean of the
-        # final model:
-        beta = model.mean[-1]
+        # final posterior distribution (this is also the mean of the marginal
+        # posterior over β):
+        beta = posteriors.mean[-1]
 
-        # Compute the mean and variance after each observation
-        mean = model.mvt_mean(x, axis="t")
-        var = model.mvt_variance(x, axis="t")
+        # Compute the mean and variance  of the predictive distribution after
+        # each observation
+        mean = posteriors.mvt_mean(x, axis="t")
+        var = posteriors.mvt_variance(x, axis="t")
         ```
 
         Note that if the prior shape if small enough (< 1), then the variance
@@ -966,10 +1019,10 @@ class NigParams:
             include_prior: If `True`, include the prior in the result.
 
         Returns:
-            NigParams object with `n` distributions, representing the posterior
-            distributions after observing each (x, y). If `include_prior=True`,
-            then returns object with `n + 1` distributions, where the first
-            is the prior.
+            NigParams object with `n` distributions, representing the joint
+            posterior distribution over β and σ² after observing each (x, y).
+            If `include_prior=True`, then returns object with `n + 1`
+            distributions, where the first is the prior.
         """
         self._validate_x_arg(x)
         n, p = x.shape
