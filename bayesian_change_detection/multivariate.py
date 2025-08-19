@@ -1054,3 +1054,27 @@ class NigParams:
             params[t:].update(xt.reshape(1, -1), np.atleast_1d(yt))
 
         return params
+
+    def var_beta(self) -> np.ndarray:
+        """
+        Compute the covariance matrices of the marginal distributions over β.
+
+        If `self` represents t NIG distributions
+
+            β, σ² ~ NIG(μ, V, a, b)
+
+        then the marginal distribution over β is a multivariate t-distribution
+        with 2a degrees of freedom:
+
+            β ~ MVT(μ, b/a V)
+
+        Returns:
+            A (t, p, p) array of covariance matrices, i.e. cov[β]. The values
+            are undefined where `shape <= 1`.
+        """
+        # NB: given an MVT(μ, Σ), then the covariance is Σ*dof/(dof - 2).
+        # If Σ = b/a V and dof = 2a, then cov = b / (a - 1) * V
+        coeff = self.scale / (self.shape - 1)
+        cov = coeff.reshape(-1, 1, 1) * self.cov
+        assert cov.shape == self.cov.shape
+        return cov
