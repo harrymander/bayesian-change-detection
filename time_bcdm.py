@@ -115,13 +115,12 @@ class TestInfo(BaseModel):
     commit: Annotated[str, AfterValidator(_validate_git_sha)]
     datetime: AwareDatetime
     num_samples: int = Field(..., ge=1)
-    execution_time: float = Field(..., gt=0)
-    number_loops: int = Field(..., ge=1)
+    execution_times: list[Annotated[float, Field(gt=0)]] = Field(min_length=1)
     options: Options
 
     @property
     def avg_execution_time(self) -> float:
-        return self.execution_time / self.number_loops
+        return sum(self.execution_times) / len(self.execution_times)
 
 
 def current_datetime() -> AwareDatetime:
@@ -269,17 +268,17 @@ def main(
             options,
             load_module(worktree_path, "bayesian_change_detection"),
         )
-        execution_time = timeit.timeit(
+        execution_times = timeit.repeat(
             "function()",
             globals=dict(function=function),
-            number=num_loops,
+            repeat=num_loops,
+            number=1,
         )
 
     info = TestInfo(
         commit=ref_sha,
         datetime=profile_datetime,
-        execution_time=execution_time,
-        number_loops=num_loops,
+        execution_times=execution_times,
         num_samples=num_samples,
         options=options,
     )
