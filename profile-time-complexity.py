@@ -56,10 +56,7 @@ NUM_SAMPLES = [
     *irange(12500, 20000, 2500),
     *irange(22000, 30000, 2000),
 ]
-OPTIONS: list[dict] = [
-    {},
-    *product_dicts(min_prob=[1e-6, 0], max_num_probs=[50, 10]),
-]
+OPTIONS = list(product_dicts(max_num_probs=[None, 50, 10]))
 
 
 def profile(*, script: str, commits: Iterable[str], dry_run: bool):
