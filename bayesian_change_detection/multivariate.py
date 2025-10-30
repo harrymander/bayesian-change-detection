@@ -94,6 +94,7 @@ def multivariate_bcdm(
     init_prob: float = ...,
     min_prob: float = ...,
     max_num_probs: int | None = ...,
+    max_run_length: int | None = ...,
     update_hook: UpdateHook | None = None,
     **prior_kwargs: Unpack[NigPriorKwargs],
 ) -> "MultivariateBcdmResults": ...
@@ -109,6 +110,7 @@ def multivariate_bcdm(
     init_prob: float = ...,
     min_prob: float = ...,
     max_num_probs: int | None = ...,
+    max_run_length: int | None = ...,
     update_hook: UpdateHook | None = None,
 ) -> "MultivariateBcdmResults": ...
 
@@ -122,6 +124,7 @@ def multivariate_bcdm(
     init_prob: float = 1,
     min_prob: float = 0,
     max_num_probs: int | None = None,
+    max_run_length: int | None = None,
     update_hook: UpdateHook | None = None,
     **prior_kwargs: Unpack[NigPriorKwargs],
 ) -> "MultivariateBcdmResults":
@@ -144,6 +147,7 @@ def multivariate_bcdm(
             after each time step. If provided, will zero out all but the top
             `max_num_probs` posterior probabilities after each time step. This
             can significantly reduce the processing time for large data.
+        max_run_length: Maximum run length. If None, there is no limit.
         update_hook: Optional function to call after each datapoint is
             processed. If provided, will be called with the following
             arguments after processing each datapoint in (x, y):
@@ -173,6 +177,8 @@ def multivariate_bcdm(
         raise ValueError("min_prob must be in [0, 1)")
     if max_num_probs is not None and max_num_probs <= 0:
         raise ValueError("max_num_probs must be > 0")
+    if max_run_length is not None and max_run_length <= 0:
+        raise ValueError("max_run_length must be > 0")
 
     if x.ndim == 1:
         n = len(x)
@@ -185,6 +191,10 @@ def multivariate_bcdm(
 
     _check_array_dtype("x", x)
     _check_array_shape_and_dtype("y", y, (n,))
+
+    if max_run_length is not None and max_run_length > n:
+        msg = f"max_run_length cannot be greater than number of samples, {n}"
+        raise ValueError(msg)
 
     if prior:
         if prior_kwargs:
@@ -204,6 +214,7 @@ def multivariate_bcdm(
         init_prob=init_prob,
         min_prob=min_prob,
         max_num_probs=max_num_probs,
+        max_run_length=max_run_length,
         prior=prior,
         hazard=hazard,
         update_hook=update_hook,
@@ -308,6 +319,7 @@ class _MultivariateBcdmWorker:
         "log_joint",
         "log_pred",
         "max_num_probs",
+        "max_run_length",
         "min_log_prob",
         "n",
         "p",
@@ -327,6 +339,7 @@ class _MultivariateBcdmWorker:
         init_prob: float,
         min_prob: float,
         max_num_probs: int | None,
+        max_run_length: int | None,
         update_hook: UpdateHook | None,
     ):
         # Assumes parameters have been validated - see multivariate_bcdm
@@ -341,10 +354,12 @@ class _MultivariateBcdmWorker:
             np.log(min_prob) if min_prob else None
         )
         self.max_num_probs = max_num_probs or 0
+        self.max_run_length = max_run_length or self.n
         self.update_hook = update_hook
 
         # To reduce memory usage, store only the lower triangular part of these
-        # matrices
+        # matrices. TODO: could further reduce memory by limiting number of
+        # cols to max_run_length?
         self.joint_support = tril_full(self.n, True, dtype=bool)
         self.log_joint = tril_empty(self.n, upper_val=-np.inf)
         self.log_pred = tril_full(self.n, -np.inf, upper_val=-np.inf)
@@ -420,6 +435,10 @@ class _MultivariateBcdmWorker:
             # Normalise the joint to get the posterior
             log_normaliser = scipy.special.logsumexp(prev_log_joint[mask])
             mask[(prev_log_joint - log_normaliser) < self.min_log_prob] = False
+
+        # Mask out run lengths greater than the max (subtract 1 because there
+        # is already a True from first index of new_mask)
+        mask[self.max_run_length - 1 :] = False
 
         mask = new_mask
 

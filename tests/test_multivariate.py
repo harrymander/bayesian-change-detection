@@ -287,6 +287,24 @@ class Test1DChangeDetectionWithMaxNumProbs(BcdmWithSupportTrimmingTester):
         assert_array_equal_strict(mask.sum(axis=1), max_sizes)
 
 
+class Test1DChangeDetectionWithMaxRunLength(BcdmTester):
+    max_run_length = 10
+
+    @classmethod
+    def run_bcdm(cls) -> MultivariateBcdmResults:
+        return _run_1d_bcdm(max_run_length=cls.max_run_length)
+
+    def test_support_mask_is_limited_to_max_run_length(self) -> None:
+        mask = self.results.joint_support.full()
+
+        expected_mask = np.zeros_like(mask)
+        for i in range(self.max_run_length):
+            expected_mask[i, : i + 1] = True
+        expected_mask[self.max_run_length :, : self.max_run_length] = True
+
+        assert_array_equal_strict(mask, expected_mask)
+
+
 class Test2DChangeDetection(BcdmWithoutSupportTrimmingTester):
     @classmethod
     def run_bcdm(cls) -> MultivariateBcdmResults:
