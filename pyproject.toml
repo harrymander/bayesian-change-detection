@@ -54,3 +54,9 @@ ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 addopts = "-Werror"
+
+[tool.poe.tasks]
+check = "ruff check"
+fix = "ruff check --fix"
+format = "ruff format"
+mypy = "dmypy run ."
