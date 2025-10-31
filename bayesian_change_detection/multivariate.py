@@ -325,6 +325,7 @@ class _MultivariateBcdmWorker:
         "n",
         "p",
         "params",
+        "prior_params",
         "update_hook",
         "x",
         "y",
@@ -357,8 +358,9 @@ class _MultivariateBcdmWorker:
         self.max_run_length = max_run_length or self.n
         self.update_hook = update_hook
 
-        # TODO: limit to max_run_length
-        self.params = NigParams.from_prior(prior, self.n)
+        # prior_params used where max_run_length < n (see start of _update)
+        self.prior_params = NigParams.from_prior(prior, 1)
+        self.params = NigParams.from_prior(prior, self.max_run_length)
 
         # To reduce memory usage, store only the lower triangular part of these
         # matrices. TODO: could further reduce memory by limiting number of
@@ -408,12 +410,21 @@ class _MultivariateBcdmWorker:
         # Note that the variable `t` is 0-indexed here whereas in the notes it
         # starts from 1.
 
-        # self.params is stored in the opposite order to `prev_log_joint`, so
-        # it is reversed. Therefore params_view[0] corresponds to Theta_t in
-        # Eq. 25, and params_view[-1] corresponds to Theta_1.
-        i1 = t + 1
-        i0 = max(0, i1 - self.max_run_length)
-        params_view = self.params[i0:i1][::-1]
+        # `self.params[0]` are the parameters for the predictive distribution
+        # for the longest run length. `self.params` is stored in the opposite
+        # direction to `self.log_joint`, so `params_view` takes a reversed view
+        # over the current possible run lengths such that `params_view[0]`
+        # corresponds to the parameters for a new run.
+        if t < self.max_run_length:
+            params_view = self.params[: t + 1][::-1]
+        else:
+            # Drop self.params[0], which corresponds to the predictive
+            # distribution for max_run_length + 1, then set self.params[-1] to
+            # the prior.
+            self.params[:-1] = self.params[1:]
+            self.params[-1:] = self.prior_params
+
+            params_view = self.params[::-1]
 
         prev_log_joint = self.log_joint[t - 1]
 
@@ -725,6 +736,13 @@ class NigParams:
             shape=np.full(t, priors.shape, dtype=_float_type),
             scale=np.full(t, priors.scale, dtype=_float_type),
         )
+
+    def __setitem__(self, i, params: "NigParams") -> None:
+        self.mean[i] = params.mean
+        self.cov[i] = params.cov
+        self.prec[i] = params.prec
+        self.shape[i] = params.shape
+        self.scale[i] = params.scale
 
     def __getitem__(self, i) -> "NigParams":
         return NigParams(
