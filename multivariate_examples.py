@@ -1,5 +1,5 @@
 from collections.abc import Sequence
-from itertools import batched, chain, pairwise
+from itertools import batched, chain, cycle, pairwise
 from pathlib import Path
 
 import click
@@ -7,10 +7,9 @@ import matplotlib.pyplot as plt
 import numpy as np
 import tqdm
 from matplotlib.axes import Axes
-from matplotlib.colors import ListedColormap, LogNorm
+from matplotlib.colors import LogNorm
 from matplotlib.image import AxesImage
 from matplotlib.lines import Line2D
-from matplotlib.patches import Polygon
 
 from bayesian_change_detection import multivariate_bcdm as _multivariate_bcdm
 from bayesian_change_detection.multivariate import (
@@ -311,98 +310,61 @@ def well_data() -> None:
             )
 
 
-def add_xindicators(
-    ax: Axes,
-    xvals,
-    height_px: float = 12,
-    width_px: float = 12,
-    **kwargs,
-):
-    ylim = ax.get_ylim()
-    ymax = max(ylim)
-    half_width_px = width_px / 2
-    transform = ax.transData
-    for x in xvals:
-        x0, y0 = transform.transform((x, ymax))
-        y1 = y0 + height_px
-        vertices = [
-            [x0, y0],
-            [x0 - half_width_px, y1],
-            [x0 + half_width_px, y1],
-        ]
-        triangle_patch = Polygon(
-            [transform.inverted().transform(v) for v in vertices],
-            clip_on=False,
-            transform=transform,
-            **kwargs,
-        )
-        ax.add_patch(triangle_patch)
-
-
 def well_data_support_compare() -> None:
     data = load_well_data()
-    results_without_trimming = well_data_multivarate_bcdm(data)
-    results_with_trimming = well_data_multivarate_bcdm(data, max_num_probs=20)
 
-    axes = plt.subplots(2, 1, figsize=FIGSIZE, sharex=True)[1]
+    results = [
+        (
+            ", ".join(f"{k}={v}" for k, v in kw.items()),
+            well_data_multivarate_bcdm(data, **kw),
+        )
+        for kw in (
+            dict(max_num_probs=None),
+            dict(max_num_probs=20),
+            dict(max_run_length=1000),
+            dict(max_run_length=1000, max_num_probs=20),
+            dict(max_run_length=500),
+        )
+    ]
+
+    axes: Sequence[Axes]
+    axes = plt.subplots(1 + len(results), 1, figsize=FIGSIZE, sharex=True)[1]
     axes[0].plot(data)
     axes[0].set_ylabel("Nuclear magnetic response")
     axes[-1].set_xlabel("Time")
-    probs, _ = plot_probabilities(
-        axes[1],
-        results_without_trimming.log_posterior(),
-        label="Posterior probability",
-        norm=LogNorm(vmin=1e-20, vmax=1),
-    )
-    axes[1].imshow(
-        results_with_trimming.joint_support.full().T[: len(probs)],
-        origin="lower",
-        aspect="auto",
-        cmap=ListedColormap(["none", "red"]),
-        alpha=0.5,
+
+    images = [
+        plot_probabilities(
+            ax,
+            result.log_posterior(),
+            label="Posterior probability",
+            norm=LogNorm(vmin=1e-20, vmax=1),
+            add_colorbar=False,
+        )[1]
+        for ax, (_, result) in zip(axes[1:], results, strict=True)
+    ]
+    plt.colorbar(
+        images[0],
+        ax=axes,
+        label="Run length posterior",
+        orientation="vertical",
+        fraction=0.05,
     )
 
     colors = plt.rcParams["axes.prop_cycle"].by_key()["color"]
-    with_trimming_color = colors[1]
-    without_trimming_color = colors[2]
-    vlines_kwargs = dict(linewidth=1)
-    for ax in axes:
-        axvlines(
-            ax,
-            results_with_trimming.changepoints(),
-            label="Changepoints (with trimming)",
-            color=with_trimming_color,
-            **vlines_kwargs,
-        )
-        axvlines(
-            ax,
-            results_without_trimming.changepoints(),
-            label="Changepoints (without trimming)",
-            linestyle="--",
-            color=without_trimming_color,
-            **vlines_kwargs,
-        )
-
-    def _add_xindicators(results: MultivariateBcdmResults, color, **kw):
-        add_xindicators(
-            axes[0],
-            results.changepoints(),
-            facecolor=color,
-            edgecolor="none",
-            alpha=0.8,
-            **kw,
-        )
-
-    _add_xindicators(
-        results_without_trimming,
-        without_trimming_color,
-        width_px=18,
-        height_px=15,
-        zorder=10,
-    )
-    _add_xindicators(results_with_trimming, with_trimming_color, zorder=20)
-
-    axes[0].legend()
+    for ax, color, (name, result) in zip(
+        axes[1:], cycle(colors), results, strict=False
+    ):
+        changepoints = result.changepoints()
+        for _ax in (ax, axes[0]):
+            axvlines(
+                _ax,
+                changepoints,
+                label=f"Changepoints ({name})",
+                color=color,
+                linewidth=1,
+            )
+        ax.legend(loc="upper left")
 
 
 def predict_segment(
