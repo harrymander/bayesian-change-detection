@@ -9,7 +9,6 @@ from numpy.typing import NDArray
 from bayesian_change_detection.array_utils import masked_argmin
 from bayesian_change_detection.linalg import (
     inv_positive_definite,
-    matrix_transpose,
 )
 from bayesian_change_detection.tril import TrilArray, tril_empty, tril_full
 
@@ -379,7 +378,9 @@ class _MultivariateBcdmWorker:
         log_joint = log_pred + self.log_hazard + self.init_log_joint
         self.log_joint[0] = log_joint[0]
         self.log_pred[0] = log_pred[0]
+
         self.params[:1].update(X[0], Y[0])
+
         if self.update_hook:
             self.update_hook(0, X[0], Y[0], self)
 
@@ -480,7 +481,12 @@ class _MultivariateBcdmWorker:
 
         # Update the model parameters (Eqs. 30-33). Avoid expensive computation
         # outside of the support.
-        params_view.update(x, y, mask=mask)
+        n = len(params_view.mean)
+        params_view.update(
+            np.tile(x, (n, 1)),
+            np.tile(y, n),
+            mask=mask,
+        )
 
 
 class NigPrior:
@@ -751,6 +757,13 @@ class NigParams:
         )
 
     def _validate_x_arg(self, x: np.ndarray) -> None:
+        exp_shape = self.mean.shape
+        if x.shape != exp_shape:
+            msg = (
+                f"expected predictor array of shape {exp_shape}, got {x.shape}"
+            )
+            raise ValueError(msg)
+
         if x.ndim != 2:
             raise ValueError("x must be 2-D")
         xp = x.shape[1]
@@ -760,11 +773,11 @@ class NigParams:
 
     def update(self, x: np.ndarray, y: np.ndarray, *, mask=None) -> None:
         """
-        Update sufficient statistics given n new observations (x, y).
+        Update sufficient statistics given t new observations (x, y).
 
         Args:
-            x: (n, p) array of independent (predictor) variables.
-            y: (n,) array of dependent (response) variables.
+            x: (t, p) array of independent (predictor) variables.
+            y: (t,) array of dependent (response) variables.
             mask: any object that can be used to index into the parameters
                 (e.g. a boolean or index array); sufficient statistics will
                 only be updated for the selected distributions.
@@ -773,89 +786,79 @@ class NigParams:
             mask = ...
 
         self._validate_x_arg(x)
-        n = x.shape[0]
-        _check_array_shape_and_dtype("y", y, (n,))
+        t, p = x.shape
+        _check_array_shape_and_dtype("y", y, (t,))
 
-        mean = self.mean[mask]
-        t, p = mean.shape
-
+        x = x[mask]
+        y = y[mask]
         cov0 = self.cov[mask]  # (t, p, p)
         prec0 = self.prec[mask]  # (t, p, p)
-        mean0 = np.expand_dims(mean, -1)  # (t, p, 1)
+        mean0 = self.mean[mask]  # (t, p)
 
-        # Add dimension for broadcasting
-        x = np.expand_dims(x, 0)  # (1, n, p)
+        # x may have reduced in size due to mask, so recompute t
+        t = len(x)
 
-        # (1, p, n) @ (1, n, p) -> (1, p, p)
-        xx = matrix_transpose(x) @ x
-        assert xx.shape == (1, p, p)
+        # Given x = [... xi ...], perform outer product for each row.
+        # (t, p) @ (t, p) -> (t, p, p)
+        xx = np.einsum("ti,tj->tij", x, x)
+        assert xx.shape == (t, p, p)
 
-        # Eq. 30, first equality
-        # (t, p, p) + (1, p, p)
+        # Eq. 35
         new_prec = prec0 + xx
         assert new_prec.shape == (t, p, p)
 
-        # (t, p, p) @ (1, p, n) -> (t, p, n)
-        if p >= n:
-            # If p >= n, we can use the Woodbury matrix identity to avoid
-            # inverting the larger (p, p) matrix. See Eq. 30, second equality.
-
-            vx = cov0 @ matrix_transpose(x)
-            assert vx.shape == (t, p, n)
-
-            # (1, n, p) @ (t, p, n) -> (t, n, n)
-            xvx = x @ vx
-            assert xvx.shape == (t, n, n)
-
-            if n == 1:
-                # (t, p, n) @ (t, n, p) -> (t, p, p)
-                vxxv = vx @ matrix_transpose(vx)
-                assert vxxv.shape == (t, p, p)
-
-                # (t, p, p) - (t, p, p) / (t, 1, 1) -> (t, p, p)
-                new_cov = cov0 - vxxv / (xvx + 1)
-            else:
-                # Matrix may not be positive definite
-                xvx_p1_inv = np.linalg.inv(xvx + np.eye(n))
-
-                # (t, p, p) - (t, p, n) @ (t, n, n) @ (t, n, p) -> (t, p, p)
-                new_cov = cov0 - vx @ xvx_p1_inv @ matrix_transpose(vx)
+        if p == 1:
+            new_cov = 1 / new_prec
         else:
-            # Just invert the (t, p, p) matrix. See Eq. 30, first equality.
-            new_cov = inv_positive_definite(new_prec)
+            # Use the Sherman-Morrison matrix identity to avoid inverting the
+            # larger (p, p) matrix. See Eq. 39.
+            vx = np.einsum("tij,tj->tj", cov0, x)
+            assert vx.shape == (t, p)
 
-        assert new_cov.shape == (t, p, p)
+            # (t, p) @ (t, p) -> (t,). I.e. dot product of each row of x and vx
+            xvx = np.einsum("ti,ti->t", x, vx)
 
-        # (1, p, n) * (1, n, 1) -> (1, p, 1)
-        xy = matrix_transpose(x) @ y.reshape(1, -1, 1)
-        assert xy.shape == (1, p, 1)
+            # (t, p, p) @ (t, p, p) @ (t, p, p) -> (t, p, p)
+            vxxv = cov0 @ xx @ cov0
 
-        # Eq. 31
-        # (t, p, p) @ ((t, p, p) @ (t, p, 1) + (1, p, 1))
+            # (t, p, p) - (t, p, p) / (t, 1, 1) -> (t, p, p)
+            new_cov = cov0 - vxxv / (xvx + 1).reshape(-1, 1, 1)
+
+            assert new_cov.shape == (t, p, p)
+
+        # (t, p) * (t, 1) -> (t, p)
+        xy = x * y.reshape(-1, 1)
+        assert xy.shape == (t, p)
+
+        # Eq. 36
         # -> (t, p, p) @ (t, p, 1)
         # -> (t, p, 1)
-        new_mean = new_cov @ (prec0 @ mean0 + xy)
-        assert new_mean.shape == (t, p, 1)
 
-        # (t, 1, p) @ (t, p, p) @ (t, p, 1) -> (t, 1, 1)
-        mean_prec_mean0 = matrix_transpose(mean0) @ prec0 @ mean0
-        assert mean_prec_mean0.shape == (t, 1, 1)
+        # (t, p, p) @ (t, p) -> (t, p)
+        prec_mean_0 = np.einsum("tij,tj->tj", prec0, mean0)
+        assert prec_mean_0.shape == (t, p)
+        new_mean = np.einsum("tij,tj->tj", new_cov, (prec_mean_0 + xy))
+        assert new_mean.shape == (t, p)
 
-        # as above
-        mean_prec_mean_new = matrix_transpose(new_mean) @ new_prec @ new_mean
-        assert mean_prec_mean_new.shape == (t, 1, 1)
+        # Eq. 38 first term in parentheses
+        mean_prec_mean_0 = np.einsum("ti,ti->t", mean0, prec_mean_0)
+        assert mean_prec_mean_0.shape == (t,)
 
-        # Eq. 33
-        new_scale = (
-            mean_prec_mean0.ravel() + np.dot(y, y) - mean_prec_mean_new.ravel()
-        ) / 2
+        # as above, final term in parentheses
+        new_prec_mean = np.einsum("tij,tj->tj", new_prec, new_mean)
+        new_mean_prec_mean = np.einsum("ti,ti->t", new_mean, new_prec_mean)
+        assert new_mean_prec_mean.shape == (t,)
+
+        # Eq. 38
+        new_scale = (mean_prec_mean_0 - new_mean_prec_mean + y * y) / 2
         assert new_scale.shape == (t,)
 
-        self.mean[mask] = new_mean.squeeze(-1)
+        self.mean[mask] = new_mean
         self.cov[mask] = new_cov
         self.prec[mask] = new_prec
-        self.shape[mask] += n / 2  # Eq. 32
+        self.shape[mask] += 0.5  # Eq. 37
         self.scale[mask] += new_scale
+
         assert np.all(self.scale[mask] >= 0), "got negative scale"
 
     def _mvt_mean(self, x: np.ndarray) -> np.ndarray:
@@ -890,14 +893,13 @@ class NigParams:
         (Logarithm of Eq. 27.)
 
         Args:
-            x: (n, p) array of predictor variables.
-            y: (n,) response variable.
+            x: (t, p) array of predictor variables.
+            y: (t,) response variable.
 
         Returns:
-            (t, n) array of log predictive probabilities, the i-th row contains
-            the probabilities over (x, y) given the i-th model.
+            (t,) array of log predictive probabilities.
         """
-        self._validate_x_arg(x)
+        # self._validate_x_arg(x)
         n = x.shape[0]
         _check_array_shape_and_dtype("y", y, (n,))
         t = self.mean.shape[0]
