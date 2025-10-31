@@ -812,11 +812,8 @@ class NigParams:
         else:
             # Use the Sherman-Morrison matrix identity to avoid inverting the
             # larger (p, p) matrix. See Eq. 39.
-            vx = np.einsum("tij,tj->tj", cov0, x)
-            assert vx.shape == (t, p)
-
-            # (t, p) @ (t, p) -> (t,). I.e. dot product of each row of x and vx
-            xvx = np.einsum("ti,ti->t", x, vx)
+            xvx = np.einsum("tij,ti,tj->t", cov0, x, x)
+            assert xvx.shape == (t,)
 
             # (t, p, p) @ (t, p, p) @ (t, p, p) -> (t, p, p)
             vxxv = cov0 @ xx @ cov0
