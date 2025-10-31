@@ -815,28 +815,12 @@ class NigParams:
                 )
                 raise ValueError(msg)
 
-    def update(
+    def _validate_xy_args(
         self,
         x: NDArray[np.floating],
         y: NDArray[np.floating] | float | np.floating,
-        *,
-        mask: Any = None,
-    ) -> None:
-        """
-        Update sufficient statistics given t new observations (or a single
-        observation that is broadcast across all t distributions) of (x, y) .
-
-        Args:
-            x: (t, p) or (p,) array of independent (predictor) variables.
-            y: (t,) array of dependent (response) variables, or a single scalar
-                value.
-            mask: any object that can be used to index into the parameters
-                (e.g. a boolean or index array); sufficient statistics will
-                only be updated for the selected distributions.
-        """
-        if mask is None:
-            mask = ...
-
+    ) -> tuple[int, NDArray[np.floating], NDArray[np.floating]]:
+        """Return original dimensionality (1 or 2), x, y."""
         self._validate_x_arg(x)
         ndim = x.ndim
         if ndim == 1:
@@ -859,16 +843,40 @@ class NigParams:
                 (t,),
             )
 
+        return ndim, x, cast(NDArray[np.floating], y)
+
+    def update(
+        self,
+        x: NDArray[np.floating],
+        y: NDArray[np.floating] | float | np.floating,
+        *,
+        mask: Any = None,
+    ) -> None:
+        """
+        Update sufficient statistics given t new observations (or a single
+        observation that is broadcast across all t distributions) of (x, y) .
+
+        Args:
+            x: (t, p) or (p,) array of independent (predictor) variables.
+            y: (t,) array of dependent (response) variables, or a single scalar
+                value.
+            mask: any object that can be used to index into the parameters
+                (e.g. a boolean or index array); sufficient statistics will
+                only be updated for the selected distributions.
+        """
+        if mask is None:
+            mask = ...
+
+        ndim, x, y = self._validate_xy_args(x, y)
         cov0 = self.cov[mask]  # (t, p, p)
         prec0 = self.prec[mask]  # (t, p, p)
         mean0 = self.mean[mask]  # (t, p)
-
-        t = len(mean0)
         if ndim == 2:
             x = x[mask]
             y = y[mask]  # type: ignore[index]
-            n = len(x)
 
+        t = len(mean0)
+        n, p = x.shape
         y = cast(NDArray[np.floating], y)
 
         # Given x = [... xi ...], perform outer product for each row.
@@ -931,22 +939,27 @@ class NigParams:
 
         assert np.all(self.scale[mask] >= 0), "got negative scale"
 
-    def mvt_logpdf(self, x: np.ndarray, y: np.ndarray) -> np.ndarray:
+    def mvt_logpdf(
+        self,
+        x: NDArray[np.floating],
+        y: NDArray[np.floating] | float | np.floating,
+    ) -> np.ndarray:
         """
         Calculate the log PDFs of the predictive distributions of t independent
         Bayesian linear regression models using self as the NIG priors.
         (Logarithm of Eq. 27.)
 
         Args:
-            x: (t, p) array of predictor variables.
-            y: (t,) response variable.
+            x: (t, p) or (p,) array of predictor variable(s).
+            y: (t,) or scalar response variable(s).
 
         Returns:
-            (t,) array of log predictive probabilities.
+            (t,) array of log predictive probabilities. If `x` and `y` are
+            single variables (shape (p,) and scalar, respectively), then
+            they are broadcasted over all `t` distributions.
         """
-        self._validate_x_arg(x)
-        t = x.shape[0]
-        _check_array_shape_and_dtype("y", y, (t,))
+        x, y = self._validate_xy_args(x, y)[1:]
+        t = self.mean.shape[0]
 
         # Σ from Eq. 31
         xvx = np.einsum("tij,ti,tj->t", self.cov, x, x)

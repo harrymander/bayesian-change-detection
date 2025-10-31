@@ -94,18 +94,22 @@ class TestNigParams:
         logpdf = self.params_updated_with_1d_regressor.mvt_logpdf(x, y)
         assert_allclose(logpdf, ndarray_snapshot(logpdf))
 
-    # def test_iteratively_and_batch_computed_mvt_logpdf_are_equivalent(
-    #     self,
-    # ) -> None:
-    #     n = 500
-    #     rng = np.random.default_rng(1234)
-    #     x: np.ndarray = rng.normal(size=(n, self.p))
-    #     y: np.ndarray = rng.normal(size=(n,))
-    #     iterative_logpdf = self._mvt_logpdf_iterative(
-    #         self.iteratively_updated_params, x, y
-    #     )
-    #     batch_logpdf = self.iteratively_updated_params.mvt_logpdf(x, y)
-    #     assert_allclose(batch_logpdf, iterative_logpdf)
+    def test_mvt_logpdf_with_1d_and_2d_repeated_params_are_equvalent(
+        self,
+    ) -> None:
+        rng = np.random.default_rng(1234)
+        x = rng.normal(size=self.p)
+        y = rng.normal()
+
+        logpdf_1d = self.params_updated_with_1d_regressor.mvt_logpdf(x, y)
+
+        xx = np.tile(x.reshape(1, -1), (self.n, 1))
+        assert xx.shape == (self.n, self.p)
+        yy = np.repeat(y, self.n)
+        assert yy.shape == (self.n,)
+        logpdf_2d = self.params_updated_with_1d_regressor.mvt_logpdf(xx, yy)
+
+        assert_array_equal_strict(logpdf_1d, logpdf_2d)
 
 
 def parametrize_nig_params_attrs(name: str):
