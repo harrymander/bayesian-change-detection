@@ -1,6 +1,6 @@
 from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Any, Literal, Protocol, TypedDict, Unpack, cast, overload
+from typing import Any, Protocol, TypedDict, Unpack, cast, overload
 
 import numpy as np
 import scipy
@@ -597,19 +597,51 @@ class NigPrior:
         self,
         x: np.ndarray,
         y: np.ndarray,
-        *,
-        include_prior: bool = False,
     ) -> "NigParams":
-        """Fit Bayesian linear regression on `x` and `y` using this prior.
-
-        Convenience wrapper for `NigParams.fit_regression` - see that
-        function's documentation for more information.
         """
-        return NigParams.from_prior(self, 1).fit_regression(
-            x,
-            y,
-            include_prior=include_prior,
-        )
+        Fit a Bayesian linear regression model using this NIG prior.
+
+        Returns the NIG posterior over the parameters after observing each
+        datapoint.
+
+        ```python
+        prior = NigPrior(2)
+        # x.shape == is (n, 2) and y.shape == (n,)
+        posteriors = NigParams.from_prior(prior, 1).fit_regression(x, y)
+
+        # The MAP estimate for the regression coefficients is the mean of the
+        # final posterior distribution (this is also the mean of the marginal
+        # posterior over β):
+        beta = posteriors.mean[-1]
+
+        # Compute the mean and variance  of the predictive distribution after
+        # each observation
+        mean = posteriors.mvt_mean(x)
+        var = posteriors.mvt_variance(x)
+        ```
+
+        Note that if the prior shape if small enough (< 1), then the variance
+        may be negative for the first observation or two.
+
+        Args:
+            x: (n, p) array of predictor variables.
+            y: (n,) array of response variables.
+            include_prior: If `True`, include the prior in the result.
+
+        Returns:
+            NigParams object with `n` distributions, representing the joint
+            posterior distribution over β and σ² after observing each (x, y).
+        """
+        n, _ = x.shape
+        assert y.shape == (n,)
+        posteriors = NigParams.from_prior(self, n)
+        for i in range(n):
+            posteriors[i:].update(
+                np.tile(x[i : i + 1], (n - i, 1)),
+                np.tile(y[i : i + 1], (n - i,)),
+            )
+
+        return posteriors
 
 
 @dataclass(slots=True)
@@ -921,21 +953,7 @@ class NigParams:
         assert logpdf.shape == (t,)
         return logpdf
 
-    def _validate_axis_t_arg(self, x: np.ndarray) -> None:
-        t = len(self.mean)
-        n = len(x)
-        if n != t:
-            msg = (
-                f"in axis='t' mode, x, which has {n} rows, must have the same"
-                f" number of rows as there are models ({t})"
-            )
-            raise ValueError(msg)
-
-    def mvt_mean(
-        self,
-        x: np.ndarray,
-        axis: Literal["n", "t"] = "n",
-    ) -> np.ndarray:
+    def mvt_mean(self, x: np.ndarray) -> np.ndarray:
         """
         Calculate the expected value of y given x using t independent Bayesian
         linear regression models with NIG priors.
@@ -944,35 +962,19 @@ class NigParams:
         obtained from mvt_logpdf.
 
         Args:
-            x: array of predictor variables; (n, p) if axis == 'n', otherwise
-                must be shape (t, p) if axis == 't' (i.e. have the same number
-                of rows as models).
-            axis: Axis along which to calculate the expected values. If 'n',
-                returns the expected value for each model across all
-                observations. If 't', returns the expected value of each
-                observation given the corresponding model index.
+            x: array of predictor variables of shape (t, p).
 
         Returns:
-            Array of expected values; has shape (t, n) if `axis == 'n'` or
-            shape (t,) if `axis == 't'`.
+            Array of expected values of has shape (t,).
         """
-        if axis not in "nt":
-            raise ValueError("axis must be 'n' or 't'")
-
         self._validate_x_arg(x)
-        if axis == "n":
-            return self._mvt_mean(x)
-
-        self._validate_axis_t_arg(x)
 
         # The dot products between the rows of x and self.mean
-        return np.einsum("tp,tp->t", x, self.mean)
+        pred_mean = np.einsum("tp,tp->t", x, self.mean)
+        assert pred_mean.shape == (len(x),)
+        return pred_mean
 
-    def mvt_variance(
-        self,
-        x: np.ndarray,
-        axis: Literal["n", "t"] = "n",
-    ) -> np.ndarray:
+    def mvt_variance(self, x: np.ndarray) -> np.ndarray:
         """
         Calculate the variances of y given x using t independent Bayesian
         linear regression models with NIG priors.
@@ -987,112 +989,18 @@ class NigParams:
         Eq. 26.
 
         Args:
-            x: array of predictor variables; (n, p) if axis == 'n', otherwise
-                must be shape (t, p) if axis == 't' (i.e. have the same number
-                of rows as models).
-            axis: Axis along which to calculate the variances. If 'n', returns
-                the variance for each model across all observations. If 't',
-                returns the variance of each observation given the
-                corresponding model index.
+            x: array of predictor variables; (t, p).
 
         Returns:
-            Array of variances; has shape (t, n) if `axis == 'n'` or shape
-            (t,) if `axis == 't'`.
+            Array of variances of shape (t,).
         """
-        if axis not in "nt":
-            raise ValueError("axis must be 'n' or 't'")
-
         self._validate_x_arg(x)
-
         coeff = self.scale / (self.shape - 1)
 
-        if axis == "n":
-            # Product across columns: (t, 1) * (t, n) -> (t, n)
-            var = coeff.reshape(-1, 1) * (1 + self._xvx_product(x))
-            assert var.shape == (self.mean.shape[0], len(x))
-            return var
-
-        self._validate_axis_t_arg(x)
-
         # Compute x[i]^T @ V[i] @ x[i] for i = 1...t
-        # This is equivalent to the diagonal of the value when axis == "n"
-        xvx = np.einsum("tij,tj,ti->t", self.cov, x, x)
+        xvx = np.einsum("tij,ti,tj->t", self.cov, x, x)
         assert xvx.shape == (len(x),)
         return coeff / (1 + xvx)
-
-    def fit_regression(
-        self,
-        x: np.ndarray,
-        y: np.ndarray,
-        *,
-        include_prior: bool = False,
-    ) -> "NigParams":
-        """
-        Fit a Bayesian linear regression model using this NIG prior.
-
-        Returns the NIG posterior over the parameters after observing each
-        datapoint.
-
-        ```python
-        prior = NigPrior(2)
-        # x.shape == is (n, 2) and y.shape == (n,)
-        posteriors = NigParams.from_prior(prior, 1).fit_regression(x, y)
-
-        # The MAP estimate for the regression coefficients is the mean of the
-        # final posterior distribution (this is also the mean of the marginal
-        # posterior over β):
-        beta = posteriors.mean[-1]
-
-        # Compute the mean and variance  of the predictive distribution after
-        # each observation
-        mean = posteriors.mvt_mean(x, axis="t")
-        var = posteriors.mvt_variance(x, axis="t")
-        ```
-
-        Note that if the prior shape if small enough (< 1), then the variance
-        may be negative for the first observation or two.
-
-        Args:
-            x: (n, p) array of predictor variables.
-            y: (n,) array of response variables.
-            include_prior: If `True`, include the prior in the result.
-
-        Returns:
-            NigParams object with `n` distributions, representing the joint
-            posterior distribution over β and σ² after observing each (x, y).
-            If `include_prior=True`, then returns object with `n + 1`
-            distributions, where the first is the prior.
-        """
-        self._validate_x_arg(x)
-        n, p = x.shape
-        _check_array_shape_and_dtype("y", y, (n,))
-
-        if self.mean.shape[0] != 1:
-            msg = "can only fit regression model from a single prior"
-            raise ValueError(msg)
-
-        prior = NigPrior(
-            p=p,
-            cov=self.cov[0],
-            mean=self.mean[0],
-            shape=self.shape[0],
-            scale=self.scale[0],
-        )
-
-        if include_prior:
-            num_params = n + 1
-            t_start = 1
-        else:
-            num_params = n
-            t_start = 0
-
-        params = NigParams.from_prior(prior, num_params)
-        for t, (xt, yt) in enumerate(zip(x, y, strict=True), start=t_start):
-            assert xt.ndim == 1, xt.shape
-            assert np.isscalar(yt), yt
-            params[t:].update(xt.reshape(1, -1), np.atleast_1d(yt))
-
-        return params
 
     def var_beta(self) -> np.ndarray:
         """

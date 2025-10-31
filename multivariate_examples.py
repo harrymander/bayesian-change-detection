@@ -14,7 +14,6 @@ from matplotlib.lines import Line2D
 from bayesian_change_detection import multivariate_bcdm as _multivariate_bcdm
 from bayesian_change_detection.multivariate import (
     MultivariateBcdmResults,
-    NigParams,
     NigPrior,
 )
 from examples import generate_random_piecewise_data
@@ -374,10 +373,10 @@ def predict_segment(
     x: np.ndarray,
     y: np.ndarray,
 ) -> tuple[np.ndarray, np.ndarray]:
-    model = NigParams.from_prior(prior, 1).fit_regression(x, y)
-    var = model.mvt_variance(x, axis="t")
+    posteriors = prior.fit_regression(x, y)
+    var = posteriors.mvt_variance(x)
     var[var < 0] = np.nan
-    return model.mvt_mean(x, axis="t"), var
+    return posteriors.mvt_mean(x), var
 
 
 def atleast_2d_col(x: np.ndarray) -> np.ndarray:
