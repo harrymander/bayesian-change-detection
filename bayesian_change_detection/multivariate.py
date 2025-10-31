@@ -415,16 +415,13 @@ class _MultivariateBcdmWorker:
         # direction to `self.log_joint`, so `params_view` takes a reversed view
         # over the current possible run lengths such that `params_view[0]`
         # corresponds to the parameters for a new run.
-        if t < self.max_run_length:
-            params_view = self.params[: t + 1][::-1]
-        else:
-            # Drop self.params[0], which corresponds to the predictive
-            # distribution for max_run_length + 1, then set self.params[-1] to
+        params_view = self.params[: t + 1][::-1]
+        if t >= self.max_run_length:
+            # Drop params_view[-1], which corresponds to the predictive
+            # distribution for max_run_length + 1, then params_view[0] to
             # the prior.
-            self.params[:-1] = self.params[1:]
-            self.params[-1:] = self.prior_params
-
-            params_view = self.params[::-1]
+            params_view[1:] = params_view[:-1]
+            params_view[:1] = self.prior_params
 
         prev_log_joint = self.log_joint[t - 1]
 
