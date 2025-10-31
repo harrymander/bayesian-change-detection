@@ -87,15 +87,12 @@ class TestNigParams:
             getattr(self.params_updated_with_1d_regressor, attrname),
         )
 
-    # def test_mvt_logpdf_snapshot(self, ndarray_snapshot: NDArraySnapshot):
-    #     n = 500
-    #     rng = np.random.default_rng(1234)
-    #     x: np.ndarray = rng.normal(size=(n, self.p))
-    #     y: np.ndarray = rng.normal(size=(n,))
-    #     logpdf = self._mvt_logpdf_iterative(
-    #         self.iteratively_updated_params, x, y
-    #     )
-    #     assert_allclose(logpdf, ndarray_snapshot(logpdf))
+    def test_mvt_logpdf_snapshot(self, ndarray_snapshot: NDArraySnapshot):
+        rng = np.random.default_rng(1234)
+        x: np.ndarray = rng.normal(size=(self.n, self.p))
+        y: np.ndarray = rng.normal(size=(self.n,))
+        logpdf = self.params_updated_with_1d_regressor.mvt_logpdf(x, y)
+        assert_allclose(logpdf, ndarray_snapshot(logpdf))
 
     # def test_iteratively_and_batch_computed_mvt_logpdf_are_equivalent(
     #     self,
