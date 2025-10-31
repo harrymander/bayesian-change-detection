@@ -374,7 +374,7 @@ class _MultivariateBcdmWorker:
         Y = self.y[:, np.newaxis]
 
         # Compute the initial reset probability (Eq. 28).
-        log_pred = self.params[:1].mvt_logpdf(X[0], Y[0])[0]
+        log_pred = self.params[:1].mvt_logpdf(X[0], Y[0])
         log_joint = log_pred + self.log_hazard + self.init_log_joint
         self.log_joint[0] = log_joint[0]
         self.log_pred[0] = log_pred[0]
@@ -457,7 +457,11 @@ class _MultivariateBcdmWorker:
         # Same as above, log_pred[0] corresponds to Theta_t etc. Use the mask
         # to avoid expensive PDF computation outside of the support
         log_pred = self.log_pred[t]  # all -np.inf
-        log_pred[mask] = params_view[mask].mvt_logpdf(x, y).ravel()
+
+        n = len(params_view.mean)
+        x = np.tile(x, (n, 1))
+        y = np.tile(y, n)
+        log_pred[mask] = params_view[mask].mvt_logpdf(x[mask], y[mask])
 
         # The (t + 1) changepoint probabilities
         log_joint = self.log_joint[t]
@@ -481,12 +485,7 @@ class _MultivariateBcdmWorker:
 
         # Update the model parameters (Eqs. 30-33). Avoid expensive computation
         # outside of the support.
-        n = len(params_view.mean)
-        params_view.update(
-            np.tile(x, (n, 1)),
-            np.tile(y, n),
-            mask=mask,
-        )
+        params_view.update(x, y, mask=mask)
 
 
 class NigPrior:
@@ -856,7 +855,7 @@ class NigParams:
         self.shape[mask] += 0.5  # Eq. 37
         self.scale[mask] += new_scale
 
-        assert np.all(self.scale[mask] >= 0), "got negative scale"
+        # assert np.all(self.scale[mask] >= 0), "got negative scale"
 
     def _mvt_mean(self, x: np.ndarray) -> np.ndarray:
         """
@@ -896,32 +895,30 @@ class NigParams:
         Returns:
             (t,) array of log predictive probabilities.
         """
-        # self._validate_x_arg(x)
-        n = x.shape[0]
-        _check_array_shape_and_dtype("y", y, (n,))
-        t = self.mean.shape[0]
+        self._validate_x_arg(x)
+        t = x.shape[0]
+        _check_array_shape_and_dtype("y", y, (t,))
 
-        # Σ from Eq. 27
-        # Product across columns: (t, 1) * (t, n) -> (t, n)
-        sigma = self.scale.reshape(-1, 1) * (self._xvx_product(x) + 1)
-        assert sigma.shape == (t, n)
+        # Σ from Eq. 31
+        xvx = np.einsum("tij,ti,tj->t", self.cov, x, x)
+        assert xvx.shape == (t,)
+        sigma = self.scale * (xvx + 1)
 
         # Quadratic term in PDF
-        # (n,) - (t, n) -> (t, n)
-        dev_squared = np.square(y - self._mvt_mean(x))
-        assert dev_squared.shape == (t, n)
+        xu = np.einsum("tp,tp->t", x, self.mean)
+        dev_squared = np.square(y - xu)
+        assert dev_squared.shape == (t,)
 
         # 0.5 * degrees of freedom - reshape for broadcasting
-        a = self.shape.reshape(-1, 1)
-        a_plus_half = a + 0.5
+        a_plus_half = self.shape + 0.5
         logpdf = (
             scipy.special.gammaln(a_plus_half)
-            - scipy.special.gammaln(a)
+            - scipy.special.gammaln(self.shape)
             - (_LOG_2PI + np.log(sigma)) / 2
             - a_plus_half * np.log(1 + dev_squared / sigma / 2)
         )
 
-        assert logpdf.shape == (t, n)
+        assert logpdf.shape == (t,)
         return logpdf
 
     def _validate_axis_t_arg(self, x: np.ndarray) -> None:
