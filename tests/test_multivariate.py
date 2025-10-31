@@ -186,7 +186,7 @@ class BcdmTester(ABC):
         nans = np.isnan(parameters).reshape((parameters.shape[0], -1))
         support = self.results.joint_support
         assert_array_equal_strict(
-            support[support.n - 1],
+            support[support.shape[0] - 1],
             ~nans.all(axis=1),
             err_msg="Support mask does not match position of NaNs",
         )

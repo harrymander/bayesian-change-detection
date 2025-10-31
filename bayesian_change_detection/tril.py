@@ -24,9 +24,19 @@ import numpy as np
 from numpy.typing import DTypeLike
 
 
-def tril_size(n: int) -> int:
-    """Returns the number of lower-triangular elements in an (n, n) matrix."""
+def tril_square_size(n: int) -> int:
     return n * (n + 1) // 2
+
+
+def tril_size(n: int, m: int) -> int:
+    """
+    Returns the number of lower-triangular elements in an (n, m) matrix. If `m`
+    is None, then assumed to be same as `n`.
+    """
+    square_size = tril_square_size(n)
+    if m >= n:
+        return square_size
+    return square_size - tril_square_size(n - m)
 
 
 class TrilArray:
@@ -43,17 +53,26 @@ class TrilArray:
     will be the zero value of the dtype of `data`.
     """
 
-    __slots__ = ["_data", "_n", "upper_val"]
+    __slots__ = ["_data", "_m", "_n", "upper_val"]
 
-    def __init__(self, n: int, data: np.ndarray, upper_val: Any = None):
+    def __init__(
+        self,
+        n: int,
+        m: int,
+        data: np.ndarray,
+        upper_val: Any = None,
+    ):
         """Do not instantiate directly - use tril_full"""
         self._n = n
+        self._m = m
         self._data = data
         self.upper_val = upper_val
 
     @property
-    def n(self) -> int:
-        """Number of rows (also the number of columns)."""
+    def shape(self) -> tuple[int, int]:
+        return (self._n, self._m)
+
+    def __len__(self) -> int:
         return self._n
 
     @property
@@ -62,8 +81,8 @@ class TrilArray:
         return self._data
 
     def _row_slice(self, i: int) -> np.ndarray:
-        n = tril_size(i)
-        return self._data[n : n + i + 1]
+        n = tril_size(i, self._m)
+        return self._data[n : n + min(i + 1, self._m)]
 
     def __getitem__(self, i: int) -> np.ndarray:
         """
@@ -89,9 +108,9 @@ class TrilArray:
         if upper_val is None:
             upper_val = np.zeros((), dtype=dtype)
 
-        full = np.empty((self._n, self._n), dtype=dtype)
-        full[np.tril_indices_from(full)] = data
-        full[np.triu_indices_from(full, 1)] = upper_val
+        full = np.empty((self._n, self._m), dtype=dtype)
+        full[np.tril_indices(self._n, 0, self._m)] = data
+        full[np.triu_indices(self._n, 1, self._m)] = upper_val
         return full
 
     def __repr__(self) -> str:
@@ -116,24 +135,33 @@ class _ArrayCreator(Protocol):
 
 def _new_tril(
     n: int,
+    m: int | None,
     f: _ArrayCreator,
     upper_val: Any,
     dtype: DTypeLike,
 ) -> TrilArray:
     if n <= 0:
         raise ValueError("n must be > 0")
-    return TrilArray(n, f(tril_size(n), dtype=dtype), upper_val)
+
+    if m is None:
+        m = n
+    elif m <= 0:
+        raise ValueError("m must be > 0")
+
+    return TrilArray(n, m, f(tril_size(n, m), dtype=dtype), upper_val)
 
 
 def tril_full(
     n: int,
     val: Any,
+    m: int | None = None,
     *,
     upper_val: Any = None,
     dtype: DTypeLike = np.float64,
 ) -> TrilArray:
     return _new_tril(
         n,
+        m,
         lambda size, dtype: np.full(size, val, dtype=dtype),
         upper_val,
         dtype,
@@ -142,8 +170,9 @@ def tril_full(
 
 def tril_empty(
     n: int,
+    m: int | None = None,
     *,
     upper_val: Any = None,
     dtype: DTypeLike = np.float64,
 ) -> TrilArray:
-    return _new_tril(n, np.empty, upper_val, dtype)
+    return _new_tril(n, m, np.empty, upper_val, dtype)

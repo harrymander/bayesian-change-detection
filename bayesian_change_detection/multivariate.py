@@ -299,8 +299,9 @@ class MultivariateBcdmResults:
             last indices, which may be changepoints.
         """
         probs = self.log_joint
-        run_length = probs[probs.n - 1].argmax().item()
-        i = probs.n - 1 - run_length
+        n = probs.shape[0]
+        run_length = probs[n - 1].argmax().item()
+        i = n - 1 - run_length
         changepoints = []
         while i > 0:
             changepoints.append(i)
@@ -383,7 +384,7 @@ class _MultivariateBcdmWorker:
                 self.update_hook(t, x, y, self)
 
         joint_support = self.joint_support
-        nan_mask = ~joint_support[joint_support.n - 1]
+        nan_mask = ~joint_support[joint_support.shape[0] - 1]
 
         def _mask_to_nan(a: np.ndarray) -> np.ndarray:
             a[nan_mask] = np.nan
