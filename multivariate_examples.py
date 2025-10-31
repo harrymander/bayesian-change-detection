@@ -47,12 +47,13 @@ def plot_probabilities(
     time_axis: int = 0,
     **kwargs,
 ) -> tuple[np.ndarray, AxesImage]:
-    if time_axis == 0:
-        log_probabilities = log_probabilities.T
-    elif time_axis != 1:
+    if time_axis not in (0, 1):
         raise ValueError("time_axis must be 0 or 1")
 
-    samples = len(log_probabilities)
+    samples: int = log_probabilities.shape[time_axis]
+    if time_axis == 0:
+        log_probabilities = log_probabilities.T
+
     if x is None:
         x = np.arange(samples)
     elif x.shape != (samples,):
@@ -275,7 +276,7 @@ def well_data_multivarate_bcdm(
 
 def well_data() -> None:
     data = load_well_data()
-    results = well_data_multivarate_bcdm(data, max_num_probs=20)
+    results = well_data_multivarate_bcdm(data, max_run_length=1000)
 
     axes = plt.subplots(2, 1, figsize=FIGSIZE, sharex=True)[1]
     axes[0].plot(data)

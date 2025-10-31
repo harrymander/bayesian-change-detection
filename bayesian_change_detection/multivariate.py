@@ -347,7 +347,6 @@ class _MultivariateBcdmWorker:
         self.n, self.p = x.shape
         self.x = x
         self.y = y
-        self.params = NigParams.from_prior(prior, self.n)
         self.log_hazard: float = np.log(hazard)
         self.log_1mhazard: float = np.log1p(-hazard)
         self.init_log_joint = np.log(init_prob) if init_prob else -np.inf
@@ -358,12 +357,16 @@ class _MultivariateBcdmWorker:
         self.max_run_length = max_run_length or self.n
         self.update_hook = update_hook
 
+        # TODO: limit to max_run_length
+        self.params = NigParams.from_prior(prior, self.n)
+
         # To reduce memory usage, store only the lower triangular part of these
         # matrices. TODO: could further reduce memory by limiting number of
         # cols to max_run_length?
-        self.joint_support = tril_full(self.n, True, dtype=bool)
-        self.log_joint = tril_empty(self.n, upper_val=-np.inf)
-        self.log_pred = tril_full(self.n, -np.inf, upper_val=-np.inf)
+        m = self.max_run_length
+        self.joint_support = tril_full(self.n, True, m, dtype=bool)
+        self.log_joint = tril_empty(self.n, m, upper_val=-np.inf)
+        self.log_pred = tril_full(self.n, -np.inf, m, upper_val=-np.inf)
 
     def fit(self) -> MultivariateBcdmResults:
         X = self.x[:, np.newaxis, :]
@@ -390,11 +393,12 @@ class _MultivariateBcdmWorker:
             a[nan_mask] = np.nan
             return a
 
+        params = self.params[-self.max_run_length :]
         return MultivariateBcdmResults(
-            mean=_mask_to_nan(self.params.mean),
-            cov=_mask_to_nan(self.params.cov),
-            shape=_mask_to_nan(self.params.shape),
-            scale=_mask_to_nan(self.params.scale),
+            mean=_mask_to_nan(params.mean),
+            cov=_mask_to_nan(params.cov),
+            shape=_mask_to_nan(params.shape),
+            scale=_mask_to_nan(params.scale),
             log_joint=self.log_joint,
             joint_support=joint_support,
             log_predictive=self.log_pred,
@@ -407,7 +411,9 @@ class _MultivariateBcdmWorker:
         # self.params is stored in the opposite order to `prev_log_joint`, so
         # it is reversed. Therefore params_view[0] corresponds to Theta_t in
         # Eq. 25, and params_view[-1] corresponds to Theta_1.
-        params_view = self.params[: t + 1][::-1]
+        i1 = t + 1
+        i0 = max(0, i1 - self.max_run_length)
+        params_view = self.params[i0:i1][::-1]
 
         prev_log_joint = self.log_joint[t - 1]
 
@@ -416,7 +422,7 @@ class _MultivariateBcdmWorker:
         # the 'hypothesis' that a new segment begins after this time step.
         new_mask = self.joint_support[t]
         mask = new_mask[1:]
-        mask[:] = self.joint_support[t - 1]
+        mask[:] = self.joint_support[t - 1][: self.max_run_length - 1]
 
         # Mask out the smallest probability in the previous timestep if
         # `max_num_probs` is set. This maintains a maximum of `max_num_probs`
@@ -437,10 +443,6 @@ class _MultivariateBcdmWorker:
             log_normaliser = scipy.special.logsumexp(prev_log_joint[mask])
             mask[(prev_log_joint - log_normaliser) < self.min_log_prob] = False
 
-        # Mask out run lengths greater than the max (subtract 1 because there
-        # is already a True from first index of new_mask)
-        mask[self.max_run_length - 1 :] = False
-
         mask = new_mask
 
         # Same as above, log_pred[0] corresponds to Theta_t etc. Use the mask
@@ -453,14 +455,20 @@ class _MultivariateBcdmWorker:
 
         # Reset probability.
         log_joint[0] = scipy.special.logsumexp(
-            log_pred[0] + self.log_hazard + prev_log_joint[mask[1:]]
+            log_pred[0]
+            + self.log_hazard
+            + prev_log_joint[: self.max_run_length - 1][mask[1:]]
         )
 
         # Growth probabilities. Will be -inf where log_pred is -inf.
         # TODO(?): could also mask out over the -inf points, but probably
         # faster to just perform the computation and let the -inf come out in
         # the addition. Need to profile.
-        log_joint[1:] = log_pred[1:] + self.log_1mhazard + prev_log_joint
+        log_joint[1:] = (
+            log_pred[1:]
+            + self.log_1mhazard
+            + prev_log_joint[: self.max_run_length - 1]
+        )
 
         # Update the model parameters (Eqs. 30-33). Avoid expensive computation
         # outside of the support.
