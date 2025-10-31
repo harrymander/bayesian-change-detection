@@ -831,9 +831,9 @@ class NigParams:
         # -> (t, p, 1)
 
         # (t, p, p) @ (t, p) -> (t, p)
-        prec_mean_0 = np.einsum("tij,tj->tj", prec0, mean0)
+        prec_mean_0 = np.einsum("tij,ti->tj", prec0, mean0)
         assert prec_mean_0.shape == (t, p)
-        new_mean = np.einsum("tij,tj->tj", new_cov, (prec_mean_0 + xy))
+        new_mean = np.einsum("tij,ti->tj", new_cov, (prec_mean_0 + xy))
         assert new_mean.shape == (t, p)
 
         # Eq. 38 first term in parentheses
@@ -841,7 +841,7 @@ class NigParams:
         assert mean_prec_mean_0.shape == (t,)
 
         # as above, final term in parentheses
-        new_prec_mean = np.einsum("tij,tj->tj", new_prec, new_mean)
+        new_prec_mean = np.einsum("tij,ti->tj", new_prec, new_mean)
         new_mean_prec_mean = np.einsum("ti,ti->t", new_mean, new_prec_mean)
         assert new_mean_prec_mean.shape == (t,)
 
@@ -855,7 +855,7 @@ class NigParams:
         self.shape[mask] += 0.5  # Eq. 37
         self.scale[mask] += new_scale
 
-        # assert np.all(self.scale[mask] >= 0), "got negative scale"
+        assert np.all(self.scale[mask] >= 0), "got negative scale"
 
     def _mvt_mean(self, x: np.ndarray) -> np.ndarray:
         """
