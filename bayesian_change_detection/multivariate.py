@@ -597,8 +597,8 @@ class NigPrior:
 
     def fit_regression(
         self,
-        x: NDArray[np.floating],
-        y: NDArray[np.floating],
+        x: FloatArray,
+        y: FloatArray,
     ) -> "NigParams":
         """
         Fit a Bayesian linear regression model using this NIG prior.
@@ -819,9 +819,9 @@ class NigParams:
 
     def _validate_xy_args(
         self,
-        x: NDArray[np.floating],
-        y: NDArray[np.floating] | float | np.floating,
-    ) -> tuple[int, NDArray[np.floating], NDArray[np.floating]]:
+        x: FloatArray,
+        y: FloatArray | float | np.floating,
+    ) -> tuple[int, FloatArray, FloatArray]:
         """Return original dimensionality (1 or 2), x, y."""
         self._validate_x_arg(x)
         ndim = x.ndim
@@ -845,12 +845,12 @@ class NigParams:
                 (t,),
             )
 
-        return ndim, x, cast(NDArray[np.floating], y)
+        return ndim, x, cast(FloatArray, y)
 
     def update(
         self,
-        x: NDArray[np.floating],
-        y: NDArray[np.floating] | float | np.floating,
+        x: FloatArray,
+        y: FloatArray | float | np.floating,
         *,
         mask: Any = None,
     ) -> None:
@@ -879,7 +879,7 @@ class NigParams:
 
         t = len(mean0)
         n, p = x.shape
-        y = cast(NDArray[np.floating], y)
+        y = cast(FloatArray, y)
 
         # Given x = [... xi ...], perform outer product for each row.
         # (t, p) @ (t, p) -> (t, p, p)
@@ -943,9 +943,9 @@ class NigParams:
 
     def predictive_logpdf(
         self,
-        x: NDArray[np.floating],
-        y: NDArray[np.floating] | float | np.floating,
-    ) -> NDArray[np.floating]:
+        x: FloatArray,
+        y: FloatArray | float | np.floating,
+    ) -> FloatArray:
         """
         Calculate the log PDFs of the predictive distributions of t independent
         Bayesian linear regression models using self as the NIG priors. The
@@ -989,8 +989,8 @@ class NigParams:
     @deprecated("Use predictive_logpdf instead")
     def mvt_logpdf(
         self,
-        x: NDArray[np.floating],
-        y: NDArray[np.floating] | float | np.floating,
+        x: FloatArray,
+        y: FloatArray | float | np.floating,
     ) -> np.ndarray:
         """
         See `predictive_logpdf`.

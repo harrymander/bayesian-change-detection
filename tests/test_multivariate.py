@@ -6,13 +6,16 @@ import numpy as np
 import numpy.testing
 import pytest
 import scipy
-from numpy.typing import NDArray
 
 from bayesian_change_detection import (
     MultivariateBcdmResults,
     multivariate_bcdm,
 )
-from bayesian_change_detection.multivariate import NigParams, NigPrior
+from bayesian_change_detection.multivariate import (
+    FloatArray,
+    NigParams,
+    NigPrior,
+)
 from bayesian_change_detection.tril import TrilArray
 from tests.conftest import JsonSnapshot, NDArraySnapshot
 from tests.utils import (
@@ -69,7 +72,7 @@ class TestNigParams:
                 np.tile(np.atleast_1d(yt), (n,)),
             )
             cls.params_updated_with_1d_regressor.update(
-                cast(NDArray[np.floating], xt),
+                cast(FloatArray, xt),
                 cast(np.floating, yt),
             )
 
