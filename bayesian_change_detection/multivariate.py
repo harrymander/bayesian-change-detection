@@ -1,3 +1,4 @@
+import warnings
 from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Any, Protocol, TypedDict, Unpack, cast, overload
@@ -5,6 +6,7 @@ from typing import Any, Protocol, TypedDict, Unpack, cast, overload
 import numpy as np
 import scipy
 from numpy.typing import NDArray
+from typing_extensions import deprecated
 
 from bayesian_change_detection.array_utils import masked_argmin
 from bayesian_change_detection.linalg import (
@@ -374,7 +376,7 @@ class _MultivariateBcdmWorker:
         Y = self.y[:, np.newaxis]
 
         # Compute the initial reset probability (Eq. 28).
-        log_pred = self.params[:1].mvt_logpdf(X[0], Y[0])
+        log_pred = self.params[:1].predictive_logpdf(X[0], Y[0])
         log_joint = log_pred + self.log_hazard + self.init_log_joint
         self.log_joint[0] = log_joint[0]
         self.log_pred[0] = log_pred[0]
@@ -461,7 +463,7 @@ class _MultivariateBcdmWorker:
         n = len(params_view.mean)
         x = np.tile(x, (n, 1))
         y = np.tile(y, n)
-        log_pred[mask] = params_view[mask].mvt_logpdf(x[mask], y[mask])
+        log_pred[mask] = params_view[mask].predictive_logpdf(x[mask], y[mask])
 
         # The (t + 1) changepoint probabilities
         log_joint = self.log_joint[t]
@@ -939,15 +941,16 @@ class NigParams:
 
         assert np.all(self.scale[mask] >= 0), "got negative scale"
 
-    def mvt_logpdf(
+    def predictive_logpdf(
         self,
         x: NDArray[np.floating],
         y: NDArray[np.floating] | float | np.floating,
-    ) -> np.ndarray:
+    ) -> NDArray[np.floating]:
         """
         Calculate the log PDFs of the predictive distributions of t independent
-        Bayesian linear regression models using self as the NIG priors.
-        (Logarithm of Eq. 27.)
+        Bayesian linear regression models using self as the NIG priors. The
+        Given an NIG prior, the predictive distribution of y is a multivariate
+        Student's t-distribution.
 
         Args:
             x: (t, p) or (p,) array of predictor variable(s).
@@ -982,6 +985,22 @@ class NigParams:
 
         assert logpdf.shape == (t,)
         return logpdf
+
+    @deprecated("Use predictive_logpdf instead")
+    def mvt_logpdf(
+        self,
+        x: NDArray[np.floating],
+        y: NDArray[np.floating] | float | np.floating,
+    ) -> np.ndarray:
+        """
+        See `predictive_logpdf`.
+        """
+        warnings.warn(
+            "mvt_logpdf is deprecated, use predictive_logpdf instead",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return self.predictive_logpdf(x, y)
 
     def mvt_mean(self, x: np.ndarray) -> np.ndarray:
         """

@@ -87,27 +87,33 @@ class TestNigParams:
             getattr(self.params_updated_with_1d_regressor, attrname),
         )
 
-    def test_mvt_logpdf_snapshot(self, ndarray_snapshot: NDArraySnapshot):
+    def test_predictive_logpdf_snapshot(
+        self, ndarray_snapshot: NDArraySnapshot
+    ):
         rng = np.random.default_rng(1234)
         x: np.ndarray = rng.normal(size=(self.n, self.p))
         y: np.ndarray = rng.normal(size=(self.n,))
-        logpdf = self.params_updated_with_1d_regressor.mvt_logpdf(x, y)
+        logpdf = self.params_updated_with_1d_regressor.predictive_logpdf(x, y)
         assert_allclose(logpdf, ndarray_snapshot(logpdf))
 
-    def test_mvt_logpdf_with_1d_and_2d_repeated_params_are_equvalent(
+    def test_predictive_logpdf_with_1d_and_2d_repeated_params_are_equvalent(
         self,
     ) -> None:
         rng = np.random.default_rng(1234)
         x = rng.normal(size=self.p)
         y = rng.normal()
 
-        logpdf_1d = self.params_updated_with_1d_regressor.mvt_logpdf(x, y)
+        logpdf_1d = self.params_updated_with_1d_regressor.predictive_logpdf(
+            x, y
+        )
 
         xx = np.tile(x.reshape(1, -1), (self.n, 1))
         assert xx.shape == (self.n, self.p)
         yy = np.repeat(y, self.n)
         assert yy.shape == (self.n,)
-        logpdf_2d = self.params_updated_with_1d_regressor.mvt_logpdf(xx, yy)
+        logpdf_2d = self.params_updated_with_1d_regressor.predictive_logpdf(
+            xx, yy
+        )
 
         assert_array_equal_strict(logpdf_1d, logpdf_2d)
 
