@@ -23,9 +23,11 @@ FIGSIZE = (20, 10)
 DATA_DIR = Path(__file__).parent / "data"
 
 
-def multivariate_bcdm(x, y, **kwargs) -> MultivariateBcdmResults:
+def multivariate_bcdm(
+    x, y, *, progress_desc: str | None = None, **kwargs
+) -> MultivariateBcdmResults:
     """Wrap multivariate_bcdm with progress bar."""
-    with tqdm.tqdm(total=len(x), unit="") as pbar:
+    with tqdm.tqdm(total=len(x), unit="", desc=progress_desc) as pbar:
         return _multivariate_bcdm(
             x,
             y,
@@ -310,13 +312,13 @@ def well_data() -> None:
             )
 
 
-def well_data_support_compare() -> None:
+def well_data_params_compare() -> None:
     data = load_well_data()
 
     results = [
         (
-            ", ".join(f"{k}={v}" for k, v in kw.items()),
-            well_data_multivarate_bcdm(data, **kw),
+            name := ", ".join(f"{k}={v}" for k, v in kw.items()),
+            well_data_multivarate_bcdm(data, **kw, progress_desc=name),
         )
         for kw in (
             dict(max_num_probs=None),
@@ -409,7 +411,7 @@ EXAMPLES = {
     "random": random_piecewise,
     "triangular": triangular,
     "well": well_data,
-    "well-support-compare": well_data_support_compare,
+    "well-params-compare": well_data_params_compare,
 }
 
 
