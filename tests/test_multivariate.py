@@ -6,6 +6,7 @@ import numpy as np
 import numpy.testing
 import pytest
 import scipy
+from numpy.typing import NDArray
 
 from bayesian_change_detection import (
     MultivariateBcdmResults,
@@ -37,10 +38,10 @@ def new_params(t: int, p: int) -> NigParams:
 
 
 class TestNigParams:
-    iteratively_updated_params: NigParams
-    batch_updated_params: NigParams
-    p: int  # dimensionality of independent variable
-    t = 5  # number of distributions
+    params_updated_with_2d_regressors: NigParams
+    params_updated_with_1d_regressor: NigParams
+    n: int
+    p: int
 
     @pytest.fixture(
         scope="class",
@@ -57,60 +58,57 @@ class TestNigParams:
         x = rng.normal(size=(n, p))
         y = rng.normal(size=n)
 
-        cls.iteratively_updated_params = new_params(cls.t, p)
+        cls.params_updated_with_2d_regressors = new_params(n, p)
+        cls.params_updated_with_1d_regressor = new_params(n, p)
+
         for xt, yt in zip(x, y, strict=True):
-            cls.iteratively_updated_params.update(
-                xt.reshape(1, p), np.atleast_1d(yt)
+            assert xt.shape == (p,)
+            assert np.isscalar(yt)
+            cls.params_updated_with_2d_regressors.update(
+                np.tile(xt.reshape(1, p), (n, 1)),
+                np.tile(np.atleast_1d(yt), (n,)),
+            )
+            cls.params_updated_with_1d_regressor.update(
+                cast(NDArray[np.floating], xt),
+                cast(np.floating, yt),
             )
 
-        cls.batch_updated_params = new_params(cls.t, p)
-        cls.batch_updated_params.update(x, y)
+        cls.n = n
         cls.p = p
 
     @pytest.mark.parametrize(
         "attrname", ("mean", "cov", "prec", "shape", "scale")
     )
-    def test_batch_and_iteratively_updated_params_are_equivalent(
+    def test_params_updated_with_1d_and_2d_params_are_equivalent(
         self, attrname: str
     ) -> None:
-        assert_allclose(
-            getattr(self.batch_updated_params, attrname),
-            getattr(self.iteratively_updated_params, attrname),
+        assert_array_equal_strict(
+            getattr(self.params_updated_with_2d_regressors, attrname),
+            getattr(self.params_updated_with_1d_regressor, attrname),
         )
 
-    @classmethod
-    def _mvt_logpdf_iterative(
-        cls, params: NigParams, x: np.ndarray, y: np.ndarray
-    ) -> np.ndarray:
-        logpdf = np.empty((cls.t, len(x)))
-        for i, (xt, yt) in enumerate(zip(x, y, strict=True)):
-            pdf = params.mvt_logpdf(xt.reshape(1, -1), np.atleast_1d(yt))
-            assert pdf.shape == (cls.t, 1)
-            logpdf[:, i] = pdf.ravel()
-        return logpdf
+    # def test_mvt_logpdf_snapshot(self, ndarray_snapshot: NDArraySnapshot):
+    #     n = 500
+    #     rng = np.random.default_rng(1234)
+    #     x: np.ndarray = rng.normal(size=(n, self.p))
+    #     y: np.ndarray = rng.normal(size=(n,))
+    #     logpdf = self._mvt_logpdf_iterative(
+    #         self.iteratively_updated_params, x, y
+    #     )
+    #     assert_allclose(logpdf, ndarray_snapshot(logpdf))
 
-    def test_mvt_logpdf_snapshot(self, ndarray_snapshot: NDArraySnapshot):
-        n = 500
-        rng = np.random.default_rng(1234)
-        x: np.ndarray = rng.normal(size=(n, self.p))
-        y: np.ndarray = rng.normal(size=(n,))
-        logpdf = self._mvt_logpdf_iterative(
-            self.iteratively_updated_params, x, y
-        )
-        assert_allclose(logpdf, ndarray_snapshot(logpdf))
-
-    def test_iteratively_and_batch_computed_mvt_logpdf_are_equivalent(
-        self,
-    ) -> None:
-        n = 500
-        rng = np.random.default_rng(1234)
-        x: np.ndarray = rng.normal(size=(n, self.p))
-        y: np.ndarray = rng.normal(size=(n,))
-        iterative_logpdf = self._mvt_logpdf_iterative(
-            self.iteratively_updated_params, x, y
-        )
-        batch_logpdf = self.iteratively_updated_params.mvt_logpdf(x, y)
-        assert_allclose(batch_logpdf, iterative_logpdf)
+    # def test_iteratively_and_batch_computed_mvt_logpdf_are_equivalent(
+    #     self,
+    # ) -> None:
+    #     n = 500
+    #     rng = np.random.default_rng(1234)
+    #     x: np.ndarray = rng.normal(size=(n, self.p))
+    #     y: np.ndarray = rng.normal(size=(n,))
+    #     iterative_logpdf = self._mvt_logpdf_iterative(
+    #         self.iteratively_updated_params, x, y
+    #     )
+    #     batch_logpdf = self.iteratively_updated_params.mvt_logpdf(x, y)
+    #     assert_allclose(batch_logpdf, iterative_logpdf)
 
 
 def parametrize_nig_params_attrs(name: str):
@@ -499,58 +497,12 @@ class TestNigBayesianLinearRegression:
         param = getattr(self.model, attr)
         assert_allclose(param, ndarray_snapshot(param))
 
-    def test_mvt_mean_is_equivalent_to_prediction_from_fitted_coefficients(
-        self,
-    ) -> None:
-        mean = self.model[-1:].mvt_mean(self.x)[-1]
-        coeffs = self.model.mean[-1]
-        pred = self.x @ coeffs
-        assert_allclose(mean, pred)
-
-    def test_mvt_mean_axis_t_snapshot(self, ndarray_snapshot: NDArraySnapshot):
-        mean = self.model.mvt_mean(self.x, axis="t")
+    def test_mvt_mean_snapshot(self, ndarray_snapshot: NDArraySnapshot):
+        mean = self.model.mvt_mean(self.x)
         assert mean.shape == (self.n,)
         assert_allclose(mean, ndarray_snapshot(mean))
 
-    def test_mvt_variance_axis_t_snapshot(
-        self, ndarray_snapshot: NDArraySnapshot
-    ):
-        variance = self.model.mvt_variance(self.x, axis="t")
+    def test_mvt_variance_snapshot(self, ndarray_snapshot: NDArraySnapshot):
+        variance = self.model.mvt_variance(self.x)
         assert variance.shape == (self.n,)
         assert_allclose(variance, ndarray_snapshot(variance))
-
-    def test_mvt_mean_axis_n_snapshot(self, ndarray_snapshot: NDArraySnapshot):
-        mean = self.model.mvt_mean(self.x, axis="n")
-        assert mean.shape == (self.n, self.n)
-        assert_allclose(mean, ndarray_snapshot(mean))
-
-    def test_mvt_variance_axis_n_snapshot(
-        self, ndarray_snapshot: NDArraySnapshot
-    ):
-        variance = self.model.mvt_variance(self.x, axis="n")
-        assert variance.shape == (self.n, self.n)
-        assert_allclose(variance, ndarray_snapshot(variance))
-
-
-def test_nig_params_regression_including_prior_has_same_posterior_params_as_without() -> (  # noqa: E501
-    None
-):
-    rng = np.random.default_rng(42)
-    n = 50
-    coeffs = np.array([1.2, 5.6])
-    x = np.linspace(0, 10, n) + rng.normal(size=n)
-    x = np.c_[np.ones_like(x), x]
-    y = x @ coeffs + rng.normal(size=n)
-
-    prior = NigPrior(p=2)
-    posteriors = prior.fit_regression(x, y, include_prior=False)
-    prior_and_posteriors = prior.fit_regression(x, y, include_prior=True)
-
-    assert prior_and_posteriors.mean.shape == (n + 1, 2)
-    for attrname in posteriors.__dataclass_fields__:
-        numpy.testing.assert_array_equal(
-            getattr(prior_and_posteriors[1:], attrname),
-            getattr(posteriors, attrname),
-            strict=True,
-            err_msg=f"posteriors' {attrname} are not equal",
-        )

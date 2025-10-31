@@ -595,8 +595,8 @@ class NigPrior:
 
     def fit_regression(
         self,
-        x: np.ndarray,
-        y: np.ndarray,
+        x: NDArray[np.floating],
+        y: NDArray[np.floating],
     ) -> "NigParams":
         """
         Fit a Bayesian linear regression model using this NIG prior.
@@ -624,7 +624,8 @@ class NigPrior:
         may be negative for the first observation or two.
 
         Args:
-            x: (n, p) array of predictor variables.
+            x: (n, p) or (n,) array of predictor variables. In the latter case,
+                p is assumed to be 1.
             y: (n,) array of response variables.
             include_prior: If `True`, include the prior in the result.
 
@@ -632,14 +633,22 @@ class NigPrior:
             NigParams object with `n` distributions, representing the joint
             posterior distribution over β and σ² after observing each (x, y).
         """
-        n, _ = x.shape
-        assert y.shape == (n,)
+        if x.ndim not in (1, 2):
+            raise ValueError("x must be a 1- or 2D array")
+
+        n = len(x)
+        x = x.reshape(n, -1)
+        p = x.shape[1]
+        if p != self.p:
+            msg = f"x has wrong number of features, expected {self.p}, got {p}"
+            raise ValueError(msg)
+
+        if y.shape != (n,):
+            raise ValueError("y must be 1D array of same length as x")
+
         posteriors = NigParams.from_prior(self, n)
-        for i in range(n):
-            posteriors[i:].update(
-                np.tile(x[i : i + 1], (n - i, 1)),
-                np.tile(y[i : i + 1], (n - i,)),
-            )
+        for i, (xi, yi) in enumerate(zip(x, y, strict=True)):
+            posteriors[i:].update(xi, yi)
 
         return posteriors
 
@@ -787,28 +796,40 @@ class NigParams:
             scale=self.scale[i],
         )
 
-    def _validate_x_arg(self, x: np.ndarray) -> None:
-        exp_shape = self.mean.shape
-        if x.shape != exp_shape:
-            msg = (
-                f"expected predictor array of shape {exp_shape}, got {x.shape}"
-            )
-            raise ValueError(msg)
+    def _validate_x_arg(self, x: NDArray[Any]) -> None:
+        if x.ndim == 1:
+            p = len(x)
+            exp_p = self.mean.shape[1]
+            if p != exp_p:
+                msg = (
+                    f"got 1D predictor array of length {p} where "
+                    f"dimensionality of distribution is {exp_p}"
+                )
+                raise ValueError(msg)
+        else:
+            exp_shape = self.mean.shape
+            if x.shape != exp_shape:
+                msg = (
+                    f"expected predictor array of shape {exp_shape}, "
+                    f"got {x.shape}"
+                )
+                raise ValueError(msg)
 
-        if x.ndim != 2:
-            raise ValueError("x must be 2-D")
-        xp = x.shape[1]
-        p = self.mean.shape[1]
-        if xp != p:
-            raise ValueError(f"expected {p}-dimensional predictors, got {xp}")
-
-    def update(self, x: np.ndarray, y: np.ndarray, *, mask=None) -> None:
+    def update(
+        self,
+        x: NDArray[np.floating],
+        y: NDArray[np.floating] | float | np.floating,
+        *,
+        mask: Any = None,
+    ) -> None:
         """
-        Update sufficient statistics given t new observations (x, y).
+        Update sufficient statistics given t new observations (or a single
+        observation that is broadcast across all t distributions) of (x, y) .
 
         Args:
-            x: (t, p) array of independent (predictor) variables.
-            y: (t,) array of dependent (response) variables.
+            x: (t, p) or (p,) array of independent (predictor) variables.
+            y: (t,) array of dependent (response) variables, or a single scalar
+                value.
             mask: any object that can be used to index into the parameters
                 (e.g. a boolean or index array); sufficient statistics will
                 only be updated for the selected distributions.
@@ -817,26 +838,47 @@ class NigParams:
             mask = ...
 
         self._validate_x_arg(x)
-        t, p = x.shape
-        _check_array_shape_and_dtype("y", y, (t,))
+        ndim = x.ndim
+        if ndim == 1:
+            if not np.isscalar(y):
+                raise ValueError("if x is 1D, y must be a scalar")
+            y = np.atleast_1d(y)
+            n = 1
+            p = len(x)
+            x = x.reshape(n, p)
+        else:
+            assert ndim == 2
+            if np.isscalar(y):
+                raise ValueError("if x is 2D, y must be non-scalar")
 
-        x = x[mask]
-        y = y[mask]
+            t, p = x.shape
+            n = t
+            _check_array_shape_and_dtype(
+                "y",
+                y,  # type: ignore[arg-type]
+                (t,),
+            )
+
         cov0 = self.cov[mask]  # (t, p, p)
         prec0 = self.prec[mask]  # (t, p, p)
         mean0 = self.mean[mask]  # (t, p)
 
-        # x may have reduced in size due to mask, so recompute t
-        t = len(x)
+        t = len(mean0)
+        if ndim == 2:
+            x = x[mask]
+            y = y[mask]  # type: ignore[index]
+            n = len(x)
+
+        y = cast(NDArray[np.floating], y)
 
         # Given x = [... xi ...], perform outer product for each row.
         # (t, p) @ (t, p) -> (t, p, p)
-        xx = np.einsum("ti,tj->tij", x, x)
-        assert xx.shape == (t, p, p)
+        xx = np.einsum("ni,nj->nij", x, x)
+        assert xx.shape == (n, p, p)
 
         # Eq. 35
         new_prec = prec0 + xx
-        assert new_prec.shape == (t, p, p)
+        assert new_prec.shape == (t, p, p), new_prec.shape
 
         if p == 1:
             new_cov = 1 / new_prec
@@ -854,9 +896,9 @@ class NigParams:
 
             assert new_cov.shape == (t, p, p)
 
-        # (t, p) * (t, 1) -> (t, p)
+        # (n, p) * (n, 1) -> (n, p)
         xy = x * y.reshape(-1, 1)
-        assert xy.shape == (t, p)
+        assert xy.shape == (n, p)
 
         # Eq. 36
         # -> (t, p, p) @ (t, p, 1)
@@ -888,31 +930,6 @@ class NigParams:
         self.scale[mask] += new_scale
 
         assert np.all(self.scale[mask] >= 0), "got negative scale"
-
-    def _mvt_mean(self, x: np.ndarray) -> np.ndarray:
-        """
-        Mean of the t-distribution. Assumes has valid shape.
-
-          x(j)^T @ μ(i) for i = 1...t and j=1...n
-        """
-        mean = np.einsum("np,tp->tn", x, self.mean)
-        assert mean.shape == (len(self.mean), len(x))
-        return mean
-
-    def _xvx_product(self, x: np.ndarray) -> np.ndarray:
-        """
-        Computes the quadratic form in the t-distribution shape param (Eq. 26):
-
-          x(j)^T V(i) x(j) for i = 1...t and j=1...n
-
-        where V(i) is the (p, p) covariance matrix of the i-th distribution.
-
-        Returns:
-            (t, n) array
-        """
-        res = np.einsum("tij,nj,ni->tn", self.cov, x, x)
-        assert res.shape == (self.mean.shape[0], len(x))
-        return res
 
     def mvt_logpdf(self, x: np.ndarray, y: np.ndarray) -> np.ndarray:
         """
