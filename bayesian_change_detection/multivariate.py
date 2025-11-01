@@ -213,18 +213,23 @@ def multivariate_bcdm_datagetter(
     if max_num_probs is not None and max_num_probs <= 0:
         raise ValueError("max_num_probs must be > 0")
 
-    if max_run_length is not None and max_run_length <= 0:
-        raise ValueError("max_run_length must be > 0")
-
     if n < 1:
         raise ValueError("n must be >= 1")
 
     if p < 1:
         raise ValueError("p must be >= 1")
 
-    if max_run_length is not None and max_run_length > n:
-        msg = f"max_run_length cannot be greater than number of samples, {n}"
-        raise ValueError(msg)
+    if max_run_length is not None:
+        if max_run_length is not None and max_run_length <= 0:
+            raise ValueError("max_run_length must be > 0")
+
+        if max_run_length > n:
+            msg = f"max_run_length cannot be more than number of samples, {n}"
+            raise ValueError(msg)
+
+        if max_num_probs is not None and max_num_probs > max_run_length:
+            msg = "max_num_probs cannot be more than max_run_length"
+            raise ValueError(msg)
 
     if prior:
         if prior_kwargs:
