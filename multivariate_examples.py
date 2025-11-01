@@ -480,7 +480,23 @@ EXAMPLES: dict[str, Callable[[], Any]] = {
     is_flag=True,
     help="Do not show plot; default if --output specified.",
 )
-def main(examples, output: Path | None, show: bool, no_show: bool) -> None:
+@click.option(
+    "--output-dir",
+    type=click.Path(
+        dir_okay=True,
+        file_okay=False,
+        writable=True,
+        path_type=Path,
+    ),
+    help="""Write all example images to directory with name [dataset].png.""",
+)
+def main(
+    examples,
+    output: Path | None,
+    show: bool,
+    no_show: bool,
+    output_dir: Path | None,
+) -> None:
     if no_show:
         if show:
             raise click.UsageError("Cannot specify both --show and --no-show.")
@@ -488,16 +504,31 @@ def main(examples, output: Path | None, show: bool, no_show: bool) -> None:
     elif not show:
         show = output is None
 
-    if output and len(examples) != 1:
-        raise click.UsageError(
-            "--output can only be specified with a single example"
-        )
+    if output:
+        if len(examples) != 1:
+            raise click.UsageError(
+                "--output can only be specified with a single example"
+            )
+
+    if output_dir:
+        if output:
+            raise click.UsageError("--output cannot be used with --output-dir")
+
+        if not output_dir.exists():
+            msg = f"directory does not exist: {output_dir}"
+            raise click.ClickException(msg)
 
     if not examples:
         examples = EXAMPLES.keys()
+
     for example in examples:
         click.echo(f"Running '{example}' example")
         EXAMPLES[example]()
+        if output_dir:
+            path = output_dir / f"{example}.png"
+            plt.savefig(path)
+            plt.close()
+            click.echo(f"Saved image to {path}", err=True)
 
     if output:
         plt.savefig(output, format=None if output.suffix else "png")
