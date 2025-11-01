@@ -273,7 +273,7 @@ def random_piecewise() -> None:
         axes[0],
         prior,
         changepoints,
-        lambda i0, i1: np.ones(i1 - i0, np.float64),
+        lambda i0, i1: np.ones((i1 - i0, 1), np.float64),
         y,
     )
     posterior = plot_probabilities(
