@@ -412,8 +412,10 @@ class MultivariateBcdmResults:
         posterior probabilities. Obtained by normalising the joint probabilites
         across the rows. See docs for `log_joint` for structure."""
         log_joint = self.log_joint.full()
-        norm = scipy.special.logsumexp(log_joint, axis=1)
-        return log_joint - norm.reshape(-1, 1)
+        mask = np.any(np.isfinite(log_joint), axis=1)
+        norm = scipy.special.logsumexp(log_joint[mask], axis=1)
+        log_joint[mask] -= norm.reshape(-1, 1)
+        return log_joint
 
     def changepoints(self) -> list[int]:
         """Compute indices of changepoints in ascending order.
@@ -582,7 +584,14 @@ class _MultivariateBcdmWorker:
         log_pred = self.log_pred[t]  # all -np.inf
 
         x, y = self.data_getter(t, mask)
-        log_pred[mask] = params_view[mask].predictive_logpdf(x, y)
+        if x.ndim == 1:
+            xmasked = x
+            ymasked = y
+        else:
+            xmasked = x[mask]
+            ymasked = y[mask]  # type: ignore
+
+        log_pred[mask] = params_view[mask].predictive_logpdf(xmasked, ymasked)
 
         # The (t + 1) changepoint probabilities
         log_joint = self.log_joint[t]
