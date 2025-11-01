@@ -73,7 +73,7 @@ class TestNigParams:
             )
             cls.params_updated_with_1d_regressor.update(
                 cast(FloatArray, xt),
-                cast(np.floating, yt),
+                cast(np.float64, yt),
             )
 
         cls.n = n
@@ -434,7 +434,7 @@ def test_hook_function_called_with_consecutive_indices() -> None:
 def test_hook_function_called_with_correct_data_shape() -> None:
     p = 3
 
-    def hook(t: int, x: np.ndarray, y: np.ndarray, _):
+    def hook(t, x, y, _):
         assert x.shape == (1, p), f"x has wrong shape in hook at t={t}"
         assert y.shape == (1,), f"y has wrong shape in hook at t={t}"
 
@@ -442,7 +442,7 @@ def test_hook_function_called_with_correct_data_shape() -> None:
     n = 5
     multivariate_bcdm(
         rng.normal(size=(n, p)),
-        y=rng.normal(size=n),
+        rng.normal(size=n),
         hazard=0.5,
         update_hook=hook,
     )
@@ -454,7 +454,7 @@ def test_hook_function_called_with_correct_input_data() -> None:
     X_hook = np.empty((n, p))
     Y_hook = np.empty(n)
 
-    def hook(t: int, x: np.ndarray, y: np.ndarray, _):
+    def hook(t, x, y, _):
         X_hook[t] = x
         Y_hook[t] = y.item()
 

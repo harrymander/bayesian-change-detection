@@ -19,6 +19,7 @@ _LOG_2PI = np.log(2 * np.pi)
 
 _float_type = np.float64
 FloatArray = NDArray[_float_type]
+FloatArrayOrScalar = FloatArray | _float_type | float
 
 
 def _as_float_array(x) -> np.ndarray:
@@ -77,8 +78,8 @@ class UpdateHook(Protocol):
     def __call__(
         self,
         t: int,
-        x: np.ndarray,
-        y: np.ndarray,
+        x: FloatArray,
+        y: FloatArrayOrScalar,
         data: HookData,
         /,
     ) -> Any:
@@ -820,7 +821,7 @@ class NigParams:
     def _validate_xy_args(
         self,
         x: FloatArray,
-        y: FloatArray | float | np.floating,
+        y: FloatArrayOrScalar,
     ) -> tuple[int, FloatArray, FloatArray]:
         """Return original dimensionality (1 or 2), x, y."""
         self._validate_x_arg(x)
@@ -850,7 +851,7 @@ class NigParams:
     def update(
         self,
         x: FloatArray,
-        y: FloatArray | float | np.floating,
+        y: FloatArrayOrScalar,
         *,
         mask: Any = None,
     ) -> None:
@@ -944,7 +945,7 @@ class NigParams:
     def predictive_logpdf(
         self,
         x: FloatArray,
-        y: FloatArray | float | np.floating,
+        y: FloatArrayOrScalar,
     ) -> FloatArray:
         """
         Calculate the log PDFs of the predictive distributions of t independent
@@ -990,7 +991,7 @@ class NigParams:
     def mvt_logpdf(
         self,
         x: FloatArray,
-        y: FloatArray | float | np.floating,
+        y: FloatArrayOrScalar,
     ) -> np.ndarray:
         """
         See `predictive_logpdf`.
