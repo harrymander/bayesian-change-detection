@@ -1,6 +1,8 @@
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
+from functools import partial
 from itertools import batched, chain, cycle, pairwise
 from pathlib import Path
+from typing import Any
 
 import click
 import matplotlib.pyplot as plt
@@ -10,11 +12,13 @@ from matplotlib.axes import Axes
 from matplotlib.colors import LogNorm
 from matplotlib.image import AxesImage
 from matplotlib.lines import Line2D
+from numpy.typing import NDArray
 
 from bayesian_change_detection import multivariate_bcdm as _multivariate_bcdm
 from bayesian_change_detection.multivariate import (
     MultivariateBcdmResults,
     NigPrior,
+    multivariate_bcdm_datagetter,
 )
 from examples import generate_random_piecewise_data
 
@@ -114,7 +118,7 @@ def axvlines(
     return [first_line, *(ax.axvline(x, *args, **kwargs) for x in xvals[1:])]
 
 
-def triangular() -> None:
+def triangular(reset_time: bool) -> None:
     """Simple example with triangular wave data."""
     rng = np.random.default_rng(42)
 
@@ -126,14 +130,36 @@ def triangular() -> None:
     Y = -np.arcsin(np.sin(t)) * 2 / np.pi + noise
     true_changepoints = np.pi * np.arange(0, 6) + np.pi / 2
 
-    X = np.c_[np.ones_like(t), t]  # add bias (intercept) term
+    p = 2
     prior = NigPrior(
-        2,
+        p,
         cov=1e6,
         shape=1e-3,
         scale=1e-6,
     )
-    res = multivariate_bcdm(X, Y, prior=prior, hazard=0.02)
+    n = len(t)
+
+    def data_getter(
+        i: int,
+        mask: np.ndarray,
+    ) -> tuple[np.ndarray, np.ndarray | float]:
+        if not reset_time:
+            return np.array([1.0, t[i]]), Y[i]
+
+        m = mask.size
+        x = t[i + 1 - m : i + 1]
+        X = np.c_[np.ones_like(x), x - x[0]]
+        return X, np.repeat(Y[i], m)
+
+    with tqdm.tqdm(total=n) as pbar:
+        res = multivariate_bcdm_datagetter(
+            n,
+            p,
+            data_getter,
+            prior=prior,
+            hazard=0.02,
+            update_hook=lambda *_: pbar.update(),
+        )
 
     axes = plt.subplots(3, sharex=True, figsize=FIGSIZE)[1]
     axes[0].plot(t, Y, "-o")
@@ -181,7 +207,20 @@ def triangular() -> None:
     for ax in axes[1:]:
         ax.set_ylabel("Run length")
 
-    plot_segment_predictions(axes[0], prior, changepoints, X, Y, t)
+    def get_regressor(i0: int, i1: int) -> NDArray[np.float64]:
+        x = t[i0:i1]
+        if reset_time:
+            x = x - x[0]
+        return np.c_[np.ones_like(x), x]
+
+    plot_segment_predictions(
+        axes[0],
+        prior,
+        changepoints,
+        get_regressor,
+        Y,
+        t,
+    )
     axes[0].legend()
     plt.tight_layout()
 
@@ -230,7 +269,13 @@ def random_piecewise() -> None:
 
     axes[0].legend()
 
-    plot_segment_predictions(axes[0], prior, changepoints, np.ones_like(y), y)
+    plot_segment_predictions(
+        axes[0],
+        prior,
+        changepoints,
+        lambda i0, i1: np.ones(i1 - i0, np.float64),
+        y,
+    )
     posterior = plot_probabilities(
         axes[1],
         res.log_posterior(),
@@ -387,28 +432,28 @@ def plot_segment_predictions(
     ax,
     prior: NigPrior,
     changepoints: list[int],
-    x: np.ndarray,
+    get_regressor: Callable[[int, int], NDArray[np.float64]],
     y: np.ndarray,
     t: np.ndarray | None = None,
 ) -> None:
-    n = len(x)
+    n = len(y)
     if t is None:
         t = np.arange(n)
 
     for i1, i2 in pairwise(chain((0,), changepoints, (n,))):
-        xseg = x[i1:i2]
-        yseg = y[i1:i2]
+        pmean, pvar = predict_segment(prior, get_regressor(i1, i2), y[i1:i2])
         tseg = t[i1:i2]
-        pmean, pvar = predict_segment(prior, atleast_2d_col(xseg), yseg)
-        ax.plot(tseg, pmean, color="green")
         sd = np.sqrt(pvar)
-        ax.plot(tseg, pmean + sd, color="green", linestyle="--")
-        ax.plot(tseg, pmean - sd, color="green", linestyle="--")
+
+        ax.plot(tseg, pmean, color="green")
+        for delta in (sd, -sd):
+            ax.plot(tseg, pmean + delta, color="green", linestyle="--")
 
 
-EXAMPLES = {
+EXAMPLES: dict[str, Callable[[], Any]] = {
     "random": random_piecewise,
-    "triangular": triangular,
+    "triangular": partial(triangular, reset_time=False),
+    "triangular-reset-time": partial(triangular, reset_time=True),
     "well": well_data,
     "well-params-compare": well_data_params_compare,
 }
