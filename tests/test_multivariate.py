@@ -10,12 +10,12 @@ import scipy
 from bayesian_change_detection import (
     MultivariateBcdmResults,
     multivariate_bcdm,
+    multivariate_bcdm_datagetter,
 )
 from bayesian_change_detection.multivariate import (
     FloatArray,
     NigParams,
     NigPrior,
-    multivariate_bcdm_datagetter,
 )
 from bayesian_change_detection.tril import TrilArray
 from tests.conftest import JsonSnapshot, NDArraySnapshot

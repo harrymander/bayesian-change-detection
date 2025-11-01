@@ -4,6 +4,7 @@ from .multivariate import (
     NigParams,
     NigPrior,
     multivariate_bcdm,
+    multivariate_bcdm_datagetter,
 )
 
 __all__ = [
@@ -13,4 +14,5 @@ __all__ = [
     "NigParams",
     "NigPrior",
     "multivariate_bcdm",
+    "multivariate_bcdm_datagetter",
 ]
