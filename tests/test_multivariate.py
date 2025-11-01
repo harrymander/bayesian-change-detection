@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from collections.abc import Sequence
-from typing import cast
+from typing import Any, cast
 
 import numpy as np
 import numpy.testing
@@ -15,6 +15,7 @@ from bayesian_change_detection.multivariate import (
     FloatArray,
     NigParams,
     NigPrior,
+    multivariate_bcdm_datagetter,
 )
 from bayesian_change_detection.tril import TrilArray
 from tests.conftest import JsonSnapshot, NDArraySnapshot
@@ -295,12 +296,8 @@ class Test1DChangeDetectionWithMaxNumProbs(BcdmWithSupportTrimmingTester):
         assert_array_equal_strict(mask.sum(axis=1), max_sizes)
 
 
-class Test1DChangeDetectionWithMaxRunLength(BcdmTester):
-    max_run_length = 10
-
-    @classmethod
-    def run_bcdm(cls) -> MultivariateBcdmResults:
-        return _run_1d_bcdm(max_run_length=cls.max_run_length)
+class BcdmWithMaxRunLengthTester(BcdmTester):
+    max_run_length: int
 
     def test_support_mask_is_limited_to_max_run_length(self) -> None:
         mask = self.results.joint_support.full()
@@ -311,6 +308,14 @@ class Test1DChangeDetectionWithMaxRunLength(BcdmTester):
         expected_mask[self.max_run_length :, : self.max_run_length] = True
 
         assert_array_equal_strict(mask, expected_mask)
+
+
+class Test1DChangeDetectionWithMaxRunLength(BcdmWithMaxRunLengthTester):
+    max_run_length = 10
+
+    @classmethod
+    def run_bcdm(cls) -> MultivariateBcdmResults:
+        return _run_1d_bcdm(max_run_length=cls.max_run_length)
 
 
 class Test2DChangeDetection(BcdmWithoutSupportTrimmingTester):
@@ -331,6 +336,120 @@ class Test2DChangeDetection(BcdmWithoutSupportTrimmingTester):
             shape=1e-3,
             scale=1e-6,
         )
+
+
+def _2d_bcdm_time_reset(**kw: Any) -> MultivariateBcdmResults:
+    rng = np.random.default_rng(42)
+
+    # Create input and outputs.
+    samples = 100
+    x = np.linspace(0, 3 * 2 * np.pi, samples)
+    noise = 0.1 * rng.standard_normal(samples)
+    y = -np.arcsin(np.sin(x)) * 2 / np.pi + noise
+
+    def data_getter(i: int, mask: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+        m = mask.size
+        xseg = x[i + 1 - m : i + 1]
+        return (
+            np.c_[np.ones_like(xseg), xseg - xseg[0]],
+            np.repeat(y[i], m),
+        )
+
+    return multivariate_bcdm_datagetter(
+        samples,
+        2,
+        data_getter,
+        hazard=0.02,
+        cov=1e6,
+        shape=1e-3,
+        scale=1e-6,
+        **kw,
+    )
+
+
+class Test2DChangeDetectionWithTimeReset(BcdmWithoutSupportTrimmingTester):
+    @classmethod
+    def run_bcdm(cls) -> MultivariateBcdmResults:
+        return _2d_bcdm_time_reset()
+
+
+class Test2DChangeDetectionWithTimeResetAndMaxRunLength(
+    BcdmWithMaxRunLengthTester
+):
+    max_run_length = 20
+
+    @classmethod
+    def run_bcdm(cls) -> MultivariateBcdmResults:
+        return _2d_bcdm_time_reset(max_run_length=cls.max_run_length)
+
+
+@pytest.mark.parametrize("max_run_length", [None, 20])
+def test_data_getter_called_with_consecutive_indices(
+    max_run_length: int | None,
+) -> None:
+    indices: list[int] = []
+
+    def data_getter(i: int, _) -> tuple[np.ndarray, float]:
+        indices.append(i)
+        return np.array([1.0]), 1.0
+
+    n = 100
+    multivariate_bcdm_datagetter(
+        n,
+        1,
+        data_getter,
+        hazard=0.5,
+        max_run_length=max_run_length,
+    )
+
+    expected_indices = list(range(n))
+    assert indices == expected_indices
+
+
+def test_data_getter_called_with_consecutive_max_lengths() -> None:
+    mask_sizes: list[int] = []
+
+    def data_getter(_, mask: np.ndarray) -> tuple[np.ndarray, float]:
+        assert mask.ndim == 1
+        mask_sizes.append(mask.size)
+        return np.array([1.0]), 1.0
+
+    n = 100
+    multivariate_bcdm_datagetter(
+        n,
+        1,
+        data_getter,
+        hazard=0.5,
+    )
+
+    expected_mask_sizes = list(range(1, n + 1))
+    assert mask_sizes == expected_mask_sizes
+
+
+def test_data_getter_mask_size_limited_to_max_run_length() -> None:
+    mask_sizes: list[int] = []
+
+    def data_getter(_, mask: np.ndarray) -> tuple[np.ndarray, float]:
+        assert mask.ndim == 1
+        assert np.all(mask)
+        mask_sizes.append(mask.size)
+        return np.array([1.0]), 1.0
+
+    n = 100
+    max_run_length = 20
+    multivariate_bcdm_datagetter(
+        n,
+        1,
+        data_getter,
+        hazard=0.5,
+        max_run_length=max_run_length,
+    )
+
+    expected_mask_sizes = [
+        *range(1, max_run_length + 1),
+        *(max_run_length for _ in range(n - max_run_length)),
+    ]
+    assert mask_sizes == expected_mask_sizes
 
 
 class Test3DChangeDetection(BcdmWithoutSupportTrimmingTester):
