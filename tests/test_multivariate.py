@@ -435,8 +435,8 @@ def test_hook_function_called_with_correct_data_shape() -> None:
     p = 3
 
     def hook(t, x, y, _):
-        assert x.shape == (1, p), f"x has wrong shape in hook at t={t}"
-        assert y.shape == (1,), f"y has wrong shape in hook at t={t}"
+        assert x.shape == (p,), f"x has wrong shape in hook at t={t}"
+        assert np.isscalar(y), f"y has wrong shape in hook at t={t}"
 
     rng = np.random.default_rng(42)
     n = 5

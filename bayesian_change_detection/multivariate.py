@@ -1,5 +1,5 @@
 import warnings
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from typing import Any, Protocol, TypedDict, Unpack, cast, overload
 
@@ -86,26 +86,54 @@ class UpdateHook(Protocol):
         pass
 
 
+DataGetter = Callable[
+    [int, NDArray[np.bool]],
+    tuple[FloatArray, FloatArrayOrScalar],
+]
+"""
+Function for getting data.
+
+Args:
+    t: index of the current point, `0 <= t <= n - 1`, where `n` is the total
+        number of datapoints.
+    mask: boolean array of shape `(m,)`. Indicates which of the `m` possible
+        run-lengths posteriors are being computed. Will always hold that
+        `m <= t + 1`; when there is no limitation on the maximum run length
+        then `m == t + 1`.
+
+Returns:
+    x: `(m, p)` or `(p,)` array of regressor variable(s), where `p` is the
+        dimensionality of the regressor. If 2D, then the ith row corresponds
+        to the regressor for the posterior for a run of length i.
+    y: `(m,)` array or scalar response variable(s). If non-scalar, `x` must 2D
+        and the same rule about the ordering of the items described above
+        applies (i.e. y[0] is the response variable for the posterior for a run
+        of length 0, etc.).
+"""
+
+
 @overload
-def multivariate_bcdm(
-    x: FloatArray,
-    y: FloatArray,
+def multivariate_bcdm_datagetter(
+    n: int,
+    p: int,
+    data_getter: DataGetter,
     hazard: float,
-    prior: None = None,
+    prior: None = ...,
     *,
     init_prob: float = ...,
     min_prob: float = ...,
     max_num_probs: int | None = ...,
     max_run_length: int | None = ...,
-    update_hook: UpdateHook | None = None,
+    update_hook: UpdateHook | None = ...,
     **prior_kwargs: Unpack[NigPriorKwargs],
 ) -> "MultivariateBcdmResults": ...
 
 
 @overload
-def multivariate_bcdm(
-    x: FloatArray,
-    y: FloatArray,
+def multivariate_bcdm_datagetter(
+    n: int,
+    p: int,
+    data_getter: DataGetter,
     hazard: float,
     prior: "NigPrior" = ...,
     *,
@@ -113,15 +141,16 @@ def multivariate_bcdm(
     min_prob: float = ...,
     max_num_probs: int | None = ...,
     max_run_length: int | None = ...,
-    update_hook: UpdateHook | None = None,
+    update_hook: UpdateHook | None = ...,
 ) -> "MultivariateBcdmResults": ...
 
 
-def multivariate_bcdm(
-    x: FloatArray,
-    y: FloatArray,
+def multivariate_bcdm_datagetter(
+    n: int,
+    p: int,
+    data_getter: DataGetter,
     hazard: float,
-    prior: "None | NigPrior" = None,
+    prior: "NigPrior | None" = None,
     *,
     init_prob: float = 1,
     min_prob: float = 0,
@@ -134,8 +163,9 @@ def multivariate_bcdm(
     Bayesian change detection model for univariate response data.
 
     Args:
-        x: (n, p) or (n,) predictor variables.
-        y: (n,) response variables.
+        n: Number of samples.
+        p: Dimensionality of regressor.
+        data_getter: Function for getting data. See docstring of `DataGetter`.
         hazard: Hazard rate.
         prior: NIG prior parameters. Cannot be passed if any `prior_kwargs` are
             already passed.
@@ -173,26 +203,24 @@ def multivariate_bcdm(
     """
     if not (0 < hazard < 1):
         raise ValueError("hazard must be in (0, 1)")
+
     if not (0 <= init_prob <= 1):
         raise ValueError("init_prob must be in [0, 1]")
+
     if not (0 <= min_prob < 1):
         raise ValueError("min_prob must be in [0, 1)")
+
     if max_num_probs is not None and max_num_probs <= 0:
         raise ValueError("max_num_probs must be > 0")
+
     if max_run_length is not None and max_run_length <= 0:
         raise ValueError("max_run_length must be > 0")
 
-    if x.ndim == 1:
-        n = len(x)
-        p = 1
-        x = x.reshape(-1, 1)
-    elif x.ndim != 2:
-        raise ValueError("x must be 1- or 2-D")
-    else:
-        n, p = x.shape
+    if n < 1:
+        raise ValueError("n must be >= 1")
 
-    _check_array_dtype("x", x)
-    _check_array_shape_and_dtype("y", y, (n,))
+    if p < 1:
+        raise ValueError("p must be >= 1")
 
     if max_run_length is not None and max_run_length > n:
         msg = f"max_run_length cannot be greater than number of samples, {n}"
@@ -211,8 +239,9 @@ def multivariate_bcdm(
         prior = NigPrior(p, **prior_kwargs)
 
     worker = _MultivariateBcdmWorker(
-        x,
-        y,
+        n,
+        p,
+        data_getter,
         init_prob=init_prob,
         min_prob=min_prob,
         max_num_probs=max_num_probs,
@@ -222,6 +251,99 @@ def multivariate_bcdm(
         update_hook=update_hook,
     )
     return worker.fit()
+
+
+class MultivariateBcdmKwargs(TypedDict, total=False):
+    init_prob: float
+    min_prob: float
+    max_num_probs: int | None
+    max_run_length: int | None
+    update_hook: UpdateHook | None
+
+
+class MultivariateBcdmKwargsWithPriorKwargs(
+    MultivariateBcdmKwargs,
+    NigPriorKwargs,
+    total=False,
+):
+    pass
+
+
+@overload
+def multivariate_bcdm(
+    x: FloatArray,
+    y: FloatArray,
+    hazard: float,
+    prior: None = ...,
+    **kwargs: Unpack[MultivariateBcdmKwargsWithPriorKwargs],
+) -> "MultivariateBcdmResults": ...
+
+
+@overload
+def multivariate_bcdm(
+    x: FloatArray,
+    y: FloatArray,
+    hazard: float,
+    prior: "NigPrior" = ...,
+    **kwargs: Unpack[MultivariateBcdmKwargs],
+) -> "MultivariateBcdmResults": ...
+
+
+def multivariate_bcdm(
+    x: FloatArray,
+    y: FloatArray,
+    hazard: float,
+    prior: "NigPrior | None" = None,
+    **kwargs: Any,
+) -> "MultivariateBcdmResults":
+    """
+    Bayesian change detection model for univariate response data.
+
+    Arguments are the same as `multivariate_bcdm_datagetter`, except pass the
+    (n, p) or (n,) predictor variables and (n,) response variables directly.
+
+    Args:
+        x: (n, p) or (n,) predictor variables.
+        y: (n,) response variables.
+        hazard: hazard rate.
+        prior: NIG prior parameters. See `multivariate_bcdm_datagetter`.
+        args: See `multivariate_bcdm_datagetter`.
+
+    Returns: see `multivariate_bcdm_datagetter`.
+
+    Raises: see `multivariate_bcdm_datagetter`.
+    """
+
+    if x.ndim == 1:
+        n = len(x)
+        p = 1
+        x = x.reshape(-1, 1)
+    elif x.ndim != 2:
+        raise ValueError("x must be 1- or 2-D")
+    else:
+        n, p = x.shape
+
+    _check_array_dtype("x", x)
+    _check_array_shape_and_dtype("y", y, (n,))
+    return multivariate_bcdm_datagetter(
+        n,
+        p,
+        SimpleDataGetter(x, y),
+        hazard,
+        prior,
+        **kwargs,
+    )
+
+
+class SimpleDataGetter:
+    """DataGetter that just returns the current observation at each index."""
+
+    def __init__(self, x: FloatArray, y: FloatArray):
+        self.x = x
+        self.y = y
+
+    def __call__(self, t: int, _) -> tuple[FloatArray, float]:
+        return self.x[t], self.y[t]
 
 
 @dataclass
@@ -315,6 +437,7 @@ class MultivariateBcdmResults:
 
 class _MultivariateBcdmWorker:
     __slots__ = [
+        "data_getter",
         "init_log_joint",
         "joint_support",
         "log_1mhazard",
@@ -329,14 +452,13 @@ class _MultivariateBcdmWorker:
         "params",
         "prior_params",
         "update_hook",
-        "x",
-        "y",
     ]
 
     def __init__(
         self,
-        x: np.ndarray,
-        y: np.ndarray,
+        n: int,
+        p: int,
+        data_getter: DataGetter,
         *,
         prior: "NigPrior",
         hazard: float,
@@ -347,9 +469,10 @@ class _MultivariateBcdmWorker:
         update_hook: UpdateHook | None,
     ):
         # Assumes parameters have been validated - see multivariate_bcdm
-        self.n, self.p = x.shape
-        self.x = x
-        self.y = y
+        self.n = n
+        self.p = p
+        self.data_getter = data_getter
+
         self.log_hazard: float = np.log(hazard)
         self.log_1mhazard: float = np.log1p(-hazard)
         self.init_log_joint = np.log(init_prob) if init_prob else -np.inf
@@ -373,24 +496,21 @@ class _MultivariateBcdmWorker:
         self.log_pred = tril_full(self.n, -np.inf, m, upper_val=-np.inf)
 
     def fit(self) -> MultivariateBcdmResults:
-        X = self.x[:, np.newaxis, :]
-        Y = self.y[:, np.newaxis]
+        x0, y0 = self.data_getter(0, np.array([True]))
 
         # Compute the initial reset probability (Eq. 28).
-        log_pred = self.params[:1].predictive_logpdf(X[0], Y[0])
+        log_pred = self.params[:1].predictive_logpdf(x0, y0)
         log_joint = log_pred + self.log_hazard + self.init_log_joint
         self.log_joint[0] = log_joint[0]
         self.log_pred[0] = log_pred[0]
 
-        self.params[:1].update(X[0], Y[0])
+        self.params[:1].update(x0, y0)
 
         if self.update_hook:
-            self.update_hook(0, X[0], Y[0], self)
+            self.update_hook(0, x0, y0, self)
 
-        for t, (x, y) in enumerate(zip(X[1:], Y[1:], strict=True), start=1):
-            self._update(t, x, y)
-            if self.update_hook:
-                self.update_hook(t, x, y, self)
+        for t in range(1, self.n):
+            self._update(t)
 
         joint_support = self.joint_support
         nan_mask = ~joint_support[joint_support.shape[0] - 1]
@@ -410,7 +530,7 @@ class _MultivariateBcdmWorker:
             log_predictive=self.log_pred,
         )
 
-    def _update(self, t: int, x: np.ndarray, y: np.ndarray) -> None:
+    def _update(self, t: int) -> None:
         # Note that the variable `t` is 0-indexed here whereas in the notes it
         # starts from 1.
 
@@ -461,10 +581,8 @@ class _MultivariateBcdmWorker:
         # to avoid expensive PDF computation outside of the support
         log_pred = self.log_pred[t]  # all -np.inf
 
-        n = len(params_view.mean)
-        x = np.tile(x, (n, 1))
-        y = np.tile(y, n)
-        log_pred[mask] = params_view[mask].predictive_logpdf(x[mask], y[mask])
+        x, y = self.data_getter(t, mask)
+        log_pred[mask] = params_view[mask].predictive_logpdf(x, y)
 
         # The (t + 1) changepoint probabilities
         log_joint = self.log_joint[t]
@@ -489,6 +607,9 @@ class _MultivariateBcdmWorker:
         # Update the model parameters (Eqs. 30-33). Avoid expensive computation
         # outside of the support.
         params_view.update(x, y, mask=mask)
+
+        if self.update_hook:
+            self.update_hook(t, x, y, self)
 
 
 class NigPrior:
