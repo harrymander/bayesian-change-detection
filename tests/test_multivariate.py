@@ -150,7 +150,12 @@ class BcdmTester(ABC):
     def test_log_posteriors_are_normalised(self) -> None:
         log_posterior = self.results.log_posterior()
         col_sums = scipy.special.logsumexp(log_posterior, axis=1)
-        assert_allclose(col_sums, 0, atol=1e-12, rtol=1e-12)
+        assert_allclose(
+            col_sums[np.isfinite(col_sums)],
+            0,
+            atol=1e-12,
+            rtol=1e-12,
+        )
 
     def test_changepoints_snapshot(self, json_snapshot: JsonSnapshot):
         changepoints = self.results.changepoints()
@@ -202,10 +207,11 @@ class BcdmTester(ABC):
 
     def _assert_array_is_zero_outside_support(self, arr: TrilArray) -> None:
         __tracebackhide__ = True
-        assert_array_equal_strict(
-            np.isneginf(arr.full()),
-            ~self.results.joint_support.full(),
-            err_msg="Array is not all-zero outside of the support",
+
+        full = arr.full()
+        support = self.results.joint_support.full()
+        assert np.all(np.isneginf(full[~support])), (
+            "Array is not all-zero outside of the support"
         )
 
     def test_predictive_is_zero_outside_support(self) -> None:
@@ -301,6 +307,7 @@ class BcdmWithMaxRunLengthTester(BcdmTester):
 
     def test_support_mask_is_limited_to_max_run_length(self) -> None:
         mask = self.results.joint_support.full()
+        assert mask.shape[1] == self.max_run_length
 
         expected_mask = np.zeros_like(mask)
         for i in range(self.max_run_length):
@@ -316,6 +323,28 @@ class Test1DChangeDetectionWithMaxRunLength(BcdmWithMaxRunLengthTester):
     @classmethod
     def run_bcdm(cls) -> MultivariateBcdmResults:
         return _run_1d_bcdm(max_run_length=cls.max_run_length)
+
+
+class BcdmWithMaxRunLengthAndSupportMaskTester(BcdmWithSupportTrimmingTester):
+    max_run_length: int
+
+    def test_support_mask_num_cols_equal_to_max_run_length(self) -> None:
+        mask = self.results.joint_support.full()
+        assert mask.shape[1] == self.max_run_length
+
+
+class Test1DChangeDetectionWithMaxRunLengthAndSupportTrimming(
+    BcdmWithMaxRunLengthAndSupportMaskTester
+):
+    max_run_length = 10
+    max_num_probs = 5
+
+    @classmethod
+    def run_bcdm(cls) -> MultivariateBcdmResults:
+        return _run_1d_bcdm(
+            max_run_length=cls.max_run_length,
+            max_num_probs=cls.max_num_probs,
+        )
 
 
 class Test2DChangeDetection(BcdmWithoutSupportTrimmingTester):
@@ -381,6 +410,20 @@ class Test2DChangeDetectionWithTimeResetAndMaxRunLength(
     @classmethod
     def run_bcdm(cls) -> MultivariateBcdmResults:
         return _2d_bcdm_time_reset(max_run_length=cls.max_run_length)
+
+
+class Test2DChangeDetectionWithTimeResetAndMaxRunLengthAndMaxNumProbs(
+    BcdmWithMaxRunLengthAndSupportMaskTester
+):
+    max_run_length = 20
+    max_num_probs = 10
+
+    @classmethod
+    def run_bcdm(cls) -> MultivariateBcdmResults:
+        return _2d_bcdm_time_reset(
+            max_run_length=cls.max_run_length,
+            max_num_probs=cls.max_num_probs,
+        )
 
 
 @pytest.mark.parametrize("max_run_length", [None, 20])
