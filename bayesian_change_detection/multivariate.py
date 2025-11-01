@@ -87,7 +87,7 @@ class UpdateHook(Protocol):
 
 
 DataGetter = Callable[
-    [int, NDArray[np.bool]],
+    [int, NDArray[np.bool_]],
     tuple[FloatArray, FloatArrayOrScalar],
 ]
 """
