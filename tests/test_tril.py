@@ -115,3 +115,20 @@ def test_bool_of_tril_with_more_than_one_element_raises_error() -> None:
 def test_tril_len_is_num_rows(rows: int, cols: int | None) -> None:
     a = tril_full(rows, np.nan, cols)
     assert len(a) == rows
+
+
+def test_tril_set_item() -> None:
+    a = tril_full(3, 1, 4, upper_val=9, dtype=int)
+
+    a[1] = 2
+    a[2][-2:] = [7, 8]
+
+    # fmt: off
+    expected = np.array([
+        [1, 9, 9, 9],
+        [2, 2, 9, 9],
+        [1, 7, 8, 9],
+    ])
+    # fmt: on
+
+    assert_array_equal_strict(a.full(), expected)
