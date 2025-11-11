@@ -66,7 +66,11 @@ class TrilArray:
         self._n = n
         self._m = m
         self._data = data
-        self.upper_val = upper_val
+
+        if upper_val is None:
+            self.upper_val = np.zeros((), dtype=self._data.dtype)
+        else:
+            self.upper_val = upper_val
 
     @property
     def shape(self) -> tuple[int, int]:
@@ -103,14 +107,9 @@ class TrilArray:
         The upper-triangular elements are set to `self.upper_val`.
         """
         data = self._data
-        dtype = data.dtype
-        upper_val = self.upper_val
-        if upper_val is None:
-            upper_val = np.zeros((), dtype=dtype)
-
-        full = np.empty((self._n, self._m), dtype=dtype)
+        full = np.empty((self._n, self._m), dtype=data.dtype)
         full[np.tril_indices(self._n, 0, self._m)] = data
-        full[np.triu_indices(self._n, 1, self._m)] = upper_val
+        full[np.triu_indices(self._n, 1, self._m)] = self.upper_val
         return full
 
     def __repr__(self) -> str:

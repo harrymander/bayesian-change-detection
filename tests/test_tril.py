@@ -1,9 +1,10 @@
 import re
+from typing import Any
 
 import numpy as np
 import pytest
 
-from bayesian_change_detection.tril import tril_full
+from bayesian_change_detection.tril import tril_empty, tril_full
 from tests.utils import assert_array_equal_strict
 
 
@@ -132,3 +133,10 @@ def test_tril_set_item() -> None:
     # fmt: on
 
     assert_array_equal_strict(a.full(), expected)
+
+
+@pytest.mark.parametrize("dtype", (np.bool_, np.uint32, np.int32, np.float64))
+def test_tril_default_upper_val_is_zero(dtype: Any):
+    array = tril_empty(3, dtype=dtype)
+    assert array.upper_val.dtype == dtype
+    assert array.upper_val == np.zeros((), dtype=dtype)
