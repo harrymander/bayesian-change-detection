@@ -1,9 +1,11 @@
 Bayesian change detection
 =========================
 
-(This repository is a fork from the original repository by Gabriel Agamennoni
-\<g.agamennoni@gmail.com\>:
-https://github.com/gabrieag/bayesian-change-detection)
+**NOTE:** This repository is a fork from the original repository by Gabriel
+Agamennoni https://github.com/gabrieag/bayesian-change-detection. It has been
+modified extensively to support multivariate Bayesian changepoint detection,
+including optimising the multivariate case to run much faster and support
+support size limitation to improve algorithmic time complexity.
 
 The Bayesian model-based change detection module implements a recursive algorithm for segmenting a sequence of real-valued input-output data. The segment boundaries are chosen under the assumption that, within each segment, the input-output data follow a multi-variate linear model. The parameters of the linear model (i.e. the coefficient matrix and the noise covariance matrix) are treated as random variables, thus resulting in a fully Bayesian model.
 
